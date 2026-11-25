@@ -176,6 +176,8 @@ async def wait_for_job(job_id: str, poll: float = 8, timeout: float = 1800) -> d
 
 
 async def build_release(job_id: str, meta: ReleaseMetadata, connector: str = "routenote") -> dict[str, Any]:
+    if not re.fullmatch(r"[A-Za-z0-9_-]{4,64}", job_id):
+        raise ValueError("Invalid job id.")
     job = storage.get("jobs", job_id)
     if not job or job.get("status") != "succeeded" or not job.get("audio_path"):
         raise ValueError("Generation job must be succeeded before building a release.")
@@ -199,8 +201,8 @@ async def build_release(job_id: str, meta: ReleaseMetadata, connector: str = "ro
     track = sorted(meta.tracks, key=lambda t: t.track_number)[0]
     safe = "".join(ch if ch.isalnum() else "-" for ch in track.title)[:40].strip("-") or "track"
     flac = os.path.join(d, f"01-{safe}.flac")
-    audio_path = os.path.realpath(job["audio_path"])
-    if os.path.commonpath((os.path.realpath(WORK), audio_path)) != os.path.realpath(WORK):
+    audio_path = safe_work_path("jobs", job_id, "master.flac")
+    if not os.path.isfile(audio_path):
         raise ValueError("Invalid stored audio path.")
     shutil.copy(audio_path, flac)
     art = await asyncio.to_thread(media.make_cover, meta.title, meta.primary_artist, job_id, os.path.join(d, "artwork.jpg"))

@@ -23,16 +23,6 @@ BOT_ENABLED = os.getenv("BOT_ENABLED", "1") == "1"
 JOB_ID = r"^[A-Za-z0-9_-]{4,64}$"
 
 
-def safe_stored_file(path: str, root: str) -> str | None:
-    if not path:
-        return None
-    root_real = os.path.realpath(root)
-    path_real = os.path.realpath(path)
-    if os.path.commonpath((root_real, path_real)) != root_real:
-        return None
-    return path_real if os.path.isfile(path_real) else None
-
-
 def require_admin(authorization: str = Header(default="")):
     """Write endpoints spend Replicate credits; protect them when ADMIN_TOKEN is set."""
     if ADMIN_TOKEN and authorization != f"Bearer {ADMIN_TOKEN}":
@@ -140,9 +130,15 @@ async def get_generation(job_id: str):
 
 @app.get("/api/generations/{job_id}/audio")
 async def get_audio(job_id: str):
-    job = storage.get("jobs", job_id) if re.fullmatch(r"[A-Za-z0-9_-]{4,64}", job_id) else None
-    path = safe_stored_file((job or {}).get("preview_path"), pipeline.WORK)
-    if not path:
+    if not re.fullmatch(r"[A-Za-z0-9_-]{4,64}", job_id):
+        raise HTTPException(status_code=400, detail="Invalid job id.")
+    job = storage.get("jobs", job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Audio not available.")
+    path = os.path.realpath(os.path.join(pipeline.WORK, "jobs", job_id, "preview.mp3"))
+    if os.path.commonpath((os.path.realpath(pipeline.WORK), path)) != os.path.realpath(pipeline.WORK):
+        raise HTTPException(status_code=404, detail="Audio not available.")
+    if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Audio not available.")
     return FileResponse(path, media_type="audio/mpeg", filename=f"{job_id}.mp3")
 
@@ -181,9 +177,15 @@ async def get_release(release_id: str):
 
 @app.get("/api/releases/{release_id}/package")
 async def download_package(release_id: str, _: None = Depends(require_admin)):
+    if not re.fullmatch(r"[A-Za-z0-9_-]{4,64}", release_id):
+        raise HTTPException(status_code=400, detail="Invalid release id.")
     rel = storage.get("releases", release_id)
-    path = safe_stored_file(rel.get("package_path") if rel else None, pipeline.WORK)
-    if not rel or not path:
+    if not rel:
+        raise HTTPException(status_code=404, detail="Package not available.")
+    path = os.path.realpath(os.path.join(pipeline.WORK, "packages", f"routenote-{release_id}.zip"))
+    if os.path.commonpath((os.path.realpath(pipeline.WORK), path)) != os.path.realpath(pipeline.WORK):
+        raise HTTPException(status_code=404, detail="Package not available.")
+    if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Package not available.")
     return FileResponse(path, media_type="application/zip", filename=os.path.basename(path))
 
