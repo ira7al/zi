@@ -9,6 +9,7 @@ import csv
 import io
 import json
 import os
+import re
 import zipfile
 from datetime import date, timedelta
 
@@ -18,6 +19,12 @@ from .base import Distributor, ReleaseMetadata, ValidationReport
 class RouteNoteConnector(Distributor):
     name = "routenote"
     UPLOAD_URL = "https://routenote.com/"  # log in -> Distribution -> Create New Release
+
+    @staticmethod
+    def _csv_safe(value):
+        if isinstance(value, str) and re.match(r"^\s*[=+\-@]", value):
+            return "'" + value
+        return value
 
     def validate(self, m: ReleaseMetadata) -> ValidationReport:
         e: list[str] = []
@@ -80,8 +87,8 @@ class RouteNoteConnector(Distributor):
         wr = csv.writer(csv_buf)
         wr.writerow(["track_no", "title", "artist", "explicit", "instrumental", "language", "isrc", "file"])
         for t in form["step_3_tracks"]:
-            wr.writerow([t["Track No."], t["Title"], t["Artist"], t["Explicit"], t["Instrumental"],
-                         t["Language"], t["ISRC"], t["File"]])
+            wr.writerow([t["Track No."], self._csv_safe(t["Title"]), self._csv_safe(t["Artist"]), t["Explicit"],
+                         t["Instrumental"], t["Language"], t["ISRC"], t["File"]])
         steps = (
             f"Upload to RouteNote ({self.UPLOAD_URL})\n"
             "1. Log in -> Distribution -> Create New Release.\n"

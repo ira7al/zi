@@ -2,7 +2,9 @@ import asyncio
 import os
 import re
 import shutil
+import time
 from contextlib import asynccontextmanager
+from secrets import compare_digest
 
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException
@@ -21,11 +23,16 @@ ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
 BOT_ENABLED = os.getenv("BOT_ENABLED", "1") == "1"
 JOB_ID = r"^[A-Za-z0-9_-]{4,64}$"
+STATUS_POLL_INTERVAL_SECONDS = 8.0
+status_last_poll: dict[str, float] = {}
+
 
 
 def require_admin(authorization: str = Header(default="")):
-    """Write endpoints spend Replicate credits; protect them when ADMIN_TOKEN is set."""
-    if ADMIN_TOKEN and authorization != f"Bearer {ADMIN_TOKEN}":
+    """Protect administrative and resource-consuming endpoints."""
+    if not ADMIN_TOKEN:
+        raise HTTPException(status_code=503, detail="ADMIN_TOKEN is not configured.")
+    if not compare_digest(authorization, f"******"):
         raise HTTPException(status_code=401, detail="Missing or invalid admin token.")
 
 
@@ -143,9 +150,14 @@ async def create_generation(request: GenerationRequest, _: None = Depends(requir
 
 
 @app.get("/api/generations/{job_id}")
-async def get_generation(job_id: str):
+async def get_generation(job_id: str, _: None = Depends(require_admin)):
     if not re.fullmatch(r"[A-Za-z0-9_-]{4,64}", job_id):
         raise HTTPException(status_code=400, detail="Invalid job id.")
+    now = time.monotonic()
+    previous = status_last_poll.get(job_id)
+    if previous is not None and now - previous < STATUS_POLL_INTERVAL_SECONDS:
+        raise HTTPException(status_code=429, detail="Generation status is being polled too frequently.")
+    status_last_poll[job_id] = now
     try:
         return pipeline.public(await pipeline.refresh_job(job_id))
     except KeyError:
@@ -155,7 +167,7 @@ async def get_generation(job_id: str):
 
 
 @app.get("/api/generations/{job_id}/audio")
-async def get_audio(job_id: str):
+async def get_audio(job_id: str, _: None = Depends(require_admin)):
     if not re.fullmatch(r"[A-Za-z0-9_-]{4,64}", job_id):
         raise HTTPException(status_code=400, detail="Invalid job id.")
     job = storage.get("jobs", job_id)
@@ -188,12 +200,12 @@ async def create_release(req: ReleaseRequest, _: None = Depends(require_admin)):
 
 
 @app.get("/api/releases")
-async def list_releases():
+async def list_releases(_: None = Depends(require_admin)):
     return storage.list_("releases")
 
 
 @app.get("/api/releases/{release_id}")
-async def get_release(release_id: str):
+async def get_release(release_id: str, _: None = Depends(require_admin)):
     rel = storage.get("releases", release_id)
     if not rel:
         raise HTTPException(status_code=404, detail="Release not found.")
@@ -227,5 +239,5 @@ async def bot_enqueue(brief: BotBrief, _: None = Depends(require_admin)):
 
 
 @app.get("/api/bot/queue")
-async def bot_queue():
+async def bot_queue(_: None = Depends(require_admin)):
     return storage.list_("queue")
