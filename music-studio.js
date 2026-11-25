@@ -48,7 +48,10 @@
   function stopPolling() { clearInterval(pollTimer); pollTimer = null; $("generate").disabled = false; }
 
   function showResult(job) {
-    const audioUrl = job.audio_url ? apiUrl(job.audio_url) : null;
+    const audioPath = typeof job.audio_url === "string" &&
+      /^\/api\/generations\/[A-Za-z0-9_-]{4,64}\/audio$/.test(job.audio_url)
+      ? job.audio_url : null;
+    const audioUrl = audioPath ? apiUrl(audioPath) : null;
     if (!audioUrl) throw new Error("The job finished but the backend returned no audio URL.");
     $("player").src = audioUrl;
     $("player").hidden = false;

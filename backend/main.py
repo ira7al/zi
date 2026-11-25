@@ -48,6 +48,32 @@ app.add_middleware(
 )
 
 
+def find_work_file(*parts: str, filename: str) -> str | None:
+    root = os.path.realpath(os.path.join(pipeline.WORK, *parts))
+    work_root = os.path.realpath(pipeline.WORK)
+    if os.path.commonpath((work_root, root)) != work_root:
+        return None
+    try:
+        for entry in os.listdir(root):
+            if entry == filename:
+                return os.path.realpath(os.path.join(root, entry))
+    except (FileNotFoundError, NotADirectoryError):
+        pass
+    return None
+
+
+def find_file_in_directory(directory: str | None, filename: str) -> str | None:
+    if not directory:
+        return None
+    try:
+        for entry in os.listdir(directory):
+            if entry == filename:
+                return os.path.realpath(os.path.join(directory, entry))
+    except (FileNotFoundError, NotADirectoryError):
+        pass
+    return None
+
+
 class GenerationRequest(BaseModel):
     track_name: str = Field(default="Untitled track", max_length=80)
     prompt: str = Field(min_length=3, max_length=1000)
@@ -130,9 +156,14 @@ async def get_generation(job_id: str):
 
 @app.get("/api/generations/{job_id}/audio")
 async def get_audio(job_id: str):
-    job = storage.get("jobs", job_id) if re.fullmatch(r"[A-Za-z0-9_-]{4,64}", job_id) else None
-    path = (job or {}).get("preview_path")
-    if not path or not os.path.exists(path):
+    if not re.fullmatch(r"[A-Za-z0-9_-]{4,64}", job_id):
+        raise HTTPException(status_code=400, detail="Invalid job id.")
+    job = storage.get("jobs", job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Audio not available.")
+    job_dir = find_work_file("jobs", filename=job_id)
+    path = find_file_in_directory(job_dir, "preview.mp3")
+    if not path or not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Audio not available.")
     return FileResponse(path, media_type="audio/mpeg", filename=f"{job_id}.mp3")
 
@@ -171,11 +202,15 @@ async def get_release(release_id: str):
 
 @app.get("/api/releases/{release_id}/package")
 async def download_package(release_id: str, _: None = Depends(require_admin)):
+    if not re.fullmatch(r"[A-Za-z0-9_-]{4,64}", release_id):
+        raise HTTPException(status_code=400, detail="Invalid release id.")
     rel = storage.get("releases", release_id)
-    if not rel or not rel.get("package_path") or not os.path.exists(rel["package_path"]):
+    if not rel:
         raise HTTPException(status_code=404, detail="Package not available.")
-    return FileResponse(rel["package_path"], media_type="application/zip",
-                        filename=os.path.basename(rel["package_path"]))
+    path = find_work_file("packages", filename=f"routenote-{release_id}.zip")
+    if not path or not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="Package not available.")
+    return FileResponse(path, media_type="application/zip", filename=os.path.basename(path))
 
 
 @app.post("/api/releases/{release_id}/submitted")
