@@ -48,6 +48,32 @@ app.add_middleware(
 )
 
 
+def find_work_file(*parts: str, filename: str) -> str | None:
+    root = os.path.realpath(os.path.join(pipeline.WORK, *parts))
+    work_root = os.path.realpath(pipeline.WORK)
+    if os.path.commonpath((work_root, root)) != work_root:
+        return None
+    try:
+        for entry in os.listdir(root):
+            if entry == filename:
+                return os.path.realpath(os.path.join(root, entry))
+    except (FileNotFoundError, NotADirectoryError):
+        pass
+    return None
+
+
+def find_file_in_directory(directory: str | None, filename: str) -> str | None:
+    if not directory:
+        return None
+    try:
+        for entry in os.listdir(directory):
+            if entry == filename:
+                return os.path.realpath(os.path.join(directory, entry))
+    except (FileNotFoundError, NotADirectoryError):
+        pass
+    return None
+
+
 class GenerationRequest(BaseModel):
     track_name: str = Field(default="Untitled track", max_length=80)
     prompt: str = Field(min_length=3, max_length=1000)
@@ -135,10 +161,9 @@ async def get_audio(job_id: str):
     job = storage.get("jobs", job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Audio not available.")
-    path = os.path.realpath(os.path.join(pipeline.WORK, "jobs", job_id, "preview.mp3"))
-    if os.path.commonpath((os.path.realpath(pipeline.WORK), path)) != os.path.realpath(pipeline.WORK):
-        raise HTTPException(status_code=404, detail="Audio not available.")
-    if not os.path.isfile(path):
+    job_dir = find_work_file("jobs", filename=job_id)
+    path = find_file_in_directory(job_dir, "preview.mp3")
+    if not path or not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Audio not available.")
     return FileResponse(path, media_type="audio/mpeg", filename=f"{job_id}.mp3")
 
@@ -182,10 +207,8 @@ async def download_package(release_id: str, _: None = Depends(require_admin)):
     rel = storage.get("releases", release_id)
     if not rel:
         raise HTTPException(status_code=404, detail="Package not available.")
-    path = os.path.realpath(os.path.join(pipeline.WORK, "packages", f"routenote-{release_id}.zip"))
-    if os.path.commonpath((os.path.realpath(pipeline.WORK), path)) != os.path.realpath(pipeline.WORK):
-        raise HTTPException(status_code=404, detail="Package not available.")
-    if not os.path.isfile(path):
+    path = find_work_file("packages", filename=f"routenote-{release_id}.zip")
+    if not path or not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Package not available.")
     return FileResponse(path, media_type="application/zip", filename=os.path.basename(path))
 
