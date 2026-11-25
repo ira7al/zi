@@ -1,91 +1,137 @@
-<details><summary>Directory Metadata (for smart change detection)</summary>
+# 📚 zi Documentation
 
-```json
-{
-  "doc_type": "directory_index",
-  "directory_path": "_docs",
-  "directory_hash": "a3abd007cab347601e300c03e57458973ab3d11dc242b41e88e5e3a38a6bec4c",
-  "file_count": 2,
-  "file_hashes": {
-    "music-studio.js": "ac0e2d0434dae6a5",
-    "single-file-app.html": "f38d939e7fb58fa7"
-  }
-}
+Welcome to the complete documentation for this repository. This documentation is automatically generated and maintained by Woden Docbot.
+
+![Files Documented: 5](https://img.shields.io/badge/Files_Documented-5-blue) ![Coverage: 29%](https://img.shields.io/badge/Coverage-29%-orange) ![Last Updated: 2026-11-25](https://img.shields.io/badge/Last_Updated-2026--11--25-gray)
+
+## 🔗 Quick Links
+
+[📂 backend](./backend/README.md)
+[📋 Dependencies](./DEPENDENCIES.md)
+
+
+---
+
+> A Python-based backend that exposes an HTTP API and orchestrates audio generation, asset preparation, and packaging for release distribution.
+
+
+
+## 📖 Overview
+
+zi provides backend components for generating and packaging multi-section audio pieces and preparing release assets. The backend exposes an HTTP API (implemented in main.py with FastAPI) to trigger and query work, orchestrates an audio generation and packaging pipeline (pipeline.py) that stitches segments into a single master of at least 180 seconds and performs licence/model-spec checks, and prepares a RouteNote-compatible release package.
+
+Media utilities (media.py) handle low-level preparation of audio and cover art assets for distribution. The codebase is implemented in Python and is arranged so the API surface invokes the pipeline and media utilities to produce finished releases.
+
+
+### 🧩 Key Components
+
+| Component | Purpose | Technologies |
+| --- | --- | --- |
+| **backend/main.py** | Implements the HTTP API surface for the Zi service, exposing endpoints to trigger or query audio generation and packaging work. | `Python`, `fastapi` |
+| **backend/pipeline.py** | Coordinates the audio generation and packaging pipeline: produces multi-section musical pieces, stitches segments into a single master (>=180s), checks licence and model specifications, and prepares a RouteNote-compatible release package. | `Python` |
+| **backend/media.py** | Provides utilities for preparing audio and cover art assets required for distribution and release packaging. | `Python`, `Pillow` |
+
+
+
+
+**Component Architecture:**
+
+```mermaid
+graph TD
+    C0[backend/main.py]
+    C1[backend/pipeline.py]
+    C2[backend/media.py]
+    C0 --> C1
+    C1 --> C2
 ```
 
-</details>
+### 🏗️ Architecture
 
-[Documentation Home](README.md)
+A Python backend directory houses three primary modules (main.py, pipeline.py, media.py): main.py is the FastAPI HTTP surface, pipeline.py orchestrates generation and packaging, and media.py prepares audio/cover assets for distribution.
+
+### 💡 Use Cases
+
+- ✦ Triggering and querying audio generation and packaging jobs via HTTP
+- ✦ Coordinating multi-section musical piece generation and stitching segments into a master track of at least 180 seconds
+- ✦ Performing licence and model-spec checks and preparing a RouteNote-compatible release package
+- ✦ Preparing audio files and cover art assets for release distribution
+
+
+
+### 🔧 Technologies
+
+
+**Languages:** ![Python: ](https://img.shields.io/badge/Python--blue) ![JavaScript: ](https://img.shields.io/badge/JavaScript--blue)
+
+**Frameworks:** ![FastAPI: ](https://img.shields.io/badge/FastAPI--blue)
+![Docker: ](https://img.shields.io/badge/Docker--blue) ![Docker Compose: ](https://img.shields.io/badge/Docker_Compose--blue) ![HTML: ](https://img.shields.io/badge/HTML--blue) ![CSS: ](https://img.shields.io/badge/CSS--blue) ![Shell: ](https://img.shields.io/badge/Shell--blue)
+
+### 📦 External Dependencies
+
+The following external packages are used across the project:
+
+- `Pillow`
+- `fastapi`
+- `httpx`
+- `pydantic`
+- `uvicorn`
+
+
 
 ---
 
-# 📁 _docs
+## 📑 Documentation Sections
 
-> **Purpose:** Top-level web and integration assets for the Zi service frontend: UI pages plus a compact JavaScript utility module coordinating network requests, polling, and simple UI updates, alongside a backend directory containing the HTTP API and audio generation pipeline.
-> 
-
-![Organization: Hierarchical](https://img.shields.io/badge/Organization-Hierarchical-blue)
-
-## 📑 Table of Contents
+### [backend](./backend/README.md)
+Contains the backend service components for the Zi service: the HTTP API surface, audio/media asset utilities, and the audio generation and packaging pipeline.
 
 
-- [Overview](#overview)
-- [Subdirectories](#subdirectories)
-- [All Files](#all-files)
-- [Dependencies](#dependencies)
-- [Architecture Notes](#architecture-notes)
-
----
-
-## Overview
-
-The repository root contains a small set of web-facing resources and an adjacent backend implementation. At the root level there are two documented files: single-file-app.html, a single-file dark-themed, responsive web interface for monitoring recent activity and live telemetry for an operations snapshot and an AI MusicGen Studio; and music-studio.js, a compact JavaScript module that provides top-level utility functions to coordinate network requests, polling behavior, and simple UI updates used by the UI. These root files form the immediate entry points for developers working on the frontend or integration testing of the studio UI.
-
-A subdirectory named backend holds the core server-side components for the Zi service. That directory contains three documented Python modules: main.py which implements the HTTP API surface for the Zi service (noted as using FastAPI in its purpose), pipeline.py which coordinates audio generation and packaging, and additional media/asset utilities. Together, the frontend files at the root use network requests to interact with the backend HTTP API and the backend implements the audio generation pipeline and asset utilities. This directory therefore groups the client-facing UI and lightweight coordinating scripts with the backend service implementation so developers can iterate on both UI behavior (polling, telemetry display) and server-side audio generation in one place.
-
-
-### File Organization
-
-Root contains web assets and a small JS utility module for coordinating UI/network behavior. A 'backend' subdirectory contains server-side components (API surface, pipeline, asset utilities). Other repository files (.gitignore, Dockerfile, README-ADDENDUM.md, README.md, docker-compose.yml, index.html, music-studio.css, music-studio.html, releases.html, releases.js, render.yaml and .github) exist at root but are not documented here; they provide project-level configuration, additional pages, and CI metadata.
-
-## 📂 Subdirectories
-
-This directory contains the following subdirectories:
-
-### [📁 backend](./backend/README.md)
-
-**Purpose:** Contains the backend service components for the Zi service: the HTTP API surface, audio/media asset utilities, and the audio generation and packaging pipeline.
+This directory hosts the core backend components used by the Zi service.
 
 ![Files: 3](https://img.shields.io/badge/Files-3-blue)
 
----
-## 📂 All Files
+### Files at the repository root
 
-| File | Type |
-| --- | --- |
-| [music-studio.js](./music-studio.js.md) | 📜 JavaScript |
-| [single-file-app.html](./single-file-app.html.md) | 🌐 HTML |
-
-## Dependencies
-
-### Internal Dependencies
-
-| Dependency | Usage |
-| --- | --- |
-| `backend` | Provides the HTTP API surface, audio/media asset utilities, and the audio generation and packaging pipeline that the root-level frontend files communicate with. |
-
-## Architecture Notes
-
-- Frontend root files are lightweight: a single-page UI plus a compact JS utilities module that handles polling and simple UI updates.
-- Backend is organized into a service API (main.py) and a separate coordination pipeline (pipeline.py) for audio generation and packaging; the frontend communicates via HTTP requests to the API.
+- [music-studio.js](./music-studio.js.md)
+- [single-file-app.html](./single-file-app.html.md)
 
 ---
 
-## Navigation
+## 📊 Documentation Statistics
 
-**↑ Parent Directory:** [Go up](../README.md)
-**🔗 Related:** [backend](./backend/README.md)
+- **Files Documented**: 5
+- **Directories**: 2
+- **Coverage**: 29%
+- **Eligible Source Files**: 17
+- **Last Updated**: 2026-11-25
 
 ---
 
-*Generated by Woden Docbot*
+## 🧭 How to Navigate
+
+> ℹ️ **INFO**
+> Each directory has its own README.md with detailed information about that section. Use the breadcrumb navigation at the top of each page to navigate back to parent directories.
+
+### Navigation Features
+
+- **Breadcrumbs** - At the top of each page, showing your current location
+- **Directory READMEs** - Each folder has a comprehensive overview
+- **File Documentation** - Click through to individual file documentation
+- **Search** - Use GitHub's search or your IDE's search functionality
+
+---
+
+## 🤖 About Woden DocBot
+
+This documentation is automatically generated and kept up-to-date by Woden DocBot, an AI-powered documentation assistant. DocBot analyzes code on every pull request and updates documentation to reflect changes.
+
+### Features
+
+- **Automatic Updates** - Documentation updates on every PR
+- **Comprehensive Coverage** - Files, functions, classes, and directories
+- **Smart Navigation** - Breadcrumbs, related files, and parent links
+- **AI-Powered** - Uses Azure GPT models for intelligent documentation generation
+
+---
+
+*Generated by Woden DocBot for zi*
