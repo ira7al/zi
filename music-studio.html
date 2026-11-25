@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0b1220">
+  <title>Zi 0.05 — Music Studio</title>
+  <link rel="stylesheet" href="music-studio.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html"><span class="brand-mark">♫</span> ZI <small>0.05</small></a>
+    <nav><a href="index.html">Operations</a><a class="active" href="music-studio.html">Music Studio</a><a href="releases.html">Releases</a></nav>
+  </header>
+  <main class="shell">
+    <section class="intro">
+      <p class="eyebrow">CREATIVE WORKSPACE / PHASE 3</p>
+      <h1>Make something <span>unforgettable.</span></h1>
+      <p>Turn a creative direction into an original instrumental music track with AI.</p>
+    </section>
+    <section class="studio-grid">
+      <form id="studio-form" class="panel">
+        <div class="panel-heading"><div><p class="eyebrow">TRACK BRIEF</p><h2>Build your sound</h2></div><span class="step">01 / 02</span></div>
+        <label>Track name<input id="track-name" maxlength="80" placeholder="Midnight in Motion"></label>
+        <label>Describe your music<textarea id="prompt" required maxlength="800" rows="4" placeholder="A cinematic electronic track with warm analog synths, a deep pulsing bassline and an uplifting chorus..."></textarea></label>
+        <div class="two-col">
+          <label>Genre<select id="genre"><option>Electronic</option><option>Pop</option><option>Hip-hop</option><option>Ambient</option><option>Rock</option><option>Jazz</option><option>Cinematic</option><option>Lo-fi</option><option>Classical</option><option>Afrobeats</option></select></label>
+          <label>Mood<select id="mood"><option>Uplifting</option><option>Dark</option><option>Dreamy</option><option>Energetic</option><option>Melancholic</option><option>Peaceful</option><option>Epic</option><option>Romantic</option></select></label>
+        </div>
+        <div class="two-col">
+          <label>Lead instruments<select id="instruments"><option>Synthesizers</option><option>Piano</option><option>Acoustic guitar</option><option>Electric guitar</option><option>Strings</option><option>Drums and percussion</option><option>Mixed ensemble</option></select><small>Tracks are instrumental: the model cannot sing real lyrics.</small></label>
+          <label>Energy<select id="energy"><option>Medium</option><option>Low</option><option>High</option><option>Intense</option></select></label>
+        </div>
+        <label class="range-label">Duration <strong><span id="duration-value">190</span> seconds</strong><input id="duration" type="range" min="180" max="300" step="5" value="190"><small>Minimum 180 s. Built from several sections crossfaded together, so expect a few minutes and several Replicate runs.</small></label>
+        <label>Backend URL<input id="api-base" type="url" placeholder="https://your-backend.example.com" autocomplete="url"><small>Enter your deployed FastAPI address. Do not enter an API key here.</small></label>
+        <label>Admin token <small>(only if your backend sets ADMIN_TOKEN)</small><input id="token" type="password" autocomplete="off" placeholder="Same as ADMIN_TOKEN on the backend"><small>Kept for this browser session only.</small></label>
+        <button id="generate" class="primary" type="submit">✦ Generate track</button>
+        <p id="notice" class="notice" role="status">Connect your backend to start generating.</p>
+      </form>
+      <aside class="panel result-panel">
+        <div class="panel-heading"><div><p class="eyebrow">YOUR CREATION</p><h2>Track preview</h2></div><span class="status" id="status">STANDBY</span></div>
+        <div class="artwork"><div class="soundwave">〰</div><div class="art-caption">ZI<br><strong>STUDIO SESSION</strong></div></div>
+        <h3 id="result-title">Your next track starts here</h3>
+        <p id="result-description" class="muted">Your generated audio will appear here when the job completes.</p>
+        <audio id="player" controls hidden></audio>
+        <a id="download" class="download" hidden download="zi-track.mp3">Download preview MP3 ↓</a>
+        <a id="to-release" class="download" hidden href="releases.html">Prepare for RouteNote →</a>
+        <div class="job-meta"><span>ENGINE</span><strong id="engine">Replicate</strong></div>
+        <div class="job-meta"><span>OUTPUT</span><strong>MP3 audio</strong></div>
+        <div class="job-meta"><span>JOB ID</span><strong id="job-id">—</strong></div>
+      </aside>
+    </section>
+    <footer>Zi 0.05 · Your ideas, orchestrated. <a href="https://github.com/inecloud313-prog/zi">GitHub</a></footer>
+  </main>
+  <script src="music-studio.js" defer></script>
+</body>
+</html>
