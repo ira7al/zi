@@ -1,4 +1,4 @@
-<!-- METADATA: {"source_path": "backend/main.py", "source_sha": "c7795eabe4913b979ecaa5d8e90c8c9e3df42085", "extraction_quality": "full_ast", "model": "gpt-5-mini", "generated_at": "2026-11-25T09:25:20Z", "doc_type": "file"} -->
+<!-- METADATA: {"source_path": "backend/main.py", "source_sha": "03ee8dfbc346b6bc2cb0de1adc2d7cc9225e14cd", "extraction_quality": "full_ast", "model": "gpt-5-mini", "generated_at": "2026-11-25T14:52:02Z", "doc_type": "file"} -->
 <details>
 <summary>Documentation Metadata (click to expand)</summary>
 
@@ -6,20 +6,17 @@
 {
   "doc_type": "file_overview",
   "file_path": "backend/main.py",
-  "source_hash": "2194cccf7ff7e294c93e2dd3a289cde66d4eb659df7f2a542543078b7a6adee0",
-  "last_updated": "2026-11-25T09:25:20.933286+00:00",
-  "git_sha": "c7795eabe4913b979ecaa5d8e90c8c9e3df42085",
-  "tokens_used": 11194,
+  "source_hash": "8ed9d8b02eff96aff9d5d3807c5f9d4ca692b68fee1e645c2d246f65b2a5508d",
+  "last_updated": "2026-11-25T14:52:02.410991+00:00",
+  "git_sha": "03ee8dfbc346b6bc2cb0de1adc2d7cc9225e14cd",
   "complexity_score": 5,
-  "estimated_review_time_minutes": 16,
+  "estimated_review_time_minutes": 15,
   "external_dependencies": [
     "asyncio",
     "os",
     "re",
     "shutil",
-    "time",
     "contextlib",
-    "secrets",
     "httpx",
     "fastapi",
     "fastapi.middleware.cors",
@@ -44,7 +41,7 @@
 
 > **File:** `backend/main.py`
 
-![Complexity: Medium](https://img.shields.io/badge/Complexity-Medium-yellow) ![Review Time: 16min](https://img.shields.io/badge/Review_Time-16min-blue)
+![Complexity: Medium](https://img.shields.io/badge/Complexity-Medium-yellow) ![Review Time: 15min](https://img.shields.io/badge/Review_Time-15min-blue)
 
 ## 📑 Table of Contents
 
@@ -59,9 +56,9 @@
 
 ## Overview
 
-This module defines a FastAPI application that exposes an HTTP API for creating and retrieving generation tasks, managing release packages, and interacting with a lightweight bot queue. It declares Pydantic request models (GenerationRequest, ReleaseRequest, SubmitMark, BotBrief) and a collection of async route handlers for operations such as creating and polling generations, serving audio files, validating and creating releases, listing and downloading release packages, and marking submissions. The application behavior is influenced by environment-configured constants (e.g., REPLICATE_TOKEN, ADMIN_TOKEN, ALLOWED_ORIGINS, BOT_ENABLED) and includes lifecycle management via an async lifespan function.
+This module defines a FastAPI application (app) that exposes a variety of HTTP endpoints for generation, release management, file access, and an optional background bot queue. It declares Pydantic models (GenerationRequest, ReleaseRequest, SubmitMark, BotBrief) used for request validation and includes a lifespan hook for startup/shutdown logic. Configuration is driven by environment variables such as REPLICATE_TOKEN, ALLOWED_ORIGINS, ADMIN_TOKEN and BOT_ENABLED, and the application registers CORS and file-serving behavior to support clients fetching generated assets and release packages.
 
-Administrative and resource-sensitive endpoints are protected by a require_admin function that checks an admin token from headers. The module also contains utility functions for locating files (find_work_file, find_file_in_directory), and it integrates middleware and responses relevant to CORS and file delivery. Network operations appear to use httpx, and status polling is coordinated with a poll interval and a status_last_poll map to track recent activity.
+The module also contains several async endpoint handlers and utilities: generation endpoints (create_generation, get_generation, get_audio), release lifecycle endpoints (validate_release, create_release, list_releases, get_release, download_package), file discovery helpers (find_work_file, find_file_in_directory), an admin guard (require_admin) to protect sensitive operations, and bot-related endpoints (bot_enqueue, bot_queue) gated by BOT_ENABLED. External integrations referenced by imports include httpx for HTTP operations, shutil for file manipulation, and an internal bot module for queueing behavior.
 
 ## Dependencies
 
@@ -73,9 +70,7 @@ Administrative and resource-sensitive endpoints are protected by a require_admin
 | `os` | import os |
 | `re` | import re |
 | `shutil` | import shutil |
-| `time` | import time |
 | `contextlib` | from contextlib import asynccontextmanager |
-| `secrets` | from secrets import compare_digest |
 | `httpx` | import httpx |
 | `fastapi` | from fastapi import Depends, FastAPI, Header, HTTPException |
 | `fastapi.middleware.cors` | from fastapi.middleware.cors import CORSMiddleware |
@@ -93,19 +88,19 @@ This file is part of the **backend** directory. View the [directory index](./REA
 
 ## Architecture Notes
 
-- Uses FastAPI for HTTP routing and lifecycle management (app, async endpoints, lifespan).
-- Defines request and data schemas with Pydantic BaseModel subclasses.
-- Implements asynchronous handlers throughout (async functions) for I/O-bound operations.
-- Configures behavior and secrets through environment variables (REPLICATE_TOKEN, ADMIN_TOKEN, ALLOWED_ORIGINS, BOT_ENABLED).
-- Performs file discovery and delivery via helper functions and FileResponse, and uses httpx for outbound HTTP calls.
+- Uses Pydantic BaseModel classes for request validation (GenerationRequest, ReleaseRequest, SubmitMark, BotBrief).
+- Implements asynchronous FastAPI handlers (async def endpoints) throughout the module.
+- Reads configuration from environment variables (REPLICATE_TOKEN, ALLOWED_ORIGINS, ADMIN_TOKEN, BOT_ENABLED).
+- Integrates file-serving and file-system utilities (shutil, FileResponse, file discovery helpers).
+- Includes an explicit lifespan function passed to FastAPI for application startup/shutdown management.
 
 ## Maintenance Notes
 
-- Provide a FastAPI application instance (app) with configured lifespan and CORS handling for the API titled 'Zi API'.
-- Define Pydantic request models used by route handlers: GenerationRequest, ReleaseRequest, SubmitMark, and BotBrief.
-- Expose async endpoints to create and retrieve generations, stream or serve audio files, and manage generation status polling.
-- Expose endpoints to validate, create, list, retrieve, and download release packages and related files.
-- Implement a bot queue API surface (bot_enqueue, bot_queue) and a submission-marking endpoint, with admin protection for sensitive operations.
+- Provide HTTP endpoints for creating and retrieving generations and their audio assets.
+- Manage release-related operations: validate, create, list, retrieve, and download release packages.
+- Serve files from disk using helper functions to locate work files and directory contents.
+- Enforce administrative access for sensitive endpoints via require_admin and environment-controlled ADMIN_TOKEN.
+- Expose optional bot queue endpoints to enqueue work and inspect the bot queue when BOT_ENABLED is set.
 
 
 ---
@@ -119,8 +114,6 @@ This file is part of the **backend** directory. View the [directory index](./REA
 | `ADMIN_TOKEN` | — | `os.getenv('ADMIN_TOKEN', '')` |
 | `BOT_ENABLED` | — | `os.getenv('BOT_ENABLED', '1') == '1'` |
 | `JOB_ID` | — | `'^[A-Za-z0-9_-]{4,64}$'` |
-| `STATUS_POLL_INTERVAL_SECONDS` | — | `8.0` |
-| `status_last_poll` | `dict[str, float]` | `{}` |
 | `app` | — | `FastAPI(title='Zi API', version='0.05', lifespan=lifespan)` |
 
 
@@ -142,12 +135,9 @@ def require_admin(authorization: str = Header(default='')):
 
 #### Description
 
-Enforces protection for administrative and resource-intensive endpoints by verifying that requests are authorized for admin-level access.
+Enforces an admin requirement for endpoints that spend Replicate credits: when an ADMIN_TOKEN is configured, this function checks the provided Authorization header and blocks access unless the request is authorized.
 
-It is intended to be used as a guard for routes that require elevated privileges or consume significant resources.
-
-
-Either allows the request to proceed (e.g., by returning control or an auth-related object) or stops it by raising an HTTP error when authorization fails.
+It is used to protect credit-spending endpoints behind an admin token.
 
 #### Parameters
 
@@ -175,12 +165,12 @@ async def lifespan(_: FastAPI):
 
 #### Description
 
-An asynchronous context manager function intended to manage the FastAPI application's lifespan events (startup and shutdown).
+An async context manager function intended to provide the lifespan (startup and shutdown) handling for a FastAPI application.
 
-It is used by FastAPI to run setup before the application starts serving requests and to perform cleanup when the application is shutting down.
+It will be used by the FastAPI app to run any setup before the app starts serving and teardown after the app stops.
 
 
-Provides an async context manager (via asynccontextmanager) that yields control to the application runtime for the duration of the app's lifespan.
+As an asynccontextmanager-decorated function, it yields an asynchronous context manager that FastAPI uses to drive the application's startup and shutdown lifecycle.
 
 #### Parameters
 
@@ -208,9 +198,9 @@ def find_work_file(*parts: str, filename: str) -> str | None:
 
 #### Description
 
-Compose a filesystem path from a sequence of path components and a filename, then locate and return that file path if it exists.
+Locate a work file by combining one or more path components with a specific filename and return the resolved file path.
 
-The function accepts any number of path parts followed by a filename and returns the full path to the corresponding "work" file or None if not found.
+It accepts any number of path segments and the filename to search for and returns the path to the matching file if found.
 
 #### Parameters
 
@@ -245,9 +235,9 @@ def find_file_in_directory(directory: str | None, filename: str) -> str | None:
 
 #### Description
 
-Locate a file with the given filename inside the provided directory and return its path if found.
+Searches for a file with the given filename inside the provided directory and returns its path if found.
 
-If the file is not present (or cannot be located), return None.
+If the directory is None or the file cannot be found, it returns None.
 
 #### Parameters
 
@@ -276,14 +266,14 @@ Not analyzed
 
 #### Description
 
-A pydantic data model that represents the input needed to request generation of an audio track, capturing the track name, textual prompt, and desired duration.
+GenerationRequest is a pydantic model that represents and validates the inputs required to request generation of a track.
 
-Acts as the canonical request schema within backend/main.py, providing a single source of truth for generation parameters that other functions or endpoints in the module can accept and rely upon for type-checked data.
+Within backend/main.py, GenerationRequest serves as the typed input contract for generation-related functionality, ensuring that downstream logic receives a consistent and validated set of fields. As a pydantic model, it centralizes input validation and simple class-level utilities tied to generation requests.
 
 Responsibilities:
-- Declare and validate the required fields for a generation request: track_name (str), prompt (str), and duration (int).
-- Hold and serialize/deserialze generation parameters in a structured form suitable for passing between components or across boundaries (e.g., API, service layer).
-- Provide a class-level helper via the _no_vocals classmethod to offer an alternate or convenience representation/behavior related to generation requests.
+- Validate and hold request data for a generation operation (track_name, prompt, duration) using BaseModel behavior.
+- Provide a structured data container that other parts of the code can rely on when accessing generation parameters.
+- Expose a class-level helper named _no_vocals (as a classmethod) for use by callers that need the corresponding class-level behavior or sentinel.
 
 #### Inheritance
 
@@ -321,9 +311,9 @@ def _no_vocals(cls, v: str) -> str:
 
 #### Description
 
-A class-level field validator method that takes a string value and returns a processed string.
+This classmethod acts as a field validator for the GenerationRequest class, receiving a string value and performing validation and/or normalization on it.
 
-It is intended to validate and/or transform the input 'v' for the GenerationRequest data model (likely enforcing a "no vocals" constraint) before the value is accepted.
+It returns the (possibly transformed) string to be stored on the model.
 
 #### Parameters
 
@@ -351,15 +341,15 @@ Not analyzed
 
 #### Description
 
-ReleaseRequest is a Pydantic model that represents the payload for initiating or describing a release operation.
+ReleaseRequest is a Pydantic data model that represents a request to perform a release operation.
 
-Within backend/main.py, ReleaseRequest serves as the canonical data transfer object for release actions, making it the standard representation of input required by functions or endpoints that perform or schedule releases. It centralizes the core identifiers and metadata needed by the module to handle a release.
+Within backend/main.py, ReleaseRequest serves as the canonical input representation for release-related operations, ensuring that code in the module receives a consistent, validated payload describing what to release, where, and with what metadata.
 
 Responsibilities:
-- Hold and validate the required fields for a release operation: job_id, connector, and metadata.
-- Provide a clear typed container for passing release-related data between components or layers.
-- Support serialization and deserialization of release request data (e.g., to/from JSON) via BaseModel capabilities.
-- Ensure consistent data structure for downstream processing of release operations.
+- Validate and store the job identifier (job_id) for the release operation.
+- Hold the connector identifier (connector) that determines which integration or backend will handle the release.
+- Contain release-specific details in the metadata field (ReleaseMetadata) for downstream processing.
+- Provide a typed, serializable container that can be passed through the application for handling release requests.
 
 #### Inheritance
 
@@ -383,14 +373,14 @@ Responsibilities:
 
 #### Description
 
-SubmitMark is a Pydantic data model representing the payload or schema for submitting a mark-related reference.
+SubmitMark is a Pydantic data model that represents a submission marker containing a reference to a routenote.
 
-Within backend/main.py, SubmitMark functions as a lightweight schema for incoming or outgoing data related to mark submission. It standardizes how a routenote reference is represented and validated across the module.
+Within backend/main.py, SubmitMark serves as the typed data schema for operations that need a routenote reference, enabling other parts of the module to accept and rely on a validated routenote_ref value. It acts as a lightweight DTO (data transfer object) for routenote submissions.
 
 Responsibilities:
-- Define and validate the structure of the submission payload containing a routenote reference.
-- Ensure that the routenote_ref attribute is present and is a string according to the Pydantic BaseModel rules.
-- Provide a typed container that other parts of the application can use for serialization, deserialization, and data exchange.
+- Define and validate the routenote_ref field as a string using Pydantic's BaseModel behavior.
+- Provide a simple, typed container for passing a routenote reference between components.
+- Ensure data consistency for any operation that requires a routenote identifier in the module.
 
 #### Inheritance
 
@@ -412,15 +402,15 @@ Responsibilities:
 
 #### Description
 
-BotBrief is a Pydantic model that represents a concise brief for a music generation or metadata record.
+BotBrief is a Pydantic data model that captures the metadata and generation instructions for a single bot-created music item, including its title, textual prompt, artist, genre, label, and duration.
 
-Within backend/main.py, BotBrief acts as the primary data model for passing around brief information about a track or generation prompt. It standardizes how brief metadata and the prompt are represented and validated across the module.
+Within backend/main.py, BotBrief acts as the primary typed representation for brief information used by other parts of the module to create, validate, and exchange music-generation metadata. It centralizes the shape and validation rules for brief payloads handled in the file.
 
 Responsibilities:
-- Validate and store a structured brief consisting of title, prompt, artist, genre, label, and duration.
-- Provide a dependable data container that can be serialized and used across the application where a music brief is required.
-- Offer a class-level utility (_no_vocals) to produce or transform a brief variant that indicates no-vocals usage or intent.
-- Serve as the canonical representation of the minimal set of fields needed to describe a generation request or track summary.
+- Declare and type-check the key fields that describe a music brief: title, prompt, artist, genre, label, and duration.
+- Provide Pydantic validation and serialization of brief data so instances can be reliably consumed, stored, or transmitted.
+- Offer a class-level utility (_no_vocals) that represents or produces a variant of the brief related to an instrumental/no-vocals configuration (as indicated by the extracted classmethod).
+- Serve as the canonical data structure for components of the system that need a compact description of a generated track or generation request.
 
 #### Inheritance
 
@@ -461,9 +451,7 @@ def _no_vocals(cls, v: str) -> str:
 
 #### Description
 
-A class-level field validator method intended to process a string by removing or normalizing its vowels (based on the method name `_no_vocals`).
-
-It is used as a field_validator and operates at the class level to return a transformed string without vowels.
+A classmethod used as a field validator that accepts a string and returns a processed string with vocals removed, intended to normalize or validate a text field on the class.
 
 #### Parameters
 
@@ -497,7 +485,9 @@ async def root():
 
 #### Description
 
-Asynchronous GET endpoint function registered with app.get for the application's root path; it serves the root HTTP request and provides the basic entry response for the service (e.g., health check or landing message).
+Asynchronous handler function registered as an HTTP GET endpoint (via the app.get decorator) for the application's root path.
+
+It serves as the entrypoint for GET requests to the root and performs whatever response logic is implemented in the function body.
 
 #### Complexity
 
@@ -519,9 +509,12 @@ async def health():
 
 #### Description
 
-As an asynchronous HTTP GET endpoint, this function provides a simple health check for the application, typically used to verify that the service is up and responding.
+Asynchronous HTTP GET endpoint that provides a health check for the application.
 
-It is intended to be called by monitoring systems or load balancers to confirm basic operational status.
+It is intended to be called by monitoring systems or load balancers to verify that the service is up and responsive.
+
+
+Returns an HTTP response indicating the service health (typically a 200 OK with a simple payload or status code), suitable for use by monitoring tools.
 
 #### Complexity
 
@@ -543,12 +536,14 @@ async def create_generation(request: GenerationRequest, _: None = Depends(requir
 
 #### Description
 
-Async HTTP POST endpoint that creates a new generation using the data supplied in the GenerationRequest.
+Asynchronous POST endpoint that creates a new generation using the provided GenerationRequest payload.
 
-It is registered with the app.post decorator and enforces admin authorization before proceeding.
+Access to this endpoint is restricted to administrators via the require_admin dependency.
 
 
-_ is an injected dependency (Depends(require_admin)) used to ensure the caller has admin privileges; request is the GenerationRequest payload containing the details for the generation to be created.
+request is a GenerationRequest object carrying the data needed to create the generation; the second parameter (_) is a placeholder for the injected admin dependency (Depends(require_admin)) and is not used directly in the function body.
+
+Returns an HTTP response indicating the result of the create operation (e.g., success/failure and any created resource data).
 
 #### Parameters
 
@@ -572,21 +567,23 @@ Not analyzed
 #### Signature
 
 ```python
-async def get_generation(job_id: str, _: None = Depends(require_admin)):
+async def get_generation(job_id: str):
 ```
 
 #### Description
 
-Asynchronous HTTP GET endpoint that retrieves generation information for a given job ID.
+As an HTTP GET endpoint, this asynchronous function handles requests to fetch the generation associated with a given job identifier.
 
-It is protected by an admin dependency, so only requests that satisfy require_admin are allowed to access the generation data for the specified job.
+It looks up or retrieves the generation result for the provided job_id and returns it to the caller.
+
+
+Returns the generation data or an HTTP response containing the generation result (or an error/status) corresponding to the provided job_id.
 
 #### Parameters
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `job_id` | `str` | ✅ | — |
-| `_` = `Depends(require_admin)` | `None` | ❌ | — |
 
 #### Complexity
 
@@ -603,26 +600,25 @@ Not analyzed
 #### Signature
 
 ```python
-async def get_audio(job_id: str, _: None = Depends(require_admin)):
+async def get_audio(job_id: str):
 ```
 
 #### Description
 
-Asynchronous HTTP GET endpoint that retrieves audio associated with a specific job identifier.
+HTTP GET endpoint that retrieves the audio associated with a given job identifier.
 
-It is exposed via the app.get decorator and is intended to serve or return the audio for the given job_id.
+It is an asynchronous handler intended to return the generated audio resource for the specified job_id.
 
 
-job_id is a string identifying the job whose audio should be retrieved; the second parameter (_) is an injected dependency (Depends(require_admin)) that enforces an administrative authorization check before the endpoint runs.
+job_id is a string identifier for the job whose audio should be fetched; its meaning is evident from the name and type.
 
-Returns an HTTP response containing the audio data or resource corresponding to the specified job_id.
+An HTTP response containing the audio payload (e.g., audio file or streamed audio data) for the requested job.
 
 #### Parameters
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `job_id` | `str` | ✅ | — |
-| `_` = `Depends(require_admin)` | `None` | ❌ | — |
 
 #### Complexity
 
@@ -644,9 +640,12 @@ async def validate_release(req: ReleaseRequest):
 
 #### Description
 
-Asynchronous HTTP POST handler that validates an incoming release payload represented by a ReleaseRequest.
+As an asynchronous HTTP POST endpoint, this function accepts a ReleaseRequest payload and performs validation of the supplied release data before further processing.
 
-It checks the contents of the request for correctness and completeness before allowing the release operation to proceed.
+It acts as the API entry point to check that the release information is well-formed and meets any business rules or constraints.
+
+
+Returns an HTTP response (typically a validation result) indicating success or detailing validation errors found in the provided ReleaseRequest.
 
 #### Parameters
 
@@ -674,14 +673,12 @@ async def create_release(req: ReleaseRequest, _: None = Depends(require_admin)):
 
 #### Description
 
-As an async POST endpoint, this function handles incoming requests to create a new release using the provided ReleaseRequest payload.
+Asynchronous POST endpoint that creates a new release using the data supplied in a ReleaseRequest.
 
-Access to this endpoint is restricted to administrators via the require_admin dependency.
+Access to this operation is restricted to administrators via a dependency on require_admin.
 
 
-req is the incoming ReleaseRequest payload containing the details of the release to create; the second parameter is the injected admin dependency (ignored in the function body) used to enforce admin-only access.
-
-Returns an HTTP response indicating the result of the create operation (e.g., success or failure) and any relevant created-release data or status information.
+req is a ReleaseRequest object containing the details of the release to be created; the second parameter _ is an injected admin dependency (Depends(require_admin)) used solely to enforce admin authorization and is not otherwise used.
 
 #### Parameters
 
@@ -705,23 +702,14 @@ Not analyzed
 #### Signature
 
 ```python
-async def list_releases(_: None = Depends(require_admin)):
+async def list_releases():
 ```
 
 #### Description
 
-Asynchronously handles an HTTP GET endpoint that returns a listing of releases.
+As an async HTTP GET endpoint, this function handles requests to list releases.
 
-Access to this endpoint is restricted to administrators via the require_admin dependency.
-
-
-An HTTP response containing the list of releases (the exact response shape is defined by the endpoint implementation).
-
-#### Parameters
-
-| Parameter | Type | Required | Description |
-| --- | --- | --- | --- |
-| `_` = `Depends(require_admin)` | `None` | ❌ | — |
+It retrieves and returns a collection of release records to the caller.
 
 #### Complexity
 
@@ -738,26 +726,23 @@ Not analyzed
 #### Signature
 
 ```python
-async def get_release(release_id: str, _: None = Depends(require_admin)):
+async def get_release(release_id: str):
 ```
 
 #### Description
 
-As an async HTTP GET endpoint, this function retrieves a release identified by the provided release_id.
+Asynchronous HTTP GET endpoint handler that retrieves and returns information about a specific software release identified by the given release_id.
 
-Access to this endpoint is protected and requires the caller to satisfy the require_admin dependency (i.e., an admin).
+It is exposed as a route via the app.get decorator and intended to fetch the release details for client requests.
 
 
-release_id is the string identifier of the release to fetch; the second parameter is an injected dependency used to enforce admin authorization and is not used directly by the function.
-
-Returns the release data (or an HTTP response containing the release) corresponding to the given release_id.
+Returns an HTTP response (typically JSON) containing the release details or an error/status indicating the release was not found or could not be retrieved.
 
 #### Parameters
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `release_id` | `str` | ✅ | — |
-| `_` = `Depends(require_admin)` | `None` | ❌ | — |
 
 #### Complexity
 
@@ -779,12 +764,12 @@ async def download_package(release_id: str, _: None = Depends(require_admin)):
 
 #### Description
 
-As an async HTTP GET endpoint, this function serves a downloadable package for a specific release identified by release_id.
+Asynchronously handles an HTTP GET endpoint to retrieve or stream a package file for the specified release.
 
-Access is restricted to callers who pass the require_admin dependency.
+Access to this endpoint is protected by an admin dependency, so only authorized administrators can download the package for the given release_id.
 
 
-Returns an HTTP response that serves or streams the package file corresponding to the provided release_id.
+Returns an HTTP response that delivers the package content for the specified release (typically a file download or streamed response), suitable for client download.
 
 #### Parameters
 
@@ -813,14 +798,14 @@ async def mark_submitted(release_id: str, body: SubmitMark, _: None = Depends(re
 
 #### Description
 
-As an HTTP POST endpoint, this async function records or updates the submitted state for a specific release identified by release_id using the data provided in the SubmitMark payload.
+As an HTTP POST handler, this asynchronous function marks a given release as submitted using the data provided in the request body.
 
 It is protected by an admin dependency, so only authorized administrators can perform the action.
 
 
-release_id is the identifier of the release to mark as submitted; body is a SubmitMark object containing the details of the submission mark to apply. The trailing parameter enforces an admin authorization dependency and is not used directly.
+release_id is the identifier of the release to mark as submitted; body is a SubmitMark object carrying the submission details (e.g., timestamp, submitter, or submission metadata). The dependency parameter _ enforces admin-only access and is not used directly.
 
-Returns an HTTP response (or serializable result) indicating whether the mark operation succeeded or failed, appropriate for an API POST handler.
+Returns an HTTP response indicating the outcome of the operation (success or appropriate error), typically with status information about the marked release.
 
 #### Parameters
 
@@ -850,12 +835,12 @@ async def bot_enqueue(brief: BotBrief, _: None = Depends(require_admin)):
 
 #### Description
 
-As an asynchronous POST endpoint, this function accepts a BotBrief and enqueues a bot job or request into the system.
+Asynchronously handles POST requests to enqueue a bot using the provided BotBrief.
 
-It is protected by an admin-only dependency so only authorized users can call it.
+It is an admin-protected endpoint (requires the require_admin dependency).
 
 
-brief is a BotBrief object containing the data needed to create or enqueue the bot; the second parameter is an injected admin-only dependency (named _), used to enforce that the caller is an administrator.
+brief is a BotBrief object containing the data needed to enqueue the bot; the second parameter _ is an internal dependency injection (Depends(require_admin)) used to ensure the caller has admin privileges.
 
 #### Parameters
 
@@ -879,20 +864,17 @@ Not analyzed
 #### Signature
 
 ```python
-async def bot_queue(_: None = Depends(require_admin)):
+async def bot_queue():
 ```
 
 #### Description
 
-As an async GET endpoint, this function exposes the "bot queue" functionality and is protected by an admin-only dependency.
+As an async HTTP GET endpoint handler, this function serves requests related to the bot queue.
 
-It serves requests to retrieve or view the bot queue/state and can only be accessed when the require_admin dependency authorizes the caller.
+It likely retrieves and returns information about the current bot queue to the caller.
 
-#### Parameters
 
-| Parameter | Type | Required | Description |
-| --- | --- | --- | --- |
-| `_` = `Depends(require_admin)` | `None` | ❌ | — |
+As a route handler it returns an HTTP response (typically JSON) containing the bot queue data or an appropriate status/error message.
 
 #### Complexity
 

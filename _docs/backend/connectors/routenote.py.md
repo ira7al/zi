@@ -1,4 +1,4 @@
-<!-- METADATA: {"source_path": "backend/connectors/routenote.py", "source_sha": "0d0a159b5033e547cac70529a45f4414070031b1", "extraction_quality": "full_ast", "model": "gpt-5-mini", "generated_at": "2026-11-25T09:25:20Z", "doc_type": "file"} -->
+<!-- METADATA: {"source_path": "backend/connectors/routenote.py", "source_sha": "656c43d6503c4badd5c3fecf2e7c9cd329617a0d", "extraction_quality": "full_ast", "model": "gpt-5-mini", "generated_at": "2026-11-25T14:52:02Z", "doc_type": "file"} -->
 <details>
 <summary>Documentation Metadata (click to expand)</summary>
 
@@ -6,10 +6,9 @@
 {
   "doc_type": "file_overview",
   "file_path": "backend/connectors/routenote.py",
-  "source_hash": "e97b277d76559de378906f16feda9e6751b1f2743020ab9dc596b3359bab6cb2",
-  "last_updated": "2026-11-25T09:24:29.804351+00:00",
-  "git_sha": "0d0a159b5033e547cac70529a45f4414070031b1",
-  "tokens_used": 2445,
+  "source_hash": "4f3b8d4633df1a5e72c0fcf549c8504af1a2c9535a86f4a59709c7405affe44d",
+  "last_updated": "2026-11-25T14:52:02.405941+00:00",
+  "git_sha": "656c43d6503c4badd5c3fecf2e7c9cd329617a0d",
   "complexity_score": 1,
   "estimated_review_time_minutes": 6,
   "external_dependencies": [
@@ -18,7 +17,6 @@
     "io",
     "json",
     "os",
-    "re",
     "zipfile",
     "datetime"
   ]
@@ -50,7 +48,7 @@
 
 ## Overview
 
-This module implements a RouteNote connector that constructs and validates release packages formatted to match RouteNote's "Create New Release" web form. Because RouteNote exposes no public upload API, the connector assembles a field-for-field package (covering Release Data, Album Details, Add Audio, and Artwork) and performs pre-validation against RouteNote's expected specifications. The connector is provided as a single class, RouteNoteConnector, which extends the Distributor base class and encapsulates the logic required to create and validate the release bundle.
+This module implements a RouteNote connector as a Distributor subclass. It encapsulates the logic needed to build a package that mirrors RouteNote's "Create New Release" form fields (Release Data -> Album Details -> Add Audio -> Artwork) and to pre-validate release assets and metadata against RouteNote's requirements. Because RouteNote offers no public upload API, the connector prepares a locally verifiable bundle intended to match the release form structure and runs validation to produce a ValidationReport for the prepared package.
 
 ## Dependencies
 
@@ -63,7 +61,6 @@ This module implements a RouteNote connector that constructs and validates relea
 | `io` | import io |
 | `json` | import json |
 | `os` | import os |
-| `re` | import re |
 | `zipfile` | import zipfile |
 | `datetime` | from datetime import date, timedelta |
 
@@ -79,16 +76,16 @@ This file is part of the **connectors** directory. View the [directory index](./
 
 ## Architecture Notes
 
-- Defines a single connector class that inherits from a Distributor base class
-- Performs packaging and validation of release metadata to mirror a web form workflow
-- Imports standard library modules for archive and CSV handling (zipfile, csv)
+- Defines a connector class by subclassing a common Distributor base type.
+- Produces structured validation output via a ValidationReport type.
+- Imports ReleaseMetadata and ValidationReport alongside the Distributor base, indicating tight coupling between metadata representation and validation.
 
 ## Maintenance Notes
 
-- Provide a Distributor-derived RouteNoteConnector class that models the behavior needed to prepare releases for RouteNote.
-- Assemble release data into a package that mirrors RouteNote's web form fields, including album metadata, audio files, and artwork.
-- Pre-validate release contents against RouteNote's specification to produce a ValidationReport indicating any issues.
-- Use standard library utilities (for example zipfile and csv) as part of packaging and metadata export operations.
+- Represent RouteNote-specific distribution behavior by providing a RouteNoteConnector class that inherits from Distributor.
+- Assemble release data and assets into a package that mirrors RouteNote's web form fields (Release Data -> Album Details -> Add Audio -> Artwork).
+- Pre-validate release metadata and assets against RouteNote's expected specs and produce a ValidationReport.
+- Expose methods on the RouteNoteConnector to perform the packaging and validation steps required for preparing releases for RouteNote.
 
 
 ---
@@ -98,19 +95,18 @@ This file is part of the **connectors** directory. View the [directory index](./
 
 ### RouteNoteConnector
 
-![Type: Concrete](https://img.shields.io/badge/Type-Concrete-green) ![Methods: 3](https://img.shields.io/badge/Methods-3-blue) ![Attributes: 2](https://img.shields.io/badge/Attributes-2-blue)
+![Type: Concrete](https://img.shields.io/badge/Type-Concrete-green) ![Methods: 2](https://img.shields.io/badge/Methods-2-blue) ![Attributes: 2](https://img.shields.io/badge/Attributes-2-blue)
 
 #### Description
 
-RouteNoteConnector is a Distributor subclass that encapsulates logic for preparing and validating release data for upload to the RouteNote service.
+RouteNoteConnector is a concrete Distributor implementation that encapsulates the logic needed to prepare and validate releases for distribution via the RouteNote service.
 
-Within backend/connectors/routenote.py, this class serves as the concrete connector implementing Distributor behavior for RouteNote specifically, centralizing upload URL configuration, data sanitation, validation, and package construction for that service.
+This class serves as the RouteNote-specific Distributor implementation within backend/connectors/routenote.py, implementing the validation and packaging steps required to hand off a release to the RouteNote upload process.
 
 Responsibilities:
-- Provide configuration constants used for communicating with RouteNote (for example the UPLOAD_URL and the connector name).
-- Sanitize textual release data so it is safe to include in CSV-formatted payloads (_csv_safe staticmethod).
-- Validate release metadata and packaging inputs to ensure they meet RouteNote's expected constraints and formats (validate).
-- Construct the final package or payload that will be sent to RouteNote for distribution (build_package).
+- Provide connector-specific constants and configuration (e.g. name and UPLOAD_URL) required for interacting with RouteNote.
+- Validate release data and/or configuration before attempting to distribute (validate method).
+- Assemble or package the release assets and metadata into the format expected by RouteNote (build_package method).
 
 #### Inheritance
 
@@ -132,45 +128,6 @@ Responsibilities:
 | `validate` | instance | Method validate.<br>**Signature:** `def validate(self, m: ReleaseMetadata) -> ValidationReport:` |
 | `build_package` | instance | Method build_package.<br>**Signature:** `def build_package(self, release_id, meta, audio_paths, artwork_path, out_dir, provenance=None) -> str:` |
 
-##### Protected Methods
-
-| Method | Type | Description |
-| --- | --- | --- |
-| `_csv_safe` | static | Method _csv_safe.<br>**Signature:** `def _csv_safe(value):` |
-
----
-
-
-
-### _csv_safe
-
-![Type: Sync](https://img.shields.io/badge/Type-Sync-green)
-
-#### Signature
-
-```python
-def _csv_safe(value):
-```
-
-#### Description
-
-Normalize or escape a given value so it can be safely included in a CSV field.
-
-The method will convert or sanitize the input to avoid breaking CSV formatting (for example handling commas, quotes or newlines) and return a CSV-friendly representation.
-
-
-A sanitized string representation of the input that is safe to place into a CSV cell.
-
-#### Parameters
-
-| Parameter | Type | Required | Description |
-| --- | --- | --- | --- |
-| `value` | `Unknown` | ✅ | — |
-
-#### Complexity
-
-Not analyzed
-
 ---
 
 
@@ -187,9 +144,9 @@ def validate(self, m: ReleaseMetadata) -> ValidationReport:
 
 #### Description
 
-Validate a release's metadata using the RouteNote connector logic.
+Validate the given release metadata against the requirements and constraints of the RouteNote connector, producing a report of any problems, warnings, or missing/invalid fields.
 
-It checks the provided ReleaseMetadata object for any issues or missing/invalid fields required by RouteNote and produces a report summarizing validation results.
+It ensures the ReleaseMetadata is suitable for submission through the RouteNote integration and encodes those findings in a ValidationReport.
 
 #### Parameters
 
@@ -223,12 +180,9 @@ def build_package(self, release_id, meta, audio_paths, artwork_path, out_dir, pr
 
 #### Description
 
-Assembles and writes a release package for a RouteNote release using the provided metadata, audio files, and artwork into the given output directory.
+Prepare and assemble a distributable package for a release identified by release_id using provided metadata, audio files, and artwork, writing the resulting package to out_dir.
 
-The method prepares all necessary files and structure for the release bundle and returns the path or identifier of the created package.
-
-
-Most parameter meanings are clear from their names: release_id identifies the release, meta contains release metadata, audio_paths is a list of audio file paths, artwork_path points to the artwork file, and out_dir is the destination directory for the package. The optional provenance parameter, if provided, supplies additional provenance or tracking information to include in the package.
+It may incorporate optional provenance information and returns the path to the created package file as a string.
 
 #### Parameters
 
