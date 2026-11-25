@@ -9,6 +9,11 @@ import subprocess
 
 async def download(url: str, dest: str) -> str:
     import httpx
+    root = os.path.dirname(dest)
+    dest_real = os.path.realpath(dest)
+    root_real = os.path.realpath(root)
+    if os.path.commonpath((root_real, dest_real)) != root_real:
+        raise ValueError("Download destination is outside the work directory.")
     async with httpx.AsyncClient(timeout=120, follow_redirects=True) as c:
         r = await c.get(url)
         r.raise_for_status()
