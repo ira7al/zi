@@ -1,80 +1,70 @@
-[Documentation Home](README.md)
+# 📚 zi Documentation
 
----
+Welcome to the complete documentation for this repository. This documentation is automatically generated and maintained by Woden Docbot.
 
-# 📁 _docs
+![Files Documented: 2](https://img.shields.io/badge/Files_Documented-2-blue) ![Coverage: 12%](https://img.shields.io/badge/Coverage-12%-orange) ![Last Updated: 2026-11-25](https://img.shields.io/badge/Last_Updated-2026--11--25-gray)
 
-> **Purpose:** Top-level repository directory providing project-level metadata, deployment/configuration artifacts, static assets, and a backend application subdirectory.
-> 
+## 🔗 Quick Links
 
-![Organization: Hierarchical](https://img.shields.io/badge/Organization-Hierarchical-blue)
+[📂 backend](./backend/README.md)
+[📋 Dependencies](./DEPENDENCIES.md)
 
-## 📑 Table of Contents
-
-
-- [Overview](#overview)
-- [Subdirectories](#subdirectories)
-- [Dependencies](#dependencies)
-- [Architecture Notes](#architecture-notes)
 
 ---
 
 ## Overview
 
-This repository root holds project-level files and a collection of static and configuration assets at the top level alongside a dedicated backend subdirectory. The root contains files such as README.md, Dockerfile, docker-compose.yml, index.html, several music-studio* static files, release-related HTML/JS, render.yaml, and other support files; the explicit purposes of these individual root files are not documented in the provided context. These files act as the repository's surface-level documentation, example pages, and deployment/configuration entries as indicated by their filenames, and they coexist with a backend implementation contained in a subdirectory.
+Up
 
-The backend/ subdirectory contains the FastAPI application entry (main.py) and related modules that expose HTTP endpoints for generation, release management, file access, and an optional background bot queue. Together, the root-level artifacts and the backend/ subdirectory form the overall project: the backend implements the API surface and background processing, while the root-level files provide repository documentation, configuration, and static assets referenced or used by the project. Where individual root-file purposes are not specified in the provided metadata, this README intentionally refrains from asserting details beyond what is documented, and instead guides developers to the README.md and the backend/ directory as primary starting points for understanding runtime behavior and endpoint functionality.
+**Languages and tools:** CSS, Docker, Docker Compose, HTML, JavaScript, Python, Shell
+
+## 📑 Documentation Sections
+
+### [backend](./backend/README.md)
+Houses the backend FastAPI application and related modules for generation, release management, file access, distribution connectors, and optional background bot processing.
 
 
-### File Organization
-
-Top-level files include documentation, deployment/configuration artifacts, and static assets at the repository root. A focused backend/ subdirectory contains the FastAPI application and its related modules, keeping API and server-side code separated from repository-level configuration and static assets.
-
-## 📂 Subdirectories
-
-This directory contains the following subdirectories:
-
-### [📁 backend](./backend/README.md)
-
-**Purpose:** Houses the backend FastAPI application and related modules for generation, release management, file access, distribution connectors, and optional background bot processing.
+The backend directory contains the FastAPI application entry (main.py) which exposes HTTP endpoints for generation, release management, file access, and an optional background bot queue.
 
 ![Files: 1](https://img.shields.io/badge/Files-1-blue)
 
 ---
 
-### [📁 .github](./.github/README.md)
+## 📊 Documentation Statistics
 
-**Purpose:** Not documented in provided context
-
-![Files: 0](https://img.shields.io/badge/Files-0-blue)
-
----
-## Dependencies
-
-### External Dependencies
-
-| Dependency | Usage |
-| --- | --- |
-| `FastAPI` | Used by the backend FastAPI application in backend/ to expose HTTP endpoints for generation, release management, file access, and an optional background bot queue (as stated in the backend subdirectory description). |
-
-### Internal Dependencies
-
-| Dependency | Usage |
-| --- | --- |
-| [backend/ modules](../backend/ modules.md) | Internal code and modules grouped under backend/ implement server-side functionality and should be treated as the primary internal dependency for API behavior. |
-
-## Architecture Notes
-
-- Server-side API and related modules are colocated under backend/; repository root contains documentation, configuration, and static assets separate from server code.
-- The backend explicitly exposes HTTP endpoints for generation, release management, and file access, and also optionally runs a background bot queue according to the backend/ description.
+- **Files Documented**: 2
+- **Directories**: 3
+- **Coverage**: 12%
+- **Eligible Source Files**: 17
+- **Last Updated**: 2026-11-25
 
 ---
 
-## Navigation
+## 🧭 How to Navigate
 
-**↑ Parent Directory:** [Go up](../README.md)
-**🔗 Related:** [backend](./backend/README.md) • [.github](./.github/README.md)
+> ℹ️ **INFO**
+> Each directory has its own README.md with detailed information about that section. Use the breadcrumb navigation at the top of each page to navigate back to parent directories.
+
+### Navigation Features
+
+- **Breadcrumbs** - At the top of each page, showing your current location
+- **Directory READMEs** - Each folder has a comprehensive overview
+- **File Documentation** - Click through to individual file documentation
+- **Search** - Use GitHub's search or your IDE's search functionality
 
 ---
 
-*Generated by Woden Docbot*
+## 🤖 About Woden DocBot
+
+This documentation is automatically generated and kept up-to-date by Woden DocBot, an AI-powered documentation assistant. DocBot analyzes code on every pull request and updates documentation to reflect changes.
+
+### Features
+
+- **Automatic Updates** - Documentation updates on every PR
+- **Comprehensive Coverage** - Files, functions, classes, and directories
+- **Smart Navigation** - Breadcrumbs, related files, and parent links
+- **AI-Powered** - Uses Azure GPT models for intelligent documentation generation
+
+---
+
+*Generated by Woden DocBot for zi*
