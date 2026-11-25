@@ -3,7 +3,6 @@ import asyncio
 import json
 import math
 import os
-import re
 import shutil
 import uuid
 from typing import Any
@@ -47,14 +46,6 @@ SECTIONS = ["intro, sparse, establishing the main theme", "building, adding laye
             "outro, resolving gently"]
 _version: str | None = None
 _locks: dict[str, asyncio.Lock] = {}
-
-
-def safe_work_path(*parts: str) -> str:
-    root = os.path.realpath(WORK)
-    path = os.path.realpath(os.path.join(root, *parts))
-    if os.path.commonpath((root, path)) != root:
-        raise ValueError("Invalid work path.")
-    return path
 
 
 def _h() -> dict:
@@ -143,10 +134,7 @@ async def _finalize(job: dict) -> dict:
         if cur.get("status") == "succeeded" and cur.get("audio_path"):
             return cur
         try:
-            job_id = job["id"]
-            if not isinstance(job_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{4,64}", job_id):
-                raise ValueError("Invalid job id.")
-            d = safe_work_path("jobs", job_id)
+            d = os.path.join(WORK, "jobs", job["id"])
             os.makedirs(d, exist_ok=True)
             files = []
             for i, s in enumerate(job["segments"]):
@@ -176,8 +164,6 @@ async def wait_for_job(job_id: str, poll: float = 8, timeout: float = 1800) -> d
 
 
 async def build_release(job_id: str, meta: ReleaseMetadata, connector: str = "routenote") -> dict[str, Any]:
-    if not re.fullmatch(r"[A-Za-z0-9_-]{4,64}", job_id):
-        raise ValueError("Invalid job id.")
     job = storage.get("jobs", job_id)
     if not job or job.get("status") != "succeeded" or not job.get("audio_path"):
         raise ValueError("Generation job must be succeeded before building a release.")
@@ -196,15 +182,12 @@ async def build_release(job_id: str, meta: ReleaseMetadata, connector: str = "ro
     if not report.ok:
         storage.put("releases", {**base, "status": "invalid", "error": "; ".join(report.errors)})
         return {**storage.get("releases", release_id), "validation": report.model_dump()}
-    d = safe_work_path(release_id)
+    d = os.path.join(WORK, release_id)
     os.makedirs(d, exist_ok=True)
     track = sorted(meta.tracks, key=lambda t: t.track_number)[0]
     safe = "".join(ch if ch.isalnum() else "-" for ch in track.title)[:40].strip("-") or "track"
     flac = os.path.join(d, f"01-{safe}.flac")
-    audio_path = safe_work_path("jobs", job_id, "master.flac")
-    if not os.path.isfile(audio_path):
-        raise ValueError("Invalid stored audio path.")
-    shutil.copy(audio_path, flac)
+    shutil.copy(job["audio_path"], flac)
     art = await asyncio.to_thread(media.make_cover, meta.title, meta.primary_artist, job_id, os.path.join(d, "artwork.jpg"))
     prov = {"model": MODEL, "commercial_licence_confirmed_by_operator": MODEL_COMMERCIAL,
             "sections": len(job.get("segments") or []), "crossfade_seconds": FADE,
