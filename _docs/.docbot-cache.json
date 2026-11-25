@@ -12,19 +12,18 @@
             "is_enum": false,
             "is_protocol": false,
             "is_pydantic_model": false,
-            "line_end": 113,
-            "line_start": 19,
+            "line_end": 106,
+            "line_start": 18,
             "name": "RouteNoteConnector",
             "qualified_name": "routenote.RouteNoteConnector",
             "response": {
-              "purpose": "RouteNoteConnector is a Distributor subclass that encapsulates logic for preparing and validating release data for upload to the RouteNote service. It provides utilities for making release fields CSV-safe, validating data according to RouteNote's requirements, and building the package that will be uploaded to the service.\n",
+              "purpose": "RouteNoteConnector is a concrete Distributor implementation that encapsulates the logic needed to prepare and validate releases for distribution via the RouteNote service. It exposes class-level configuration such as the connector name and the upload endpoint used when sending packages.\n",
               "responsibilities": [
-                "Provide configuration constants used for communicating with RouteNote (for example the UPLOAD_URL and the connector name).",
-                "Sanitize textual release data so it is safe to include in CSV-formatted payloads (_csv_safe staticmethod).",
-                "Validate release metadata and packaging inputs to ensure they meet RouteNote's expected constraints and formats (validate).",
-                "Construct the final package or payload that will be sent to RouteNote for distribution (build_package)."
+                "Provide connector-specific constants and configuration (e.g. name and UPLOAD_URL) required for interacting with RouteNote.",
+                "Validate release data and/or configuration before attempting to distribute (validate method).",
+                "Assemble or package the release assets and metadata into the format expected by RouteNote (build_package method)."
               ],
-              "role_in_module": "Within backend/connectors/routenote.py, this class serves as the concrete connector implementing Distributor behavior for RouteNote specifically, centralizing upload URL configuration, data sanitation, validation, and package construction for that service."
+              "role_in_module": "This class serves as the RouteNote-specific Distributor implementation within backend/connectors/routenote.py, implementing the validation and packaging steps required to hand off a release to the RouteNote upload process."
             }
           }
         ],
@@ -38,33 +37,14 @@
             "is_classmethod": false,
             "is_method": true,
             "is_property": false,
-            "is_staticmethod": true,
-            "line_end": 27,
-            "line_start": 24,
-            "name": "_csv_safe",
-            "qualified_name": "routenote.RouteNoteConnector._csv_safe",
-            "response": {
-              "parameters_summary": null,
-              "purpose": "Normalize or escape a given value so it can be safely included in a CSV field. The method will convert or sanitize the input to avoid breaking CSV formatting (for example handling commas, quotes or newlines) and return a CSV-friendly representation.\n",
-              "returns_summary": "A sanitized string representation of the input that is safe to place into a CSV cell."
-            },
-            "signature": "def _csv_safe(value):"
-          },
-          {
-            "class_name": "RouteNoteConnector",
-            "is_abstract": false,
-            "is_async": false,
-            "is_classmethod": false,
-            "is_method": true,
-            "is_property": false,
             "is_staticmethod": false,
-            "line_end": 56,
-            "line_start": 29,
+            "line_end": 49,
+            "line_start": 22,
             "name": "validate",
             "qualified_name": "routenote.RouteNoteConnector.validate",
             "response": {
               "parameters_summary": null,
-              "purpose": "Validate a release's metadata using the RouteNote connector logic. It checks the provided ReleaseMetadata object for any issues or missing/invalid fields required by RouteNote and produces a report summarizing validation results.\n",
+              "purpose": "Validate the given release metadata against the requirements and constraints of the RouteNote connector, producing a report of any problems, warnings, or missing/invalid fields. It ensures the ReleaseMetadata is suitable for submission through the RouteNote integration and encodes those findings in a ValidationReport.\n",
               "returns_summary": null
             },
             "signature": "def validate(self, m: ReleaseMetadata) -> ValidationReport:"
@@ -77,13 +57,13 @@
             "is_method": true,
             "is_property": false,
             "is_staticmethod": false,
-            "line_end": 113,
-            "line_start": 58,
+            "line_end": 106,
+            "line_start": 51,
             "name": "build_package",
             "qualified_name": "routenote.RouteNoteConnector.build_package",
             "response": {
-              "parameters_summary": "Most parameter meanings are clear from their names: release_id identifies the release, meta contains release metadata, audio_paths is a list of audio file paths, artwork_path points to the artwork file, and out_dir is the destination directory for the package. The optional provenance parameter, if provided, supplies additional provenance or tracking information to include in the package.",
-              "purpose": "Assembles and writes a release package for a RouteNote release using the provided metadata, audio files, and artwork into the given output directory. The method prepares all necessary files and structure for the release bundle and returns the path or identifier of the created package.\n",
+              "parameters_summary": null,
+              "purpose": "Prepare and assemble a distributable package for a release identified by release_id using provided metadata, audio files, and artwork, writing the resulting package to out_dir. It may incorporate optional provenance information and returns the path to the created package file as a string.\n",
               "returns_summary": null
             },
             "signature": "def build_package(self, release_id, meta, audio_paths, artwork_path, out_dir, provenance=None) -> str:"
@@ -92,26 +72,26 @@
         "language": "Python",
         "overview": {
           "key_responsibilities": [
-            "Provide a Distributor-derived RouteNoteConnector class that models the behavior needed to prepare releases for RouteNote.",
-            "Assemble release data into a package that mirrors RouteNote's web form fields, including album metadata, audio files, and artwork.",
-            "Pre-validate release contents against RouteNote's specification to produce a ValidationReport indicating any issues.",
-            "Use standard library utilities (for example zipfile and csv) as part of packaging and metadata export operations."
+            "Represent RouteNote-specific distribution behavior by providing a RouteNoteConnector class that inherits from Distributor.",
+            "Assemble release data and assets into a package that mirrors RouteNote's web form fields (Release Data -> Album Details -> Add Audio -> Artwork).",
+            "Pre-validate release metadata and assets against RouteNote's expected specs and produce a ValidationReport.",
+            "Expose methods on the RouteNoteConnector to perform the packaging and validation steps required for preparing releases for RouteNote."
           ],
           "notable_patterns": [
-            "Defines a single connector class that inherits from a Distributor base class",
-            "Performs packaging and validation of release metadata to mirror a web form workflow",
-            "Imports standard library modules for archive and CSV handling (zipfile, csv)"
+            "Defines a connector class by subclassing a common Distributor base type.",
+            "Produces structured validation output via a ValidationReport type.",
+            "Imports ReleaseMetadata and ValidationReport alongside the Distributor base, indicating tight coupling between metadata representation and validation."
           ],
-          "summary": "This module implements a RouteNote connector that constructs and validates release packages formatted to match RouteNote's \"Create New Release\" web form. Because RouteNote exposes no public upload API, the connector assembles a field-for-field package (covering Release Data, Album Details, Add Audio, and Artwork) and performs pre-validation against RouteNote's expected specifications. The connector is provided as a single class, RouteNoteConnector, which extends the Distributor base class and encapsulates the logic required to create and validate the release bundle.\n"
+          "summary": "This module implements a RouteNote connector as a Distributor subclass. It encapsulates the logic needed to build a package that mirrors RouteNote's \"Create New Release\" form fields (Release Data -> Album Details -> Add Audio -> Artwork) and to pre-validate release assets and metadata against RouteNote's requirements. Because RouteNote offers no public upload API, the connector prepares a locally verifiable bundle intended to match the release form structure and runs validation to produce a ValidationReport for the prepared package.\n"
         },
         "schema_version": "2.0.0",
-        "tokens_input": 1369,
-        "tokens_output": 1076
+        "tokens_input": 1157,
+        "tokens_output": 882
       },
       "extraction_quality": "full_ast",
-      "generated_at": "2026-11-25T09:24:29Z",
+      "generated_at": "2026-11-25T14:49:48Z",
       "model": "gpt-5-mini",
-      "source_sha": "0d0a159b5033e547cac70529a45f4414070031b1"
+      "source_sha": "656c43d6503c4badd5c3fecf2e7c9cd329617a0d"
     },
     "backend/main.py": {
       "description": {
@@ -125,18 +105,18 @@
             "is_enum": false,
             "is_protocol": false,
             "is_pydantic_model": true,
-            "line_end": 92,
-            "line_start": 84,
+            "line_end": 85,
+            "line_start": 77,
             "name": "GenerationRequest",
             "qualified_name": "main.GenerationRequest",
             "response": {
-              "purpose": "A pydantic data model that represents the input needed to request generation of an audio track, capturing the track name, textual prompt, and desired duration. It serves as a typed container for generation parameters.\n",
+              "purpose": "GenerationRequest is a pydantic model that represents and validates the inputs required to request generation of a track. It captures the essential fields needed for a generation operation: track_name, prompt, and duration.\n",
               "responsibilities": [
-                "Declare and validate the required fields for a generation request: track_name (str), prompt (str), and duration (int).",
-                "Hold and serialize/deserialze generation parameters in a structured form suitable for passing between components or across boundaries (e.g., API, service layer).",
-                "Provide a class-level helper via the _no_vocals classmethod to offer an alternate or convenience representation/behavior related to generation requests."
+                "Validate and hold request data for a generation operation (track_name, prompt, duration) using BaseModel behavior.",
+                "Provide a structured data container that other parts of the code can rely on when accessing generation parameters.",
+                "Expose a class-level helper named _no_vocals (as a classmethod) for use by callers that need the corresponding class-level behavior or sentinel."
               ],
-              "role_in_module": "Acts as the canonical request schema within backend/main.py, providing a single source of truth for generation parameters that other functions or endpoints in the module can accept and rely upon for type-checked data."
+              "role_in_module": "Within backend/main.py, GenerationRequest serves as the typed input contract for generation-related functionality, ensuring that downstream logic receives a consistent and validated set of fields. As a pydantic model, it centralizes input validation and simple class-level utilities tied to generation requests."
             }
           },
           {
@@ -148,19 +128,19 @@
             "is_enum": false,
             "is_protocol": false,
             "is_pydantic_model": true,
-            "line_end": 98,
-            "line_start": 95,
+            "line_end": 91,
+            "line_start": 88,
             "name": "ReleaseRequest",
             "qualified_name": "main.ReleaseRequest",
             "response": {
-              "purpose": "ReleaseRequest is a Pydantic model that represents the payload for initiating or describing a release operation. It encapsulates the identifying job information, the connector to use, and associated release metadata in a structured, validated form.\n",
+              "purpose": "ReleaseRequest is a Pydantic data model that represents a request to perform a release operation. It groups the identifying job information, the connector to use, and associated release metadata into a validated structure.\n",
               "responsibilities": [
-                "Hold and validate the required fields for a release operation: job_id, connector, and metadata.",
-                "Provide a clear typed container for passing release-related data between components or layers.",
-                "Support serialization and deserialization of release request data (e.g., to/from JSON) via BaseModel capabilities.",
-                "Ensure consistent data structure for downstream processing of release operations."
+                "Validate and store the job identifier (job_id) for the release operation.",
+                "Hold the connector identifier (connector) that determines which integration or backend will handle the release.",
+                "Contain release-specific details in the metadata field (ReleaseMetadata) for downstream processing.",
+                "Provide a typed, serializable container that can be passed through the application for handling release requests."
               ],
-              "role_in_module": "Within backend/main.py, ReleaseRequest serves as the canonical data transfer object for release actions, making it the standard representation of input required by functions or endpoints that perform or schedule releases. It centralizes the core identifiers and metadata needed by the module to handle a release."
+              "role_in_module": "Within backend/main.py, ReleaseRequest serves as the canonical input representation for release-related operations, ensuring that code in the module receives a consistent, validated payload describing what to release, where, and with what metadata."
             }
           },
           {
@@ -172,18 +152,18 @@
             "is_enum": false,
             "is_protocol": false,
             "is_pydantic_model": true,
-            "line_end": 102,
-            "line_start": 101,
+            "line_end": 95,
+            "line_start": 94,
             "name": "SubmitMark",
             "qualified_name": "main.SubmitMark",
             "response": {
-              "purpose": "SubmitMark is a Pydantic data model representing the payload or schema for submitting a mark-related reference. It encapsulates a single string field, routenote_ref, which likely holds an identifier or reference used when submitting or validating a mark.\n",
+              "purpose": "SubmitMark is a Pydantic data model that represents a submission marker containing a reference to a routenote. It is intended to validate and carry the routenote reference as structured data within the application.\n",
               "responsibilities": [
-                "Define and validate the structure of the submission payload containing a routenote reference.",
-                "Ensure that the routenote_ref attribute is present and is a string according to the Pydantic BaseModel rules.",
-                "Provide a typed container that other parts of the application can use for serialization, deserialization, and data exchange."
+                "Define and validate the routenote_ref field as a string using Pydantic's BaseModel behavior.",
+                "Provide a simple, typed container for passing a routenote reference between components.",
+                "Ensure data consistency for any operation that requires a routenote identifier in the module."
               ],
-              "role_in_module": "Within backend/main.py, SubmitMark functions as a lightweight schema for incoming or outgoing data related to mark submission. It standardizes how a routenote reference is represented and validated across the module."
+              "role_in_module": "Within backend/main.py, SubmitMark serves as the typed data schema for operations that need a routenote reference, enabling other parts of the module to accept and rely on a validated routenote_ref value. It acts as a lightweight DTO (data transfer object) for routenote submissions."
             }
           },
           {
@@ -195,19 +175,19 @@
             "is_enum": false,
             "is_protocol": false,
             "is_pydantic_model": true,
-            "line_end": 116,
-            "line_start": 105,
+            "line_end": 109,
+            "line_start": 98,
             "name": "BotBrief",
             "qualified_name": "main.BotBrief",
             "response": {
-              "purpose": "BotBrief is a Pydantic model that represents a concise brief for a music generation or metadata record. It captures the core textual prompt together with identifying metadata such as title, artist, genre, label, and intended duration.\n",
+              "purpose": "BotBrief is a Pydantic data model that captures the metadata and generation instructions for a single bot-created music item, including its title, textual prompt, artist, genre, label, and duration. It provides a typed, validated container for passing brief information through the application.\n",
               "responsibilities": [
-                "Validate and store a structured brief consisting of title, prompt, artist, genre, label, and duration.",
-                "Provide a dependable data container that can be serialized and used across the application where a music brief is required.",
-                "Offer a class-level utility (_no_vocals) to produce or transform a brief variant that indicates no-vocals usage or intent.",
-                "Serve as the canonical representation of the minimal set of fields needed to describe a generation request or track summary."
+                "Declare and type-check the key fields that describe a music brief: title, prompt, artist, genre, label, and duration.",
+                "Provide Pydantic validation and serialization of brief data so instances can be reliably consumed, stored, or transmitted.",
+                "Offer a class-level utility (_no_vocals) that represents or produces a variant of the brief related to an instrumental/no-vocals configuration (as indicated by the extracted classmethod).",
+                "Serve as the canonical data structure for components of the system that need a compact description of a generated track or generation request."
               ],
-              "role_in_module": "Within backend/main.py, BotBrief acts as the primary data model for passing around brief information about a track or generation prompt. It standardizes how brief metadata and the prompt are represented and validated across the module."
+              "role_in_module": "Within backend/main.py, BotBrief acts as the primary typed representation for brief information used by other parts of the module to create, validate, and exchange music-generation metadata. It centralizes the shape and validation rules for brief payloads handled in the file."
             }
           }
         ],
@@ -222,14 +202,14 @@
             "is_method": false,
             "is_property": false,
             "is_staticmethod": false,
-            "line_end": 36,
-            "line_start": 31,
+            "line_end": 29,
+            "line_start": 26,
             "name": "require_admin",
             "qualified_name": "main.require_admin",
             "response": {
               "parameters_summary": null,
-              "purpose": "Enforces protection for administrative and resource-intensive endpoints by verifying that requests are authorized for admin-level access. It is intended to be used as a guard for routes that require elevated privileges or consume significant resources.\n",
-              "returns_summary": "Either allows the request to proceed (e.g., by returning control or an auth-related object) or stops it by raising an HTTP error when authorization fails."
+              "purpose": "Enforces an admin requirement for endpoints that spend Replicate credits: when an ADMIN_TOKEN is configured, this function checks the provided Authorization header and blocks access unless the request is authorized. It is used to protect credit-spending endpoints behind an admin token.\n",
+              "returns_summary": null
             },
             "signature": "def require_admin(authorization: str = Header(default='')):"
           },
@@ -241,14 +221,14 @@
             "is_method": false,
             "is_property": false,
             "is_staticmethod": false,
-            "line_end": 45,
-            "line_start": 40,
+            "line_end": 38,
+            "line_start": 33,
             "name": "lifespan",
             "qualified_name": "main.lifespan",
             "response": {
               "parameters_summary": null,
-              "purpose": "An asynchronous context manager function intended to manage the FastAPI application's lifespan events (startup and shutdown). It is used by FastAPI to run setup before the application starts serving requests and to perform cleanup when the application is shutting down.\n",
-              "returns_summary": "Provides an async context manager (via asynccontextmanager) that yields control to the application runtime for the duration of the app's lifespan."
+              "purpose": "An async context manager function intended to provide the lifespan (startup and shutdown) handling for a FastAPI application. It will be used by the FastAPI app to run any setup before the app starts serving and teardown after the app stops.\n",
+              "returns_summary": "As an asynccontextmanager-decorated function, it yields an asynchronous context manager that FastAPI uses to drive the application's startup and shutdown lifecycle."
             },
             "signature": "async def lifespan(_: FastAPI):"
           },
@@ -260,13 +240,13 @@
             "is_method": false,
             "is_property": false,
             "is_staticmethod": false,
-            "line_end": 69,
-            "line_start": 58,
+            "line_end": 62,
+            "line_start": 51,
             "name": "find_work_file",
             "qualified_name": "main.find_work_file",
             "response": {
               "parameters_summary": null,
-              "purpose": "Compose a filesystem path from a sequence of path components and a filename, then locate and return that file path if it exists. The function accepts any number of path parts followed by a filename and returns the full path to the corresponding \"work\" file or None if not found.\n",
+              "purpose": "Locate a work file by combining one or more path components with a specific filename and return the resolved file path. It accepts any number of path segments and the filename to search for and returns the path to the matching file if found.\n",
               "returns_summary": null
             },
             "signature": "def find_work_file(*parts: str, filename: str) -> str | None:"
@@ -279,13 +259,13 @@
             "is_method": false,
             "is_property": false,
             "is_staticmethod": false,
-            "line_end": 81,
-            "line_start": 72,
+            "line_end": 74,
+            "line_start": 65,
             "name": "find_file_in_directory",
             "qualified_name": "main.find_file_in_directory",
             "response": {
               "parameters_summary": null,
-              "purpose": "Locate a file with the given filename inside the provided directory and return its path if found. If the file is not present (or cannot be located), return None.\n",
+              "purpose": "Searches for a file with the given filename inside the provided directory and returns its path if found. If the directory is None or the file cannot be found, it returns None.\n",
               "returns_summary": null
             },
             "signature": "def find_file_in_directory(directory: str | None, filename: str) -> str | None:"
@@ -298,13 +278,13 @@
             "is_method": true,
             "is_property": false,
             "is_staticmethod": false,
-            "line_end": 92,
-            "line_start": 91,
+            "line_end": 85,
+            "line_start": 84,
             "name": "_no_vocals",
             "qualified_name": "main.GenerationRequest._no_vocals",
             "response": {
               "parameters_summary": null,
-              "purpose": "A class-level field validator method that takes a string value and returns a processed string. It is intended to validate and/or transform the input 'v' for the GenerationRequest data model (likely enforcing a \"no vocals\" constraint) before the value is accepted.\n",
+              "purpose": "This classmethod acts as a field validator for the GenerationRequest class, receiving a string value and performing validation and/or normalization on it. It returns the (possibly transformed) string to be stored on the model.\n",
               "returns_summary": null
             },
             "signature": "def _no_vocals(cls, v: str) -> str:"
@@ -317,13 +297,13 @@
             "is_method": true,
             "is_property": false,
             "is_staticmethod": false,
-            "line_end": 116,
-            "line_start": 115,
+            "line_end": 109,
+            "line_start": 108,
             "name": "_no_vocals",
             "qualified_name": "main.BotBrief._no_vocals",
             "response": {
               "parameters_summary": null,
-              "purpose": "A class-level field validator method intended to process a string by removing or normalizing its vowels (based on the method name `_no_vocals`). It is used as a field_validator and operates at the class level to return a transformed string without vowels.\n",
+              "purpose": "A classmethod used as a field validator that accepts a string and returns a processed string with vocals removed, intended to normalize or validate a text field on the class.\n",
               "returns_summary": null
             },
             "signature": "def _no_vocals(cls, v: str) -> str:"
@@ -336,13 +316,13 @@
             "is_method": false,
             "is_property": false,
             "is_staticmethod": false,
-            "line_end": 121,
-            "line_start": 120,
+            "line_end": 114,
+            "line_start": 113,
             "name": "root",
             "qualified_name": "main.root",
             "response": {
               "parameters_summary": null,
-              "purpose": "Asynchronous GET endpoint function registered with app.get for the application's root path; it serves the root HTTP request and provides the basic entry response for the service (e.g., health check or landing message).\n",
+              "purpose": "Asynchronous handler function registered as an HTTP GET endpoint (via the app.get decorator) for the application's root path. It serves as the entrypoint for GET requests to the root and performs whatever response logic is implemented in the function body.\n",
               "returns_summary": null
             },
             "signature": "async def root():"
@@ -355,14 +335,14 @@
             "is_method": false,
             "is_property": false,
             "is_staticmethod": false,
-            "line_end": 136,
-            "line_start": 125,
+            "line_end": 129,
+            "line_start": 118,
             "name": "health",
             "qualified_name": "main.health",
             "response": {
               "parameters_summary": null,
-              "purpose": "As an asynchronous HTTP GET endpoint, this function provides a simple health check for the application, typically used to verify that the service is up and responding. It is intended to be called by monitoring systems or load balancers to confirm basic operational status.\n",
-              "returns_summary": null
+              "purpose": "Asynchronous HTTP GET endpoint that provides a health check for the application. It is intended to be called by monitoring systems or load balancers to verify that the service is up and responsive.\n",
+              "returns_summary": "Returns an HTTP response indicating the service health (typically a 200 OK with a simple payload or status code), suitable for use by monitoring tools."
             },
             "signature": "async def health():"
           },
@@ -374,14 +354,14 @@
             "is_method": false,
             "is_property": false,
             "is_staticmethod": false,
-            "line_end": 149,
-            "line_start": 140,
+            "line_end": 142,
+            "line_start": 133,
             "name": "create_generation",
             "qualified_name": "main.create_generation",
             "response": {
-              "parameters_summary": "_ is an injected dependency (Depends(require_admin)) used to ensure the caller has admin privileges; request is the GenerationRequest payload containing the details for the generation to be created.",
-              "purpose": "Async HTTP POST endpoint that creates a new generation using the data supplied in the GenerationRequest. It is registered with the app.post decorator and enforces admin authorization before proceeding.\n",
-              "returns_summary": null
+              "parameters_summary": "request is a GenerationRequest object carrying the data needed to create the generation; the second parameter (_) is a placeholder for the injected admin dependency (Depends(require_admin)) and is not used directly in the function body.",
+              "purpose": "Asynchronous POST endpoint that creates a new generation using the provided GenerationRequest payload. Access to this endpoint is restricted to administrators via the require_admin dependency.\n",
+              "returns_summary": "Returns an HTTP response indicating the result of the create operation (e.g., success/failure and any created resource data)."
             },
             "signature": "async def create_generation(request: GenerationRequest, _: None = Depends(require_admin)):"
           },
@@ -393,16 +373,16 @@
             "is_method": false,
             "is_property": false,
             "is_staticmethod": false,
-            "line_end": 166,
-            "line_start": 153,
+            "line_end": 154,
+            "line_start": 146,
             "name": "get_generation",
             "qualified_name": "main.get_generation",
             "response": {
               "parameters_summary": null,
-              "purpose": "Asynchronous HTTP GET endpoint that retrieves generation information for a given job ID. It is protected by an admin dependency, so only requests that satisfy require_admin are allowed to access the generation data for the specified job.\n",
-              "returns_summary": null
+              "purpose": "As an HTTP GET endpoint, this asynchronous function handles requests to fetch the generation associated with a given job identifier. It looks up or retrieves the generation result for the provided job_id and returns it to the caller.\n",
+              "returns_summary": "Returns the generation data or an HTTP response containing the generation result (or an error/status) corresponding to the provided job_id."
             },
-            "signature": "async def get_generation(job_id: str, _: None = Depends(require_admin)):"
+            "signature": "async def get_generation(job_id: str):"
           },
           {
             "class_name": null,
@@ -412,16 +392,16 @@
             "is_method": false,
             "is_property": false,
             "is_staticmethod": false,
-            "line_end": 180,
-            "line_start": 170,
+            "line_end": 168,
+            "line_start": 158,
             "name": "get_audio",
             "qualified_name": "main.get_audio",
             "response": {
-              "parameters_summary": "job_id is a string identifying the job whose audio should be retrieved; the second parameter (_) is an injected dependency (Depends(require_admin)) that enforces an administrative authorization check before the endpoint runs.",
-              "purpose": "Asynchronous HTTP GET endpoint that retrieves audio associated with a specific job identifier. It is exposed via the app.get decorator and is intended to serve or return the audio for the given job_id.\n",
-              "returns_summary": "Returns an HTTP response containing the audio data or resource corresponding to the specified job_id."
+              "parameters_summary": "job_id is a string identifier for the job whose audio should be fetched; its meaning is evident from the name and type.",
+              "purpose": "HTTP GET endpoint that retrieves the audio associated with a given job identifier. It is an asynchronous handler intended to return the generated audio resource for the specified job_id.\n",
+              "returns_summary": "An HTTP response containing the audio payload (e.g., audio file or streamed audio data) for the requested job."
             },
-            "signature": "async def get_audio(job_id: str, _: None = Depends(require_admin)):"
+            "signature": "async def get_audio(job_id: str):"
           },
           {
             "class_name": null,
@@ -431,14 +411,14 @@
             "is_method": false,
             "is_property": false,
             "is_staticmethod": false,
-            "line_end": 187,
-            "line_start": 184,
+            "line_end": 175,
+            "line_start": 172,
             "name": "validate_release",
             "qualified_name": "main.validate_release",
             "response": {
               "parameters_summary": null,
-              "purpose": "Asynchronous HTTP POST handler that validates an incoming release payload represented by a ReleaseRequest. It checks the contents of the request for correctness and completeness before allowing the release operation to proceed.\n",
-              "returns_summary": null
+              "purpose": "As an asynchronous HTTP POST endpoint, this function accepts a ReleaseRequest payload and performs validation of the supplied release data before further processing. It acts as the API entry point to check that the release information is well-formed and meets any business rules or constraints.\n",
+              "returns_summary": "Returns an HTTP response (typically a validation result) indicating success or detailing validation errors found in the provided ReleaseRequest."
             },
             "signature": "async def validate_release(req: ReleaseRequest):"
           },
@@ -450,14 +430,14 @@
             "is_method": false,
             "is_property": false,
             "is_staticmethod": false,
-            "line_end": 199,
-            "line_start": 191,
+            "line_end": 187,
+            "line_start": 179,
             "name": "create_release",
             "qualified_name": "main.create_release",
             "response": {
-              "parameters_summary": "req is the incoming ReleaseRequest payload containing the details of the release to create; the second parameter is the injected admin dependency (ignored in the function body) used to enforce admin-only access.",
-              "purpose": "As an async POST endpoint, this function handles incoming requests to create a new release using the provided ReleaseRequest payload. Access to this endpoint is restricted to administrators via the require_admin dependency.\n",
-              "returns_summary": "Returns an HTTP response indicating the result of the create operation (e.g., success or failure) and any relevant created-release data or status information."
+              "parameters_summary": "req is a ReleaseRequest object containing the details of the release to be created; the second parameter _ is an injected admin dependency (Depends(require_admin)) used solely to enforce admin authorization and is not otherwise used.",
+              "purpose": "Asynchronous POST endpoint that creates a new release using the data supplied in a ReleaseRequest. Access to this operation is restricted to administrators via a dependency on require_admin.\n",
+              "returns_summary": null
             },
             "signature": "async def create_release(req: ReleaseRequest, _: None = Depends(require_admin)):"
           },
@@ -469,16 +449,16 @@
             "is_method": false,
             "is_property": false,
             "is_staticmethod": false,
-            "line_end": 204,
-            "line_start": 203,
+            "line_end": 192,
+            "line_start": 191,
             "name": "list_releases",
             "qualified_name": "main.list_releases",
             "response": {
               "parameters_summary": null,
-              "purpose": "Asynchronously handles an HTTP GET endpoint that returns a listing of releases. Access to this endpoint is restricted to administrators via the require_admin dependency.\n",
-              "returns_summary": "An HTTP response containing the list of releases (the exact response shape is defined by the endpoint implementation)."
+              "purpose": "As an async HTTP GET endpoint, this function handles requests to list releases. It retrieves and returns a collection of release records to the caller.\n",
+              "returns_summary": null
             },
-            "signature": "async def list_releases(_: None = Depends(require_admin)):"
+            "signature": "async def list_releases():"
           },
           {
             "class_name": null,
@@ -488,16 +468,16 @@
             "is_method": false,
             "is_property": false,
             "is_staticmethod": false,
-            "line_end": 212,
-            "line_start": 208,
+            "line_end": 200,
+            "line_start": 196,
             "name": "get_release",
             "qualified_name": "main.get_release",
             "response": {
-              "parameters_summary": "release_id is the string identifier of the release to fetch; the second parameter is an injected dependency used to enforce admin authorization and is not used directly by the function.",
-              "purpose": "As an async HTTP GET endpoint, this function retrieves a release identified by the provided release_id. Access to this endpoint is protected and requires the caller to satisfy the require_admin dependency (i.e., an admin).\n",
-              "returns_summary": "Returns the release data (or an HTTP response containing the release) corresponding to the given release_id."
+              "parameters_summary": null,
+              "purpose": "Asynchronous HTTP GET endpoint handler that retrieves and returns information about a specific software release identified by the given release_id. It is exposed as a route via the app.get decorator and intended to fetch the release details for client requests.\n",
+              "returns_summary": "Returns an HTTP response (typically JSON) containing the release details or an error/status indicating the release was not found or could not be retrieved."
             },
-            "signature": "async def get_release(release_id: str, _: None = Depends(require_admin)):"
+            "signature": "async def get_release(release_id: str):"
           },
           {
             "class_name": null,
@@ -507,14 +487,14 @@
             "is_method": false,
             "is_property": false,
             "is_staticmethod": false,
-            "line_end": 225,
-            "line_start": 216,
+            "line_end": 213,
+            "line_start": 204,
             "name": "download_package",
             "qualified_name": "main.download_package",
             "response": {
               "parameters_summary": null,
-              "purpose": "As an async HTTP GET endpoint, this function serves a downloadable package for a specific release identified by release_id. Access is restricted to callers who pass the require_admin dependency.\n",
-              "returns_summary": "Returns an HTTP response that serves or streams the package file corresponding to the provided release_id."
+              "purpose": "Asynchronously handles an HTTP GET endpoint to retrieve or stream a package file for the specified release. Access to this endpoint is protected by an admin dependency, so only authorized administrators can download the package for the given release_id.\n",
+              "returns_summary": "Returns an HTTP response that delivers the package content for the specified release (typically a file download or streamed response), suitable for client download."
             },
             "signature": "async def download_package(release_id: str, _: None = Depends(require_admin)):"
           },
@@ -526,14 +506,14 @@
             "is_method": false,
             "is_property": false,
             "is_staticmethod": false,
-            "line_end": 233,
-            "line_start": 229,
+            "line_end": 221,
+            "line_start": 217,
             "name": "mark_submitted",
             "qualified_name": "main.mark_submitted",
             "response": {
-              "parameters_summary": "release_id is the identifier of the release to mark as submitted; body is a SubmitMark object containing the details of the submission mark to apply. The trailing parameter enforces an admin authorization dependency and is not used directly.",
-              "purpose": "As an HTTP POST endpoint, this async function records or updates the submitted state for a specific release identified by release_id using the data provided in the SubmitMark payload. It is protected by an admin dependency, so only authorized administrators can perform the action.\n",
-              "returns_summary": "Returns an HTTP response (or serializable result) indicating whether the mark operation succeeded or failed, appropriate for an API POST handler."
+              "parameters_summary": "release_id is the identifier of the release to mark as submitted; body is a SubmitMark object carrying the submission details (e.g., timestamp, submitter, or submission metadata). The dependency parameter _ enforces admin-only access and is not used directly.",
+              "purpose": "As an HTTP POST handler, this asynchronous function marks a given release as submitted using the data provided in the request body. It is protected by an admin dependency, so only authorized administrators can perform the action.\n",
+              "returns_summary": "Returns an HTTP response indicating the outcome of the operation (success or appropriate error), typically with status information about the marked release."
             },
             "signature": "async def mark_submitted(release_id: str, body: SubmitMark, _: None = Depends(require_admin)):"
           },
@@ -545,13 +525,13 @@
             "is_method": false,
             "is_property": false,
             "is_staticmethod": false,
-            "line_end": 238,
-            "line_start": 237,
+            "line_end": 226,
+            "line_start": 225,
             "name": "bot_enqueue",
             "qualified_name": "main.bot_enqueue",
             "response": {
-              "parameters_summary": "brief is a BotBrief object containing the data needed to create or enqueue the bot; the second parameter is an injected admin-only dependency (named _), used to enforce that the caller is an administrator.",
-              "purpose": "As an asynchronous POST endpoint, this function accepts a BotBrief and enqueues a bot job or request into the system. It is protected by an admin-only dependency so only authorized users can call it.\n",
+              "parameters_summary": "brief is a BotBrief object containing the data needed to enqueue the bot; the second parameter _ is an internal dependency injection (Depends(require_admin)) used to ensure the caller has admin privileges.",
+              "purpose": "Asynchronously handles POST requests to enqueue a bot using the provided BotBrief. It is an admin-protected endpoint (requires the require_admin dependency).\n",
               "returns_summary": null
             },
             "signature": "async def bot_enqueue(brief: BotBrief, _: None = Depends(require_admin)):"
@@ -564,44 +544,44 @@
             "is_method": false,
             "is_property": false,
             "is_staticmethod": false,
-            "line_end": 243,
-            "line_start": 242,
+            "line_end": 231,
+            "line_start": 230,
             "name": "bot_queue",
             "qualified_name": "main.bot_queue",
             "response": {
               "parameters_summary": null,
-              "purpose": "As an async GET endpoint, this function exposes the \"bot queue\" functionality and is protected by an admin-only dependency. It serves requests to retrieve or view the bot queue/state and can only be accessed when the require_admin dependency authorizes the caller.\n",
-              "returns_summary": null
+              "purpose": "As an async HTTP GET endpoint handler, this function serves requests related to the bot queue. It likely retrieves and returns information about the current bot queue to the caller.\n",
+              "returns_summary": "As a route handler it returns an HTTP response (typically JSON) containing the bot queue data or an appropriate status/error message."
             },
-            "signature": "async def bot_queue(_: None = Depends(require_admin)):"
+            "signature": "async def bot_queue():"
           }
         ],
         "language": "Python",
         "overview": {
           "key_responsibilities": [
-            "Provide a FastAPI application instance (app) with configured lifespan and CORS handling for the API titled 'Zi API'.",
-            "Define Pydantic request models used by route handlers: GenerationRequest, ReleaseRequest, SubmitMark, and BotBrief.",
-            "Expose async endpoints to create and retrieve generations, stream or serve audio files, and manage generation status polling.",
-            "Expose endpoints to validate, create, list, retrieve, and download release packages and related files.",
-            "Implement a bot queue API surface (bot_enqueue, bot_queue) and a submission-marking endpoint, with admin protection for sensitive operations."
+            "Provide HTTP endpoints for creating and retrieving generations and their audio assets.",
+            "Manage release-related operations: validate, create, list, retrieve, and download release packages.",
+            "Serve files from disk using helper functions to locate work files and directory contents.",
+            "Enforce administrative access for sensitive endpoints via require_admin and environment-controlled ADMIN_TOKEN.",
+            "Expose optional bot queue endpoints to enqueue work and inspect the bot queue when BOT_ENABLED is set."
           ],
           "notable_patterns": [
-            "Uses FastAPI for HTTP routing and lifecycle management (app, async endpoints, lifespan).",
-            "Defines request and data schemas with Pydantic BaseModel subclasses.",
-            "Implements asynchronous handlers throughout (async functions) for I/O-bound operations.",
-            "Configures behavior and secrets through environment variables (REPLICATE_TOKEN, ADMIN_TOKEN, ALLOWED_ORIGINS, BOT_ENABLED).",
-            "Performs file discovery and delivery via helper functions and FileResponse, and uses httpx for outbound HTTP calls."
+            "Uses Pydantic BaseModel classes for request validation (GenerationRequest, ReleaseRequest, SubmitMark, BotBrief).",
+            "Implements asynchronous FastAPI handlers (async def endpoints) throughout the module.",
+            "Reads configuration from environment variables (REPLICATE_TOKEN, ALLOWED_ORIGINS, ADMIN_TOKEN, BOT_ENABLED).",
+            "Integrates file-serving and file-system utilities (shutil, FileResponse, file discovery helpers).",
+            "Includes an explicit lifespan function passed to FastAPI for application startup/shutdown management."
           ],
-          "summary": "This module defines a FastAPI application that exposes an HTTP API for creating and retrieving generation tasks, managing release packages, and interacting with a lightweight bot queue. It declares Pydantic request models (GenerationRequest, ReleaseRequest, SubmitMark, BotBrief) and a collection of async route handlers for operations such as creating and polling generations, serving audio files, validating and creating releases, listing and downloading release packages, and marking submissions. The application behavior is influenced by environment-configured constants (e.g., REPLICATE_TOKEN, ADMIN_TOKEN, ALLOWED_ORIGINS, BOT_ENABLED) and includes lifecycle management via an async lifespan function.\n\nAdministrative and resource-sensitive endpoints are protected by a require_admin function that checks an admin token from headers. The module also contains utility functions for locating files (find_work_file, find_file_in_directory), and it integrates middleware and responses relevant to CORS and file delivery. Network operations appear to use httpx, and status polling is coordinated with a poll interval and a status_last_poll map to track recent activity.\n"
+          "summary": "This module defines a FastAPI application (app) that exposes a variety of HTTP endpoints for generation, release management, file access, and an optional background bot queue. It declares Pydantic models (GenerationRequest, ReleaseRequest, SubmitMark, BotBrief) used for request validation and includes a lifespan hook for startup/shutdown logic. Configuration is driven by environment variables such as REPLICATE_TOKEN, ALLOWED_ORIGINS, ADMIN_TOKEN and BOT_ENABLED, and the application registers CORS and file-serving behavior to support clients fetching generated assets and release packages.\n\nThe module also contains several async endpoint handlers and utilities: generation endpoints (create_generation, get_generation, get_audio), release lifecycle endpoints (validate_release, create_release, list_releases, get_release, download_package), file discovery helpers (find_work_file, find_file_in_directory), an admin guard (require_admin) to protect sensitive operations, and bot-related endpoints (bot_enqueue, bot_queue) gated by BOT_ENABLED. External integrations referenced by imports include httpx for HTTP operations, shutil for file manipulation, and an internal bot module for queueing behavior.\n"
         },
         "schema_version": "2.0.0",
-        "tokens_input": 5515,
-        "tokens_output": 5679
+        "tokens_input": 5382,
+        "tokens_output": 5555
       },
       "extraction_quality": "full_ast",
-      "generated_at": "2026-11-25T09:25:20Z",
+      "generated_at": "2026-11-25T14:50:35Z",
       "model": "gpt-5-mini",
-      "source_sha": "c7795eabe4913b979ecaa5d8e90c8c9e3df42085"
+      "source_sha": "03ee8dfbc346b6bc2cb0de1adc2d7cc9225e14cd"
     }
   },
   "schema_version": "1.0.0"
