@@ -1,0 +1,1062 @@
+{
+  "entries": {
+    "backend/main.py": {
+      "description": {
+        "classes": [
+          {
+            "base_classes": [
+              "BaseModel"
+            ],
+            "is_abstract": false,
+            "is_dataclass": false,
+            "is_enum": false,
+            "is_protocol": false,
+            "is_pydantic_model": true,
+            "line_end": 59,
+            "line_start": 51,
+            "name": "GenerationRequest",
+            "qualified_name": "main.GenerationRequest",
+            "response": {
+              "purpose": "GenerationRequest is a Pydantic model that represents the input data required to request a track generation. It encapsulates the minimal parameters (track name, textual prompt, and duration) needed by downstream logic to produce or configure an audio generation job.\n",
+              "responsibilities": [
+                "Define and validate the input schema for a generation request, including track_name, prompt, and duration.",
+                "Carry the generation parameters through the application as a typed data object.",
+                "Expose any class-level helpers relevant to request handling (e.g., the provided _no_vocals classmethod) for use by calling code.",
+                "Serve as a single source of truth for the fields required to initiate a generation operation."
+              ],
+              "role_in_module": "Within backend/main.py, GenerationRequest acts as the typed data contract for incoming generation operations, supplying validated parameters to the module's generation workflow and related functions."
+            }
+          },
+          {
+            "base_classes": [
+              "BaseModel"
+            ],
+            "is_abstract": false,
+            "is_dataclass": false,
+            "is_enum": false,
+            "is_protocol": false,
+            "is_pydantic_model": true,
+            "line_end": 65,
+            "line_start": 62,
+            "name": "ReleaseRequest",
+            "qualified_name": "main.ReleaseRequest",
+            "response": {
+              "purpose": "ReleaseRequest is a Pydantic data model that represents the payload required to request a release operation. It groups identifying information (job_id, connector) together with structured release details (metadata) for validation and serialization.\n",
+              "responsibilities": [
+                "Validate and enforce the types and presence of the fields job_id, connector, and metadata according to the Pydantic BaseModel behavior.",
+                "Provide a structured container for transfer of release-related data across application boundaries (e.g., API endpoints, internal processing).",
+                "Ensure the metadata field is typed as ReleaseMetadata so downstream logic can rely on a known structure for release details.",
+                "Support serialization and deserialization of release request instances to/from standard formats (e.g., dict, JSON) via Pydantic utilities."
+              ],
+              "role_in_module": "Within backend/main.py, ReleaseRequest serves as the typed contract for incoming or outgoing release requests, enabling consistent validation and easy consumption of release-related data by other components in the module. It acts as the canonical data representation for release operations."
+            }
+          },
+          {
+            "base_classes": [
+              "BaseModel"
+            ],
+            "is_abstract": false,
+            "is_dataclass": false,
+            "is_enum": false,
+            "is_protocol": false,
+            "is_pydantic_model": true,
+            "line_end": 69,
+            "line_start": 68,
+            "name": "SubmitMark",
+            "qualified_name": "main.SubmitMark",
+            "response": {
+              "purpose": "SubmitMark is a Pydantic data model used to represent a submission that references a routenote. It provides a validated container for the routenote reference string within the application.\n",
+              "responsibilities": [
+                "Define and validate the routenote_ref field as a string using Pydantic's BaseModel behaviour.",
+                "Ensure incoming or outgoing data that represents a submission mark includes a correctly typed reference to a routenote.",
+                "Serve as a simple, serializable schema for exchanging or persisting the routenote reference in APIs or internal processing."
+              ],
+              "role_in_module": "Within backend/main.py, this class functions as the typed data structure for passing a routenote reference around the module; it standardizes how a submission mark's reference is represented and validated."
+            }
+          },
+          {
+            "base_classes": [
+              "BaseModel"
+            ],
+            "is_abstract": false,
+            "is_dataclass": false,
+            "is_enum": false,
+            "is_protocol": false,
+            "is_pydantic_model": true,
+            "line_end": 83,
+            "line_start": 72,
+            "name": "BotBrief",
+            "qualified_name": "main.BotBrief",
+            "response": {
+              "purpose": "BotBrief is a Pydantic model that represents a concise description of a music-related brief. It captures the core metadata and the generated prompt needed to create or describe a track.\n",
+              "responsibilities": [
+                "Validate and store the brief's textual and metadata fields: title, prompt, artist, genre, and label.",
+                "Enforce and type-check the duration as an integer representing the track length in seconds (or another agreed unit).",
+                "Provide a class-level helper (_no_vocals) to describe or produce a variation of the brief that specifies no vocals.",
+                "Serve as a structured data container for passing brief information between components (e.g., prompt generation, storage, or processing)."
+              ],
+              "role_in_module": "Within backend/main.py, BotBrief functions as the canonical data model for song briefs, enabling other parts of the module to reliably create, validate, and consume brief objects. It standardizes the shape of brief-related data used across the module."
+            }
+          }
+        ],
+        "extraction_quality": "full_ast",
+        "file_path": "backend/main.py",
+        "functions": [
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": false,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 29,
+            "line_start": 26,
+            "name": "require_admin",
+            "qualified_name": "main.require_admin",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "Enforces that an incoming request is from an administrator before allowing access to endpoints that spend Replicate credits. When an ADMIN_TOKEN is configured, this function checks the Authorization header and blocks access if the token does not match.\n",
+              "returns_summary": "Returns nothing on success; if the Authorization header does not match the expected admin token access is denied (typically by raising an HTTP exception)."
+            },
+            "signature": "def require_admin(authorization: str = Header(default='')):"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": true,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 38,
+            "line_start": 33,
+            "name": "lifespan",
+            "qualified_name": "main.lifespan",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "An asynchronous context manager function intended to control the FastAPI application's lifespan (startup and shutdown) when used with the application's lifespan management. It provides a place to run setup before the app becomes available and cleanup after the app is shutting down.\n",
+              "returns_summary": "Returns an async context manager (via the asynccontextmanager decorator) that yields control for the application's runtime period, allowing setup and teardown code to run around the app's lifetime."
+            },
+            "signature": "async def lifespan(_: FastAPI):"
+          },
+          {
+            "class_name": "GenerationRequest",
+            "is_abstract": false,
+            "is_async": false,
+            "is_classmethod": true,
+            "is_method": true,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 59,
+            "line_start": 58,
+            "name": "_no_vocals",
+            "qualified_name": "main.GenerationRequest._no_vocals",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "A class-level field validator for GenerationRequest that accepts a string value and returns a (possibly validated or transformed) string. It is intended to be used with Pydantic's field_validator mechanism to enforce or normalize the value of a \"no vocals\"-related field on the class.\n",
+              "returns_summary": null
+            },
+            "signature": "def _no_vocals(cls, v: str) -> str:"
+          },
+          {
+            "class_name": "BotBrief",
+            "is_abstract": false,
+            "is_async": false,
+            "is_classmethod": true,
+            "is_method": true,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 83,
+            "line_start": 82,
+            "name": "_no_vocals",
+            "qualified_name": "main.BotBrief._no_vocals",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "Likely a class-level validator that processes the input string v to remove or alter its vowels (i.e., producing a version of the string without vocalic characters). It is intended to be used as a field validator on the BotBrief class to enforce or normalize vowel-free forms of a string.\n",
+              "returns_summary": null
+            },
+            "signature": "def _no_vocals(cls, v: str) -> str:"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": true,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 88,
+            "line_start": 87,
+            "name": "root",
+            "qualified_name": "main.root",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "Asynchronous endpoint function registered with app.get that handles HTTP GET requests to the application's root path. It serves as the route handler for the root (/) URL and contains the logic to produce the response returned to clients.\n",
+              "returns_summary": null
+            },
+            "signature": "async def root():"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": true,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 103,
+            "line_start": 92,
+            "name": "health",
+            "qualified_name": "main.health",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "Asynchronous HTTP GET endpoint that provides a simple health check for the application. It is intended to be called to verify that the service is running and responsive.\n",
+              "returns_summary": null
+            },
+            "signature": "async def health():"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": true,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 116,
+            "line_start": 107,
+            "name": "create_generation",
+            "qualified_name": "main.create_generation",
+            "response": {
+              "parameters_summary": "request is a GenerationRequest containing the data for the generation to be created; the second parameter, _, is a dependency injection placeholder that enforces the require_admin check to ensure only administrators can call this endpoint.",
+              "purpose": "Asynchronous POST endpoint that handles creation of a new generation resource using the provided GenerationRequest payload. It enforces an admin-only requirement via dependency injection before processing the creation.\n",
+              "returns_summary": "Returns an HTTP response representing the outcome of the creation operation (e.g., success or error and any created resource data)."
+            },
+            "signature": "async def create_generation(request: GenerationRequest, _: None = Depends(require_admin)):"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": true,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 128,
+            "line_start": 120,
+            "name": "get_generation",
+            "qualified_name": "main.get_generation",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "As an asynchronous HTTP GET endpoint, this function fetches the generation result or status associated with a specific job identifier. It retrieves the generation data for the provided job_id so clients can check progress or obtain the completed output.\n",
+              "returns_summary": "Returns an HTTP response (typically JSON) containing the generation details or status for the given job_id, such as progress, result data, or an error if the job is not found."
+            },
+            "signature": "async def get_generation(job_id: str):"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": true,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 137,
+            "line_start": 132,
+            "name": "get_audio",
+            "qualified_name": "main.get_audio",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "As an async GET endpoint, this function handles requests to retrieve the audio associated with a given job identifier. It looks up or streams the audio data for the job specified by job_id and returns it to the caller.\n",
+              "returns_summary": "Returns an HTTP response (likely streaming or file response) containing the audio data for the specified job_id."
+            },
+            "signature": "async def get_audio(job_id: str):"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": true,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 144,
+            "line_start": 141,
+            "name": "validate_release",
+            "qualified_name": "main.validate_release",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "As an asynchronous HTTP POST endpoint, this function receives a ReleaseRequest and performs validation of the release data contained in that request. It is intended to check the incoming release payload for correctness and business-rule compliance before further processing.\n",
+              "returns_summary": null
+            },
+            "signature": "async def validate_release(req: ReleaseRequest):"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": true,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 156,
+            "line_start": 148,
+            "name": "create_release",
+            "qualified_name": "main.create_release",
+            "response": {
+              "parameters_summary": "req is the request payload containing the release details (a ReleaseRequest object); the second parameter is an injected dependency used to ensure the caller has admin privileges and is not used directly.",
+              "purpose": "As an async POST endpoint, this function handles creating a new release using the data provided in the ReleaseRequest. It enforces that the caller is an administrator via the Depends(require_admin) dependency.\n",
+              "returns_summary": "Returns an HTTP response representing the outcome, typically including the created release record or a success status."
+            },
+            "signature": "async def create_release(req: ReleaseRequest, _: None = Depends(require_admin)):"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": true,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 161,
+            "line_start": 160,
+            "name": "list_releases",
+            "qualified_name": "main.list_releases",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "An asynchronous HTTP GET endpoint that retrieves and returns a list of releases. It serves the releases data when clients call this route.\n",
+              "returns_summary": "Returns a response containing the collection of releases (typically serialized as JSON) for the caller."
+            },
+            "signature": "async def list_releases():"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": true,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 169,
+            "line_start": 165,
+            "name": "get_release",
+            "qualified_name": "main.get_release",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "As an HTTP GET endpoint handler, this asynchronous function retrieves the data for a specific release identified by the provided release_id. It is exposed via the app.get decorator and is intended to return the release information when called.\n",
+              "returns_summary": "Returns an HTTP response (typically JSON) containing the requested release details or an error response if the release cannot be found or another problem occurs."
+            },
+            "signature": "async def get_release(release_id: str):"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": true,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 178,
+            "line_start": 173,
+            "name": "download_package",
+            "qualified_name": "main.download_package",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "As an async GET endpoint, this function handles requests to download the package associated with the provided release_id. It is protected by an admin dependency, so only callers that satisfy require_admin can invoke the download.\n",
+              "returns_summary": null
+            },
+            "signature": "async def download_package(release_id: str, _: None = Depends(require_admin)):"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": true,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 186,
+            "line_start": 182,
+            "name": "mark_submitted",
+            "qualified_name": "main.mark_submitted",
+            "response": {
+              "parameters_summary": "release_id is the identifier of the release to mark; body is a SubmitMark object containing the submission details or metadata to apply to that release. The third parameter is an injected dependency used to ensure the caller is an admin.",
+              "purpose": "HTTP POST endpoint that marks a specific release (identified by release_id) as submitted using the data provided in the SubmitMark body. The operation requires an authenticated admin (enforced via Depends(require_admin)).\n",
+              "returns_summary": "Returns an HTTP response indicating the result of the mark-as-submitted operation (e.g., success or failure) and any relevant payload."
+            },
+            "signature": "async def mark_submitted(release_id: str, body: SubmitMark, _: None = Depends(require_admin)):"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": true,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 191,
+            "line_start": 190,
+            "name": "bot_enqueue",
+            "qualified_name": "main.bot_enqueue",
+            "response": {
+              "parameters_summary": "brief is a BotBrief object describing the bot to enqueue; the second parameter _ is an unused dependency whose presence enforces that the caller is an admin via Depends(require_admin).",
+              "purpose": "As an HTTP POST endpoint handler, this asynchronous function accepts a BotBrief and enqueues a bot for processing or deployment. Access is restricted to administrators via a dependency, so only authorized users can call this endpoint.\n",
+              "returns_summary": null
+            },
+            "signature": "async def bot_enqueue(brief: BotBrief, _: None = Depends(require_admin)):"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": true,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 196,
+            "line_start": 195,
+            "name": "bot_queue",
+            "qualified_name": "main.bot_queue",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "An asynchronous HTTP GET endpoint handler named bot_queue (decorated with app.get) defined in backend/main.py. It serves as an async route function to handle GET requests related to the bot queue in the application.\n",
+              "returns_summary": null
+            },
+            "signature": "async def bot_queue():"
+          }
+        ],
+        "language": "Python",
+        "overview": {
+          "key_responsibilities": [
+            "Expose async HTTP endpoints to create and retrieve generation jobs and to serve generated audio files.",
+            "Validate, create, list, and retrieve release artifacts and provide package download endpoints for those releases.",
+            "Protect sensitive endpoints with an admin-only dependency and honor environment-driven configuration like API tokens and CORS origins.",
+            "Provide endpoints to mark submissions and to enqueue/inspect jobs for an attached bot when enabled.",
+            "Define Pydantic request models (GenerationRequest, ReleaseRequest, SubmitMark, BotBrief) used for input validation across the API."
+          ],
+          "notable_patterns": [
+            "Uses FastAPI to define async HTTP handlers and an application lifespan hook.",
+            "Uses Pydantic BaseModel classes for request validation.",
+            "Reads configuration from environment variables to control behavior and feature flags.",
+            "Implements an admin dependency (require_admin) to restrict sensitive operations.",
+            "Integrates with external libraries and modules such as httpx, shutil, and a local bot module."
+          ],
+          "summary": "This module implements the HTTP API surface for a service named \"Zi\" using FastAPI. It defines an application instance and a set of async endpoint handlers to manage audio generation jobs, release artifacts, package downloads, and a simple bot queue. Configuration and feature toggles are driven by environment variables (API tokens, allowed CORS origins, admin token and whether the bot is enabled). The module also includes request/validation models implemented with Pydantic for generation requests, release creation, submission marking, and brief bot payloads.\n\nEndpoints cover lifecycle operations for generation jobs (create and retrieve), serving generated audio files, validating and creating releases, listing and retrieving release metadata, downloading packaged releases, marking submissions, and enqueuing or inspecting the bot queue. Administrative protection is provided by a require_admin dependency, and the application registers a lifespan hook for startup/shutdown behavior. External utilities and HTTP requests are supported via imports such as httpx, shutil and a local bot module.\n"
+        },
+        "schema_version": "2.0.0",
+        "tokens_input": 4948,
+        "tokens_output": 5355
+      },
+      "extraction_quality": "full_ast",
+      "generated_at": "2026-11-25T12:32:09Z",
+      "model": "gpt-5-mini",
+      "source_sha": "0f234646e1c5f74e810a620d3cb0469440da7ffc"
+    },
+    "backend/media.py": {
+      "description": {
+        "classes": [],
+        "extraction_quality": "full_ast",
+        "file_path": "backend/media.py",
+        "functions": [
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": true,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 17,
+            "line_start": 10,
+            "name": "download",
+            "qualified_name": "media.download",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "Asynchronously downloads data from the given URL and saves it to the specified destination path. It performs the network transfer and writes the retrieved content to the filesystem at `dest`.\n",
+              "returns_summary": null
+            },
+            "signature": "async def download(url: str, dest: str) -> str:"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": false,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 24,
+            "line_start": 20,
+            "name": "to_routenote_flac",
+            "qualified_name": "media.to_routenote_flac",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "Resample a FLAC audio file produced at 32 kHz to the 44.1 kHz sample rate required by RouteNote, saving the result to the destination path. Essentially converts or rewrites the source FLAC into a RouteNote-compatible FLAC at 44.1 kHz.\n",
+              "returns_summary": null
+            },
+            "signature": "def to_routenote_flac(src: str, dest: str) -> str:"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": false,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 54,
+            "line_start": 27,
+            "name": "make_cover",
+            "qualified_name": "media.make_cover",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "Generate a piece of original generative artwork as a 3000x3000 RGB JPEG image following the project\u2019s text-light store rules. The function uses the provided title, artist and seed to produce the image and writes it to the given destination path.\n",
+              "returns_summary": null
+            },
+            "signature": "def make_cover(title: str, artist: str, seed: str, dest: str, size: int = 3000) -> str:"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": false,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 58,
+            "line_start": 57,
+            "name": "_run",
+            "qualified_name": "media._run",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "Execute a system command represented by a list of strings. The function runs the provided command (likely by invoking a subprocess) and does not return a value.\n",
+              "returns_summary": null
+            },
+            "signature": "def _run(cmd: list[str]) -> None:"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": false,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 64,
+            "line_start": 61,
+            "name": "probe_seconds",
+            "qualified_name": "media.probe_seconds",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "Open and inspect the media file at the given filesystem path to determine its duration. The function returns the length of the media in seconds as a floating point number.\n",
+              "returns_summary": "A float giving the media duration in seconds."
+            },
+            "signature": "def probe_seconds(path: str) -> float:"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": false,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 79,
+            "line_start": 67,
+            "name": "stitch",
+            "qualified_name": "media.stitch",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "Take a list of audio segment files and crossfade them together, producing a final 44.1 kHz, 16-bit stereo FLAC master and a 192 kbps MP3 preview. The function applies a specified fade length between segments when creating the stitched output.\n",
+              "returns_summary": null
+            },
+            "signature": "def stitch(files: list[str], master: str, preview: str, fade: float = 2.0) -> None:"
+          }
+        ],
+        "language": "Python",
+        "overview": {
+          "key_responsibilities": [
+            "Asynchronously download remote resources needed for media processing.",
+            "Invoke ffmpeg via subprocess to run conversions and normalization steps.",
+            "Resample generated audio to 44.1 kHz/16-bit FLAC suitable for RouteNote distribution.",
+            "Create procedural 3000x3000 RGB JPEG cover art with a text-light style using Pillow.",
+            "Measure audio durations and stitch multiple segments into a single crossfaded FLAC master and a 192 kbps MP3 preview."
+          ],
+          "notable_patterns": [
+            "Uses asynchronous HTTP fetching for downloads",
+            "Drives external multimedia processing via subprocess (ffmpeg)",
+            "Generates procedural images with Pillow (Image, ImageDraw, ImageFont)"
+          ],
+          "summary": "This module provides utilities for preparing audio and cover art assets for distribution. It includes asynchronous download support, ffmpeg-based audio processing and probing, sample-rate conversion tailored for a specific distributor, and an assembler that stitches together segments with crossfades and produces both a high-quality FLAC master and an MP3 preview. In addition, the module can generate original procedural cover art as a high-resolution JPG using Pillow, with text-light design suitable for store requirements.\n\nThe functions coordinate external tools and libraries: network fetching via an async download function, subprocess-driven ffmpeg invocations for resampling, normalization, duration probing and mixing, and Pillow routines to render 3000x3000 RGB artwork. Helper utilities encapsulate running shell commands and extracting segment durations to drive the stitching workflow.\n"
+        },
+        "schema_version": "2.0.0",
+        "tokens_input": 1881,
+        "tokens_output": 1359
+      },
+      "extraction_quality": "full_ast",
+      "generated_at": "2026-11-25T12:31:32Z",
+      "model": "gpt-5-mini",
+      "source_sha": "64a257986acc0aa6fc26095e1b3c9f929232ba36"
+    },
+    "backend/pipeline.py": {
+      "description": {
+        "classes": [],
+        "extraction_quality": "full_ast",
+        "file_path": "backend/pipeline.py",
+        "functions": [
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": false,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 52,
+            "line_start": 51,
+            "name": "_h",
+            "qualified_name": "pipeline._h",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "Internal helper function in the pipeline module whose job is to construct and return a dictionary used by the pipeline. Being named with a leading underscore indicates it is intended for private/internal use within backend.pipeline.\n",
+              "returns_summary": null
+            },
+            "signature": "def _h() -> dict:"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": false,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 58,
+            "line_start": 55,
+            "name": "segments_needed",
+            "qualified_name": "pipeline.segments_needed",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "Determine how many segments are required for a given total count. The function takes an integer total and returns the number of segments needed to cover or partition that total.\n",
+              "returns_summary": null
+            },
+            "signature": "def segments_needed(total: int) -> int:"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": true,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 74,
+            "line_start": 61,
+            "name": "_create_prediction",
+            "qualified_name": "pipeline._create_prediction",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "Asynchronously create a prediction using the provided HTTPX async client, sending the given text prompt and a time parameter in seconds to the remote service. It performs the network call and returns the prediction result as a Python dictionary.\n",
+              "returns_summary": null
+            },
+            "signature": "async def _create_prediction(c: httpx.AsyncClient, prompt: str, seconds: int) -> dict:"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": true,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 92,
+            "line_start": 77,
+            "name": "start_long_generation",
+            "qualified_name": "pipeline.start_long_generation",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "Asynchronously initiates a long-running generation process for a named track using the provided prompt and target duration. It kicks off generation work (likely audio or content generation) associated with the given track_name and runs for the specified duration before returning status or result metadata.\n",
+              "returns_summary": null
+            },
+            "signature": "async def start_long_generation(track_name: str, prompt: str, duration: int) -> dict[str, Any]:"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": false,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 100,
+            "line_start": 95,
+            "name": "public",
+            "qualified_name": "pipeline.public",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "Accepts a job represented as a dictionary and produces another dictionary based on that input. The function likely transforms, filters, or prepares the job data for further use or exposure.\n",
+              "returns_summary": null
+            },
+            "signature": "def public(job: dict) -> dict:"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": true,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 128,
+            "line_start": 103,
+            "name": "refresh_job",
+            "qualified_name": "pipeline.refresh_job",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "Asynchronously refreshes the state or metadata of a pipeline job identified by the given job_id, likely by fetching the latest information from storage or an external service and returning the updated job representation as a dictionary.\n",
+              "returns_summary": null
+            },
+            "signature": "async def refresh_job(job_id: str) -> dict[str, Any]:"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": true,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 152,
+            "line_start": 131,
+            "name": "_finalize",
+            "qualified_name": "pipeline._finalize",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "Asynchronously perform finalization steps for a pipeline job represented by the provided job dictionary, such as completing status updates, applying any final transformations or cleanup, and preparing the job record for return or storage. It completes the job's processing lifecycle and ensures the job dict reflects the finalized state before being returned.\n",
+              "returns_summary": null
+            },
+            "signature": "async def _finalize(job: dict) -> dict:"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": true,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 163,
+            "line_start": 155,
+            "name": "wait_for_job",
+            "qualified_name": "pipeline.wait_for_job",
+            "response": {
+              "parameters_summary": "job_id is the identifier of the job to monitor. poll and timeout are time intervals in seconds: poll controls how often the function checks the job status, and timeout is the maximum total wait time before giving up.",
+              "purpose": "Asynchronously waits for the completion (or update) of a background job identified by job_id, polling at regular intervals and timing out if the job does not complete within the given timeout. It returns the final job state as a dictionary when finished or when a terminal condition is reached.\n",
+              "returns_summary": null
+            },
+            "signature": "async def wait_for_job(job_id: str, poll: float = 8, timeout: float = 1800) -> dict[str, Any]:"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": true,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 197,
+            "line_start": 166,
+            "name": "build_release",
+            "qualified_name": "pipeline.build_release",
+            "response": {
+              "parameters_summary": "meta is a ReleaseMetadata object containing the release-specific information (e.g., tracks, artists, assets, and release settings) required to construct the release package; connector selects which distribution or integration workflow to target (defaults to 'routenote').",
+              "purpose": "Asynchronously builds a release package for a given job using the provided release metadata and a specified distribution connector. It orchestrates the creation of whatever payload or configuration is needed to push or prepare the release for the chosen connector (defaulting to 'routenote') and returns the assembled result as a dictionary.\n",
+              "returns_summary": null
+            },
+            "signature": "async def build_release(job_id: str, meta: ReleaseMetadata, connector: str = 'routenote') -> dict[str, Any]:"
+          }
+        ],
+        "language": "Python",
+        "overview": {
+          "key_responsibilities": [
+            "Compute how many generation segments are needed for a target duration (segments_needed).",
+            "Create and submit generation predictions to the external model API (async _create_prediction) and provide a public entry to start a long-running generation process (async start_long_generation/public).",
+            "Poll and wait for external jobs to complete, refresh job state, and finalize generation outputs into stitched masters (async wait_for_job, async refresh_job, async _finalize).",
+            "Build a release package including media files and metadata suitable for connectors (async build_release) while performing licence and model checks.",
+            "Manage environment-driven configuration such as model selection, segment length, extras, and working directory constants used throughout the pipeline."
+          ],
+          "notable_patterns": [
+            "Extensive use of async functions for I/O-bound operations and job orchestration.",
+            "Configuration and behaviour driven by environment variables and preset maps.",
+            "Integration with external services/APIs (Replicate) via httpx and a connectors registry for release metadata.",
+            "Filesystem and temporary artifact management using shutil, uuid, and a configurable work directory.",
+            "Separation of responsibilities into small functions: prediction creation, polling, finalization, and release packaging."
+          ],
+          "summary": "This module coordinates an audio generation and packaging pipeline that produces multi-section musical pieces, stitches segments into a single master of at least 180 seconds, performs licence and model-spec checks, and prepares a RouteNote-compatible release package. It reads configuration and model presets from environment variables, divides target duration into segments, creates generation predictions against an external API (Replicate), polls and finalizes jobs, and assembles generated media and metadata into a release artifact using local media and storage helpers and connector metadata mappings.\n\nThe pipeline exposes a set of async operations for creating and waiting on generation jobs, finalizing results, and building the final release, as well as synchronous helpers for calculating segment counts and a public entry point to start generation. It integrates with external services via httpx and uses filesystem work directories, temporary storage, and utilities like uuid and shutil to manage artifacts during processing, while enforcing minimum track length and licence awareness based on model configuration.\n"
+        },
+        "schema_version": "2.0.0",
+        "tokens_input": 2671,
+        "tokens_output": 2139
+      },
+      "extraction_quality": "full_ast",
+      "generated_at": "2026-11-25T12:31:39Z",
+      "model": "gpt-5-mini",
+      "source_sha": "b203cd4025bfe6653971814fdaa3f9f139c0ef03"
+    },
+    "music-studio.js": {
+      "description": {
+        "classes": [],
+        "extraction_quality": "structural",
+        "file_path": "music-studio.js",
+        "functions": [
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": false,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 2,
+            "line_start": 2,
+            "name": "$",
+            "qualified_name": "$",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "Utility function named $ that operates on a single identifier. It is intended as a concise helper to perform a lookup, selection, or retrieval given the provided id.\n",
+              "returns_summary": null
+            },
+            "signature": "def $(id):"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": false,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 26,
+            "line_start": 23,
+            "name": "setNotice",
+            "qualified_name": "setNotice",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "Displays or updates a user-visible notice in the music studio UI using the provided message. If the error flag is true, the notice is treated/styled as an error (for example to indicate failure or important warnings).\n",
+              "returns_summary": null
+            },
+            "signature": "def setNotice(message, error=false):"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": false,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 27,
+            "line_start": 27,
+            "name": "setStatus",
+            "qualified_name": "setStatus",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "Sets the current status of the music studio to the provided value. This function updates internal state or UI indicators to reflect the given status.\n",
+              "returns_summary": null
+            },
+            "signature": "def setStatus(value):"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": false,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 32,
+            "line_start": 28,
+            "name": "apiUrl",
+            "qualified_name": "apiUrl",
+            "response": {
+              "parameters_summary": "path is the path fragment or route (relative to the API root) to be appended to the base API URL; it may include leading or trailing slashes as needed.",
+              "purpose": "Constructs a full API endpoint URL using the provided path. It takes a path fragment and produces the complete URL that the application can use to call the backend API.\n",
+              "returns_summary": "A string containing the full URL for the API endpoint corresponding to the given path."
+            },
+            "signature": "def apiUrl(path):"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": false,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 39,
+            "line_start": 34,
+            "name": "errorText",
+            "qualified_name": "errorText",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "Constructs and/or formats an error message using the provided response payload and HTTP status. It uses the data and status inputs to produce a human-readable error text for display or logging.\n",
+              "returns_summary": "Returns a string containing the constructed or formatted error message based on the provided data and status."
+            },
+            "signature": "def errorText(data, status):"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": true,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 47,
+            "line_start": 40,
+            "name": "request",
+            "qualified_name": "request",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "Asynchronously performs a request to the given path, using the supplied options object to control request behavior. It is the central helper for making network or API calls within music-studio.js.\n",
+              "returns_summary": null
+            },
+            "signature": "async def request(path, options={}):"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": false,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 48,
+            "line_start": 48,
+            "name": "stopPolling",
+            "qualified_name": "stopPolling",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "Stops any active polling started by the module (for example, periodic network or state polling), cancels scheduled timers or intervals, and prevents further poll callbacks from running. It is used to cleanly terminate the polling mechanism when updates are no longer needed or before teardown.\n",
+              "returns_summary": null
+            },
+            "signature": "def stopPolling():"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": false,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 66,
+            "line_start": 50,
+            "name": "showResult",
+            "qualified_name": "showResult",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "Displays or presents the outcome of the provided job object, updating the UI or console with the job's result. It processes the job parameter to show the final status or output to the user.\n",
+              "returns_summary": null
+            },
+            "signature": "def showResult(job):"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": true,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 99,
+            "line_start": 68,
+            "name": "poll",
+            "qualified_name": "poll",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "Asynchronously polls the status or result of a job identified by the given jobId. It repeatedly checks or waits for updates related to that job until a terminal condition (such as completion or failure) is reached.\n",
+              "returns_summary": null
+            },
+            "signature": "async def poll(jobId):"
+          },
+          {
+            "class_name": null,
+            "is_abstract": false,
+            "is_async": false,
+            "is_classmethod": false,
+            "is_method": false,
+            "is_property": false,
+            "is_staticmethod": false,
+            "line_end": 109,
+            "line_start": 101,
+            "name": "startPolling",
+            "qualified_name": "startPolling",
+            "response": {
+              "parameters_summary": null,
+              "purpose": "Starts a polling process associated with the given job identifier so the system can periodically check the job's status or progress. It triggers ongoing checks for updates related to the job represented by jobId.\n",
+              "returns_summary": "No explicit return value; the function performs side effects (begins the polling process) rather than producing a meaningful return value."
+            },
+            "signature": "def startPolling(jobId):"
+          }
+        ],
+        "language": "javascript",
+        "overview": {
+          "key_responsibilities": [
+            "Construct API endpoint URLs consistently via apiUrl.",
+            "Perform asynchronous HTTP requests and handle responses through request (async).",
+            "Manage polling lifecycle with startPolling, poll (async), and stopPolling to repeatedly query status or results.",
+            "Update the UI and user feedback using $ (DOM helper), setNotice, setStatus, showResult, and errorText."
+          ],
+          "notable_patterns": [
+            "async functions for non-blocking network operations (request, poll)",
+            "explicit polling lifecycle control (startPolling / stopPolling / poll)",
+            "separation between network logic and UI update helpers",
+            "single-file module exporting several top-level utility functions"
+          ],
+          "summary": "This JavaScript module provides a compact set of top-level utility functions that coordinate network requests, polling behavior, and simple UI updates for a music studio feature. It centralizes the construction of API endpoints, exposes an async request helper and polling control (start/stop/poll), and offers small DOM/UX helpers for showing results, notices, and status or error text. The async functions indicate the module is designed to perform non-blocking network operations and manage repeated polling cycles, while the other functions focus on reflecting outcomes and errors in the page.\n"
+        },
+        "schema_version": "2.0.0",
+        "tokens_input": 2116,
+        "tokens_output": 2259
+      },
+      "extraction_quality": "structural",
+      "generated_at": "2026-11-25T12:31:42Z",
+      "model": "gpt-5-mini",
+      "source_sha": "58da5ca431d0d3da5db413eeefd95eccfe395a1c"
+    },
+    "single-file-app.html": {
+      "description": {
+        "classes": [],
+        "extraction_quality": "raw_source",
+        "file_path": "single-file-app.html",
+        "functions": [],
+        "language": "HTML",
+        "overview": {
+          "key_responsibilities": [
+            "Render a dashboard header showing application name, workspace user ID, and snapshot status.",
+            "Present operation summary KPIs and a live telemetry feed area for ops_snapshot events.",
+            "Provide navigation between Operations and AI MusicGen Studio sections.",
+            "Style and layout the interface using Tailwind CSS utilities and embedded custom CSS variables and rules."
+          ],
+          "notable_patterns": [
+            "Single-file HTML app combining markup, Tailwind CDN, and embedded custom CSS.",
+            "Dark theme implemented via CSS variables and custom color palette.",
+            "Responsive grid and utility-first layout using Tailwind classes.",
+            "Use of element IDs and semantic sections (e.g., #user-id-display, #snapshot-meta) to support dynamic updates."
+          ],
+          "summary": "This single-file HTML document implements a dark-themed, responsive web interface for monitoring recent activity and live telemetry related to an operations snapshot and an AI MusicGen Studio. It includes a top header that displays the application title, workspace user ID, and snapshot meta information, along with navigation links for \"Operations\" and \"AI MusicGen Studio.\" The page contains a dashboard-style layout with KPI tiles (e.g., active stream events), a live telemetry feed area, and a studio panel styled with custom CSS and Tailwind utility classes. Visual styling is provided by Tailwind via a CDN plus an embedded stylesheet that defines colors, layout rules, and animations such as a pulsing live-dot indicator.\n"
+        },
+        "schema_version": "2.0.0",
+        "tokens_input": 2926,
+        "tokens_output": 376
+      },
+      "extraction_quality": "raw_source",
+      "generated_at": "2026-11-25T12:31:21Z",
+      "model": "gpt-5-mini",
+      "source_sha": "3f2bc715cccea50c880bbabc9109a5f4d4196f04"
+    }
+  },
+  "schema_version": "1.0.0"
+}
