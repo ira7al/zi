@@ -132,9 +132,15 @@ async def get_generation(job_id: str):
 async def get_audio(job_id: str):
     job = storage.get("jobs", job_id) if re.fullmatch(r"[A-Za-z0-9_-]{4,64}", job_id) else None
     path = (job or {}).get("preview_path")
-    if not path or not os.path.exists(path):
+    jobs_root = os.path.realpath(os.path.join(storage.DATA_DIR, "jobs"))
+    resolved_path = os.path.realpath(path) if path else None
+    if (
+        not resolved_path
+        or os.path.commonpath([jobs_root, resolved_path]) != jobs_root
+        or not os.path.exists(resolved_path)
+    ):
         raise HTTPException(status_code=404, detail="Audio not available.")
-    return FileResponse(path, media_type="audio/mpeg", filename=f"{job_id}.mp3")
+    return FileResponse(resolved_path, media_type="audio/mpeg", filename=f"{job_id}.mp3")
 
 
 @app.post("/api/releases/validate")
