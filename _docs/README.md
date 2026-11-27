@@ -2,34 +2,99 @@
 
 Welcome to the complete documentation for this repository. This documentation is automatically generated and maintained by Woden Docbot.
 
-![Files Documented: 0](https://img.shields.io/badge/Files_Documented-0-blue) ![Coverage: 0%](https://img.shields.io/badge/Coverage-0%-orange) ![Last Updated: 2026-11-25](https://img.shields.io/badge/Last_Updated-2026--11--25-gray)
+![Files Documented: 1](https://img.shields.io/badge/Files_Documented-1-blue) ![Coverage: 6%](https://img.shields.io/badge/Coverage-6%-orange) ![Last Updated: 2026-11-27](https://img.shields.io/badge/Last_Updated-2026--11--27-gray)
 
 ## 🔗 Quick Links
 
+[📂 app](./app/README.md)
 [📋 Dependencies](./DEPENDENCIES.md)
 
 
 ---
 
-## Overview
+> A small desktop web app implemented in Python that manages music projects and coordinates export operations.
 
-Up
 
-**Languages and tools:** CSS, Docker, Docker Compose, HTML, JavaScript, Python, Shell
+
+## 📖 Overview
+
+zi is a compact desktop web application whose core runtime lives in the app directory. The repository centers on zi_app.py, which implements orchestration for project management and export functionality for music projects.
+
+The codebase combines Python application logic with web assets (HTML, JavaScript, CSS) and includes supporting developer files (for example README.md and run_windows.bat). The project declares Python-side dependencies such as fastapi and uvicorn and also contains artifacts for running or packaging (Docker / Docker Compose files are present in the tree).
+
+
+### 🧩 Key Components
+
+| Component | Purpose | Technologies |
+| --- | --- | --- |
+| **app** | Hosts the primary runtime code for the desktop web app, including the implementation of project management and export orchestration. | `Python`, `HTML`, `JavaScript` |
+| **zi_app.py** | The central implementation file and entry surface for the application-level logic that other components import or invoke. | `Python` |
+| **run_windows.bat** | A developer convenience script present alongside the app to facilitate running the application on Windows. | `Batch` |
+
+
+
+
+**Component Architecture:**
+
+```mermaid
+graph TD
+    C0[app]
+    C1[zi_app.py]
+    C2[run_windows.bat]
+    C0 --> C1
+    C1 --> C2
+```
+
+### 🏗️ Architecture
+
+A single application module in app/ (zi_app.py) provides the core orchestration; web assets sit alongside it and repository-level scripts and Docker files support running and packaging.
+
+### 💡 Use Cases
+
+- ✦ Manage music project metadata and state
+- ✦ Generate and export music project outputs
+
+
+
+### 🔧 Technologies
+
+
+**Languages:** ![JavaScript: ](https://img.shields.io/badge/JavaScript--blue) ![Python: ](https://img.shields.io/badge/Python--blue)
+![Batch: ](https://img.shields.io/badge/Batch--blue) ![CSS: ](https://img.shields.io/badge/CSS--blue) ![Docker: ](https://img.shields.io/badge/Docker--blue) ![Docker Compose: ](https://img.shields.io/badge/Docker_Compose--blue) ![HTML: ](https://img.shields.io/badge/HTML--blue) ![Shell: ](https://img.shields.io/badge/Shell--blue)
+
+### 📦 External Dependencies
+
+The following external packages are used across the project:
+
+- `Pillow`
+- `fastapi`
+- `httpx`
+- `pydantic`
+- `uvicorn`
+
+
+
+---
 
 ## 📑 Documentation Sections
 
-No documentation sections available yet.
+### [app](./app/README.md)
+Contains the core application module for a small desktop web app that manages music projects and export operations.
+
+
+The app directory hosts the primary runtime code for the desktop web app.
+
+![Files: 1](https://img.shields.io/badge/Files-1-blue)
 
 ---
 
 ## 📊 Documentation Statistics
 
-- **Files Documented**: 0
-- **Directories**: 0
-- **Coverage**: 0%
-- **Eligible Source Files**: 17
-- **Last Updated**: 2026-11-25
+- **Files Documented**: 1
+- **Directories**: 2
+- **Coverage**: 6%
+- **Eligible Source Files**: 18
+- **Last Updated**: 2026-11-27
 
 ---
 
