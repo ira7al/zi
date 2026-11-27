@@ -10,6 +10,10 @@ DATA = os.environ.get("ZI_DATA", os.path.join(ROOT, "zi_data"))
 JOBS, LIB, EXP = (os.path.join(DATA, d) for d in ("jobs", "library", "exports"))
 for d in (JOBS, LIB, EXP):
     os.makedirs(d, exist_ok=True)
+STATUS_SEED = os.path.join(ROOT, "status.json")
+STATUS = os.path.join(DATA, "status.json")
+if not os.path.exists(STATUS) and os.path.exists(STATUS_SEED):
+    shutil.copy2(STATUS_SEED, STATUS)
 AUDIO_EXT = (".wav", ".mp3", ".flac", ".m4a")
 ARTIST = WRITER = "Rahal"
 
@@ -31,6 +35,17 @@ def read_json(p, default=None):
     except Exception: return default
 def write_json(p, o):
     with open(p, "w", encoding="utf-8") as f: json.dump(o, f, indent=2, ensure_ascii=False)
+
+def load_status():
+    st = read_json(STATUS) or read_json(STATUS_SEED) or {"updated": "", "items": []}
+    return st
+
+def save_status(obj):
+    if not isinstance(obj, dict) or not isinstance(obj.get("items"), list):
+        raise ValueError("status.json must be an object with an items list")
+    obj["updated"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    write_json(STATUS, obj)
+    return obj
 
 def make_job(d):
     pre = d.get("preset") or "Melodic Techno 122"
@@ -125,9 +140,25 @@ input,select,textarea{width:100%;background:#0e0f14;color:var(--tx);border:1px s
 textarea{min-height:90px}button{background:var(--ac);color:#fff;border:0;border-radius:8px;padding:10px 16px;font:inherit;cursor:pointer;margin-top:12px}
 button.sec{background:#2a2e45}.row{display:flex;gap:10px;align-items:center}.row>*{flex:1}
 table{width:100%;border-collapse:collapse}td,th{padding:8px 6px;border-bottom:1px solid #23263a;text-align:left;font-size:13px}th{color:var(--mut);font-weight:500}
-.tag{font-size:11px;padding:2px 8px;border-radius:10px;background:#2a2e45}#msg{color:#7cf0b0;margin:8px 0;min-height:18px}audio{width:100%;margin-top:8px}</style>
-<header>Zi <span>Music Studio</span> &nbsp;<small style="color:var(--mut);font-weight:400">artist Rahal · AI-assisted · free</small></header>
-<main><div>
+.tag{font-size:11px;padding:2px 8px;border-radius:10px;background:#2a2e45}#msg{color:#7cf0b0;margin:8px 0;min-height:18px}audio{width:100%;margin-top:8px}
+nav{float:right}nav a{color:var(--mut);cursor:pointer;margin-left:16px;font-size:15px;font-weight:400}nav a.on{color:var(--tx);font-weight:700;border-bottom:2px solid var(--ac)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px}
+.tile{background:#12131b;border-radius:12px;padding:14px 16px;border:1px solid #23263a;cursor:pointer}
+.tile:hover{border-color:var(--ac)}.tile h3{margin:0 0 8px;font-size:14px}.tile p{margin:8px 0 0;font-size:12px;color:var(--mut)}
+.badge{font-size:11px;padding:2px 8px;border-radius:10px}
+.b-live{background:#14452f;color:#7cf0b0}.b-progress{background:#4a3a12;color:#ffd97c}.b-done{background:#1c3a4a;color:#7cc7ff}.b-pending{background:#2a2e45;color:#8b8fa3}
+.tile .grp{font-size:11px;color:#5a5e73;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}.tile .open{color:var(--ac);font-size:12px;margin-top:8px}</style>
+<header>Zi <span>Music Studio</span> &nbsp;<small style="color:var(--mut);font-weight:400">artist Rahal · AI-assisted · free</small><nav><a id=navS class=on onclick="showTab('studio')">Studio</a><a id=navD onclick="showTab('dash')">Dashboard</a></nav></header>
+<main id=dash style="display:none;grid-template-columns:1fr"><div>
+<div class=card><h2>Project dashboard &nbsp;<small id=supdated style="color:var(--mut);font-weight:400"></small></h2>
+<small style="color:var(--mut)">Every page and asset of the project. Click a tile to open it and see how far it got.</small>
+<div style="height:12px"></div><div class=tiles id=tiles></div></div>
+<div class=card><h2>Edit status</h2>
+<small style="color:var(--mut)">Live status is read from zi_data/status.json. The team updates it as work moves; you can also edit it here and save.</small>
+<textarea id=sedit style="min-height:280px;font-family:monospace;font-size:12px;margin-top:10px"></textarea>
+<button onclick=saveStatus()>Save status</button> <span id=smsg style="color:#7cf0b0"></span></div>
+</div></main>
+<main id=studio><div>
 <div class=card><h2>1. New track</h2>
 <label>Style preset</label><select id=preset></select>
 <label>Title (optional)</label><input id=title>
@@ -152,7 +183,11 @@ async function mk(){try{const r=await post('/api/jobs',{preset:$('preset').value
 async function im(){const r=await post('/api/import',{folder:$('imp').value});$('msg').textContent=r.error||('Imported '+r.imported+' track(s)');refresh()}
 function play(i){const a=$('pl');a.style.display='block';a.src='/audio/'+encodeURIComponent(L[i].id);a.play()}
 async function ex(i){const r=await post('/api/export',{id:L[i].id,title:L[i].title,genre:L[i].genre});$('msg').textContent=r.error||('Exported: '+r.zip+(r.notes.length?' ('+r.notes.join(' ')+')':''))}
-load()</script>"""
+function showTab(t){if(history.replaceState)history.replaceState(null,'',t=='dash'?'#dashboard':'#');$('studio').style.display=t=='studio'?'grid':'none';$('dash').style.display=t=='dash'?'grid':'none';$('navS').className=t=='studio'?'on':'';$('navD').className=t=='dash'?'on':'';if(t=='dash')loadDash()}
+const badge=s=>{const k=(s||'').toLowerCase();const c=k.indexOf('live')>=0?'b-live':k.indexOf('progress')>=0?'b-progress':k.indexOf('done')>=0?'b-done':'b-pending';return `<span class="badge ${c}">${esc(s||'')}</span>`}
+async function loadDash(){const s=await j('/api/status');window.S=s;$('tiles').innerHTML=(s.items||[]).map(x=>`<div class=tile data-u="${esc(x.url||'')}" onclick="if(this.dataset.u)window.open(this.dataset.u,'_blank')"><div class=grp>${esc(x.group||'')}</div><h3>${esc(x.name)}</h3>${badge(x.status)}<p>${esc(x.note||'')}</p>${x.url?'<div class=open>open &nearr;</div>':''}</div>`).join('');$('supdated').textContent=s.updated?('last updated '+s.updated):'';$('sedit').value=JSON.stringify({project:s.project,updated:s.updated,items:s.items},null,2)}
+async function saveStatus(){$('smsg').textContent='';try{const obj=JSON.parse($('sedit').value);const r=await post('/api/status',obj);$('smsg').textContent=r.error||'Saved';loadDash()}catch(e){$('smsg').textContent='Invalid JSON: '+e}}
+load();if(location.hash=='#dashboard')showTab('dash')</script>"""
 
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
@@ -165,6 +200,7 @@ class H(BaseHTTPRequestHandler):
         if p == "/api/presets": return self.send(200, list(PRESETS))
         if p == "/api/jobs": return self.send(200, list_jobs())
         if p == "/api/library": return self.send(200, scan_library())
+        if p == "/api/status": return self.send(200, load_status())
         if p.startswith("/audio/"):
             f = os.path.normpath(os.path.join(LIB, unquote(p[7:])))
             if f.startswith(os.path.normpath(LIB)) and os.path.isfile(f):
@@ -177,6 +213,7 @@ class H(BaseHTTPRequestHandler):
             if p == "/api/jobs": return self.send(200, make_job(d))
             if p == "/api/import": return self.send(200, {"imported": import_folder(d.get("folder", ""))})
             if p == "/api/export": return self.send(200, export_release(d["id"], d.get("title", ""), d.get("genre", "")))
+            if p == "/api/status": return self.send(200, save_status(d))
             self.send(404, {"error": "not found"})
         except Exception as e: self.send(400, {"error": str(e)})
 from urllib.parse import unquote
