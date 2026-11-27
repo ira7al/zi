@@ -9,15 +9,7 @@
 
 name: CI Black Duck security scan
 
-on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    # The branches below must be a subset of the branches above
-    branches: [ "main" ]
-  schedule:
-    - cron: '19 4 * * 5'
-
+on: workflow_dispatch  # was: on push/pull_request - manual only on dev-engine (starter scanner not configured for this repo)
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -52,3 +44,4 @@ jobs:
           srm_apikey: ${{ secrets.SRM_API_KEY }}
           srm_assessment_types: "SCA,SAST"
 
+ 
