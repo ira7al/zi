@@ -142,7 +142,7 @@ def export_release(track_id, title, genre, language="Instrumental", explicit="No
     return {"folder": out, "zip": z, "notes": notes}
 
 HTML = r"""<!doctype html>
-<html lang="ar" dir="rtl" data-theme="dark">
+<html lang="en" dir="ltr" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <title>Zi Music Studio</title>
@@ -257,7 +257,23 @@ tbody tr:hover{background:color-mix(in srgb,var(--ac) 6%,transparent)}
 .tile h3{margin:0 0 7px;font-size:14.5px}
 .tile .en{font-size:11px;color:var(--mut);margin:-3px 0 6px}
 .tile p{margin:8px 0 0;font-size:12.5px;color:var(--mut);line-height:1.5}
-.tile .open{color:var(--ac2);font-size:12px;margin-top:9px;font-weight:700}
+.tile .openbtn{position:relative;display:inline-flex;align-items:center;gap:7px;margin-top:11px;padding:6px 0;padding-inline:13px 7px;border-radius:99px;font-size:12px;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--ac),var(--ac2));box-shadow:0 2px 10px rgba(124,92,255,.35);overflow:hidden;transition:transform .18s,box-shadow .28s,filter .18s;animation:obglow 2.8s ease-in-out infinite}
+.tile .openbtn .ob-tx{position:relative;z-index:1;letter-spacing:.2px}
+.tile .openbtn .ob-ic{position:relative;z-index:1;width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.22);display:grid;place-items:center;overflow:hidden;transition:background .22s}
+.tile .openbtn .ob-ic svg{position:absolute;width:11px;height:11px;transition:transform .32s cubic-bezier(.3,1.35,.5,1)}
+.tile .openbtn .ob-ic svg.ob-b{transform:translate(-160%,160%)}
+.tile .openbtn::before{content:"";position:absolute;inset:0;background:linear-gradient(115deg,transparent 32%,rgba(255,255,255,.55) 50%,transparent 68%);transform:translateX(-130%);pointer-events:none}
+.tile:hover .openbtn,.tile:focus-visible .openbtn{transform:translateY(-1px) scale(1.05);filter:saturate(1.15);box-shadow:0 4px 20px rgba(124,92,255,.65),0 0 16px rgba(0,212,255,.4);animation-play-state:paused}
+.tile:hover .openbtn::before,.tile:focus-visible .openbtn::before{animation:obsheen .9s ease forwards}
+.tile:hover .openbtn .ob-ic,.tile:focus-visible .openbtn .ob-ic{background:rgba(255,255,255,.34)}
+.tile:hover .openbtn .ob-ic svg.ob-a,.tile:focus-visible .openbtn .ob-ic svg.ob-a{transform:translate(160%,-160%)}
+.tile:hover .openbtn .ob-ic svg.ob-b,.tile:focus-visible .openbtn .ob-ic svg.ob-b{transform:translate(0,0)}
+[dir=rtl] .tile .openbtn .ob-ic svg.ob-b{transform:translate(160%,160%)}
+[dir=rtl] .tile .openbtn .ob-ic svg path{transform:scaleX(-1);transform-box:fill-box;transform-origin:center}
+[dir=rtl] .tile:hover .openbtn .ob-ic svg.ob-a,[dir=rtl] .tile:focus-visible .openbtn .ob-ic svg.ob-a{transform:translate(-160%,-160%)}
+.tile:active .openbtn{transform:scale(.93);box-shadow:0 1px 6px rgba(124,92,255,.4)}
+@keyframes obsheen{to{transform:translateX(130%)}}
+@keyframes obglow{0%,100%{box-shadow:0 2px 10px rgba(124,92,255,.35)}50%{box-shadow:0 3px 16px rgba(0,212,255,.55)}}
 .pbar{height:5px;background:var(--line);border-radius:4px;overflow:hidden;margin-top:11px}
 .pbar i{display:block;height:100%;border-radius:4px}
 .pb-live i{background:var(--good);width:100%}.pb-done i{background:var(--info);width:100%}
@@ -456,7 +472,7 @@ const j=(u,o)=>fetch(u,o).then(r=>r.json());
 const post=(u,b)=>j(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const hash=s=>{let h=0;for(const c of String(s))h=(h*31+c.charCodeAt(0))>>>0;return h};
-let LANG=localStorage.getItem('zi-lang')||'ar';
+let LANG=localStorage.getItem('zi-lang')||'en';
 const T={
 en:{skip:"Skip to content",tagline:"artist Rahal \u00b7 AI-assisted \u00b7 free",studio:"Studio",library:"Library",dashboard:"Dashboard",
 newtrack:"New track",preset:"Style preset",title:"Title (optional)",length:"Length",min:"min",instr:"Instrumental (no lyrics)",lyrics:"Lyrics",
@@ -601,13 +617,13 @@ async function loadDash(quiet){
   const tile=x=>`<a class="tile" ${x.url?`href="${esc(x.url)}" target="_blank" rel="noopener"`:''}>
     <div class="grp"><span class="gic">${gicon(x.group)}</span>${esc(x.group||'')}</div>
     <h3>${esc(x.name)}</h3>${badge(x.status)}${pbar(x.status)}
-    <p>${esc(x.note||'')}</p>${x.url?`<div class="open">${t('open')} \u2197</div>`:''}</a>`;
+    <p>${esc(x.note||'')}</p>${x.url?`<span class="openbtn"><span class="ob-tx">${t('open')}</span><span class="ob-ic"><svg class='ob-a' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M7 17L17 7M9 7h8v8'/></svg><svg class='ob-b' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M7 17L17 7M9 7h8v8'/></svg></span></span>`:''}</a>`;
   $('tiles').innerHTML=items.map(tile).join('');
   $('sections').innerHTML=(s.sections||[]).map(sec=>`<div class="sechead"><span class="sic"><svg viewBox=&quot;0 0 24 24&quot; fill=&quot;none&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;2&quot; stroke-linecap=&quot;round&quot;><circle cx=&quot;12&quot; cy=&quot;12&quot; r=&quot;8.5&quot;/><path d=&quot;M12 7.5v9M9.2 9.4c0-1.1 1.2-1.9 2.8-1.9s2.8.8 2.8 1.9c0 2.6-5.6 1.6-5.6 4.2 0 1.1 1.2 1.9 2.8 1.9s2.8-.8 2.8-1.9&quot;/></svg></span>${esc(sec.title||'')}</div>
     <p class="secintro">${esc(sec.intro||'')}</p><div class="tiles">${(sec.tiles||[]).map(x=>`<a class="tile" ${x.url?`href="${esc(x.url)}" target="_blank" rel="noopener"`:''}>
     <h3>${esc(x.name||'')}</h3>${x.name_en?`<div class="en">${esc(x.name_en)}</div>`:''}<div style="margin-top:6px">${badgeK(x.status_key,x.status)}</div>${pbar(x.status_key=='ready'?'live':x.status_key=='blocked_legal'?'blocked':x.status_key=='setup_needed'?'in progress':'')}
     <p>${esc(x.note||'')}</p><div>${(x.links||[]).map(lk=>`<span class="chip" data-link="${esc(lk.url)}">${esc(lk.label)} \u2197</span>`).join('')}</div>
-    ${x.url?`<div class="open">${t('open')} \u2197</div>`:''}</a>`).join('')}</div>`).join('');
+    ${x.url?`<span class="openbtn"><span class="ob-tx">${t('open')}</span><span class="ob-ic"><svg class='ob-a' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M7 17L17 7M9 7h8v8'/></svg><svg class='ob-b' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M7 17L17 7M9 7h8v8'/></svg></span></span>`:''}</a>`).join('')}</div>`).join('');
   document.querySelectorAll('#tiles .tile,#sections .tile').forEach(tilt);
   document.querySelectorAll('.chip').forEach(c=>c.onclick=e=>{e.preventDefault();e.stopPropagation();window.open(c.dataset.link,'_blank','noopener')});
   $('sedit').value=JSON.stringify({project:s.project,updated:s.updated,items:s.items,sections:s.sections},null,2);
