@@ -10,6 +10,12 @@ Generate full music tracks for free on Google Colab (T4 GPU) and save them to yo
 5. Press **Generate**. Do not interrupt the cell while it runs.
 6. Tracks are saved to `MyDrive/Zi_Music/`.
 
+## Team mode and batch mode
+Run cells in order: 1 (setup), 2 (Studio), 3 (Team mode), 4 (Batch). Cells 3 and 4 need cell 2 run first.
+- **Team mode (cell 3):** a set of AI roles (lyricist, A&R, producer, engineer, artwork, release manager, operator) makes one release and prints a short log. It uses free open models only. The operator role checks health, retries and explains errors in plain words. Length 60-180 s.
+- **Batch mode (cell 4):** makes 1-18 tracks back to back from the 18 built-in presets (default 10, 90 s each, 60-180 s allowed). It writes all lyrics first, frees the GPU, then renders all audio. Expect about 1 minute per track after the first run. Do not touch the notebook tab while it runs.
+- **18 presets:** melodic progressive techno, indie dance, mid-tempo techno and Afro-dance techno, (plus deep house and downtempo indie) between 100 and 128 BPM, some with English lyrics and some instrumental. Presets describe the sound only, no artist names. Edit the `PRESETS` list in cell 4 to change them.
+
 ## Speed notes
 - The free T4 is slow on the first run. A 60 s track can take 10+ minutes.
 - If generation stalls, set `ACESTEP_INIT_LLM=false` in cell 1. The notebook then writes caption and lyrics itself and only the diffusion model runs.
