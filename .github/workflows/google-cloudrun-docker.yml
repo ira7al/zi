@@ -29,11 +29,7 @@
 
 name: 'Build and Deploy to Cloud Run'
 
-on:
-  push:
-    branches:
-      - '"main"'
-
+on: workflow_dispatch  # was: on push/pull_request - manual only on dev-engine (starter scanner not configured for this repo)
 env:
   PROJECT_ID: 'my-project' # TODO: update to your Google Cloud project ID
   REGION: 'us-central1' # TODO: update to your region
@@ -93,3 +89,4 @@ jobs:
         run: |2-
 
           echo ${{ steps.deploy.outputs.url }}
+ 

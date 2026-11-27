@@ -23,15 +23,7 @@
 name: "42Crunch REST API Static Security Testing"
 
 # follow standard Code Scanning triggers
-on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    # The branches below must be a subset of the branches above
-    branches: [ "main" ]
-  schedule:
-    - cron: '29 12 * * 0'
-
+on: workflow_dispatch  # was: on push/pull_request - manual only on dev-engine (starter scanner not configured for this repo)
 permissions:
   contents: read
 
@@ -56,3 +48,4 @@ jobs:
           upload-to-code-scanning: true
           # Github token for uploading the results
           github-token: ${{ github.token }}
+ 
