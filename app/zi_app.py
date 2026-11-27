@@ -118,33 +118,34 @@ def make_cover(path, title, seed):
 def export_release(track_id, title, genre, language="Instrumental", explicit="No"):
     known = [it["id"] for it in scan_library()]
     if track_id not in known: raise ValueError("Track not found")
-    lib_root = os.path.normpath(LIB) + os.sep
-    src = os.path.normpath(os.path.join(LIB, known[known.index(track_id)]))
-    meta_p = os.path.normpath(os.path.splitext(src)[0] + ".json")
-    if not (src.startswith(lib_root) and meta_p.startswith(lib_root) and os.path.isfile(src)):
-        raise ValueError("Track not found")
-    meta = read_json(meta_p, {}) or {}
-    title = title or meta.get("title") or os.path.splitext(os.path.basename(src))[0]
-    genre = genre or meta.get("genre") or "Electronic"
-    out = os.path.join(EXP, now() + "-" + slug(title)); os.makedirs(out)
-    ff = shutil.which("ffmpeg"); notes = []
-    if ff:
-        subprocess.run([ff, "-y", "-i", src, "-ar", "44100", "-sample_fmt", "s16", os.path.join(out, slug(title) + ".wav")], capture_output=True)
-        subprocess.run([ff, "-y", "-i", src, "-b:a", "320k", "-ar", "44100", os.path.join(out, slug(title) + ".mp3")], capture_output=True)
+    src = os.path.normpath(os.path.join(LIB, track_id))
+    if src.startswith(os.path.normpath(LIB)) and os.path.isfile(src):
+        meta_p = os.path.normpath(os.path.splitext(src)[0] + ".json")
+        meta = read_json(meta_p, {}) if meta_p.startswith(os.path.normpath(LIB)) else {}
+        title = title or meta.get("title") or os.path.splitext(os.path.basename(src))[0]
+        genre = genre or meta.get("genre") or "Electronic"
+        out = os.path.join(EXP, now() + "-" + slug(title)); os.makedirs(out)
+        ff = shutil.which("ffmpeg"); notes = []
+        if ff:
+            subprocess.run([ff, "-y", "-i", src, "-ar", "44100", "-sample_fmt", "s16", os.path.join(out, slug(title) + ".wav")], capture_output=True)
+            subprocess.run([ff, "-y", "-i", src, "-b:a", "320k", "-ar", "44100", os.path.join(out, slug(title) + ".mp3")], capture_output=True)
+        else:
+            shutil.copy2(src, out); notes.append("ffmpeg not found: original audio copied, convert to 44.1 kHz WAV/320k MP3 yourself (install ffmpeg to automate).")
+        if not make_cover(os.path.join(out, "cover_3000x3000.jpg"), title, title):
+            notes.append("Pillow missing: run 'pip install pillow' for the 3000x3000 cover, or add your own.")
+        row = {"Title": title, "Artist": ARTIST, "Writer": WRITER, "Genre": genre, "Language": language, "Explicit": explicit,
+               "AI generated": "Yes (AI-assisted, disclose per RouteNote policy)", "Release date": ""}
+        with open(os.path.join(out, "metadata.csv"), "w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=list(row)); w.writeheader(); w.writerow(row)
+        with open(os.path.join(out, "routenote_form.txt"), "w", encoding="utf-8") as f:
+            f.write("\n".join(f"{k}: {v}" for k, v in row.items()) + "\n\nUpload by hand at routenote.com. Check RouteNote's current AI-content policy first.\n" + "\n".join(notes) + "\n")
+        z = out + ".zip"
+        with zipfile.ZipFile(z, "w", zipfile.ZIP_DEFLATED) as zf:
+            for fn in os.listdir(out): zf.write(os.path.join(out, fn), fn)
+        return {"folder": out, "zip": z, "notes": notes}
     else:
-        shutil.copy2(src, out); notes.append("ffmpeg not found: original audio copied, convert to 44.1 kHz WAV/320k MP3 yourself (install ffmpeg to automate).")
-    if not make_cover(os.path.join(out, "cover_3000x3000.jpg"), title, title):
-        notes.append("Pillow missing: run 'pip install pillow' for the 3000x3000 cover, or add your own.")
-    row = {"Title": title, "Artist": ARTIST, "Writer": WRITER, "Genre": genre, "Language": language, "Explicit": explicit,
-           "AI generated": "Yes (AI-assisted, disclose per RouteNote policy)", "Release date": ""}
-    with open(os.path.join(out, "metadata.csv"), "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=list(row)); w.writeheader(); w.writerow(row)
-    with open(os.path.join(out, "routenote_form.txt"), "w", encoding="utf-8") as f:
-        f.write("\n".join(f"{k}: {v}" for k, v in row.items()) + "\n\nUpload by hand at routenote.com. Check RouteNote's current AI-content policy first.\n" + "\n".join(notes) + "\n")
-    z = out + ".zip"
-    with zipfile.ZipFile(z, "w", zipfile.ZIP_DEFLATED) as zf:
-        for fn in os.listdir(out): zf.write(os.path.join(out, fn), fn)
-    return {"folder": out, "zip": z, "notes": notes}
+        raise ValueError("Track not found")
+
 
 HTML = r"""<!doctype html>
 <html lang="en" dir="ltr" data-theme="dark">
