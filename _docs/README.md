@@ -1,75 +1,128 @@
-[Documentation Home](README.md)
+# 📚 zi Documentation
+
+Welcome to the complete documentation for this repository. This documentation is automatically generated and maintained by Woden Docbot.
+
+![Files Documented: 1](https://img.shields.io/badge/Files_Documented-1-blue) ![Coverage: 6%](https://img.shields.io/badge/Coverage-6%-orange) ![Last Updated: 2026-11-27](https://img.shields.io/badge/Last_Updated-2026--11--27-gray)
+
+## 🔗 Quick Links
+
+[📂 app](./app/README.md)
+[📋 Dependencies](./DEPENDENCIES.md)
+
 
 ---
 
-# 📁 _docs
-
-> **Purpose:** Top-level repository directory that organizes the project delivery artifacts, configuration, and two functional submodules (app and backend) for a desktop web app that manages music projects and export operations.
-> 
-
-![Organization: Hierarchical](https://img.shields.io/badge/Organization-Hierarchical-blue)
-
-## 📑 Table of Contents
+> A small desktop web app implemented in Python that manages music projects and coordinates export operations.
 
 
-- [Overview](#overview)
-- [Subdirectories](#subdirectories)
-- [Dependencies](#dependencies)
-- [Architecture Notes](#architecture-notes)
+
+## 📖 Overview
+
+zi is a compact desktop web application whose core runtime lives in the app directory. The repository centers on zi_app.py, which implements orchestration for project management and export functionality for music projects.
+
+The codebase combines Python application logic with web assets (HTML, JavaScript, CSS) and includes supporting developer files (for example README.md and run_windows.bat). The project declares Python-side dependencies such as fastapi and uvicorn and also contains artifacts for running or packaging (Docker / Docker Compose files are present in the tree).
+
+
+### 🧩 Key Components
+
+| Component | Purpose | Technologies |
+| --- | --- | --- |
+| **app** | Hosts the primary runtime code for the desktop web app, including the implementation of project management and export orchestration. | `Python`, `HTML`, `JavaScript` |
+| **zi_app.py** | The central implementation file and entry surface for the application-level logic that other components import or invoke. | `Python` |
+| **run_windows.bat** | A developer convenience script present alongside the app to facilitate running the application on Windows. | `Batch` |
+
+
+
+
+**Component Architecture:**
+
+```mermaid
+graph TD
+    C0[app]
+    C1[zi_app.py]
+    C2[run_windows.bat]
+    C0 --> C1
+    C1 --> C2
+```
+
+### 🏗️ Architecture
+
+A single application module in app/ (zi_app.py) provides the core orchestration; web assets sit alongside it and repository-level scripts and Docker files support running and packaging.
+
+### 💡 Use Cases
+
+- ✦ Manage music project metadata and state
+- ✦ Generate and export music project outputs
+
+
+
+### 🔧 Technologies
+
+
+**Languages:** ![JavaScript: ](https://img.shields.io/badge/JavaScript--blue) ![Python: ](https://img.shields.io/badge/Python--blue)
+![Batch: ](https://img.shields.io/badge/Batch--blue) ![CSS: ](https://img.shields.io/badge/CSS--blue) ![Docker: ](https://img.shields.io/badge/Docker--blue) ![Docker Compose: ](https://img.shields.io/badge/Docker_Compose--blue) ![HTML: ](https://img.shields.io/badge/HTML--blue) ![Shell: ](https://img.shields.io/badge/Shell--blue)
+
+### 📦 External Dependencies
+
+The following external packages are used across the project:
+
+- `Pillow`
+- `fastapi`
+- `httpx`
+- `pydantic`
+- `uvicorn`
+
+
 
 ---
 
-## Overview
+## 📑 Documentation Sections
 
-This repository root collects top-level configuration, static web assets, documentation, and two focused subdirectories that implement the application runtime and backend pieces. At the root there are repository infrastructure files such as .gitignore, Dockerfile, docker-compose.yml, several README documents (README.md, README-ADDENDUM.md), security guidance (SECURITY.md), and multiple static web assets (index.html, music-studio.css, music-studio.html, music-studio.js, releases.html, releases.js, single-file-app.html). These root files provide project-level configuration, containerization recipes, and the web UI assets that the desktop web app exposes. The root also contains render.yaml and release- or packaging-related HTML used for distribution or demos.
+### [app](./app/README.md)
+Contains the core application module for a small desktop web app that manages music projects and export operations.
 
-Below the root, two subdirectories hold the actual implementation code: app/ and backend/. The app/ directory contains the core application module (zi_app.py) and supports orchestration of project management and export functionality for music projects. The backend/ directory contains one documented file relevant to backend behavior (purpose documented in this repository). Together, these components form a small desktop web app: the app/ module orchestrates project and export workflows while the backend/ provides supporting server-side or utility logic; the root-level static assets and container files enable running, packaging, and deploying the combined system. This organization separates runtime code from deployment and UI assets so developers can quickly find configuration, UI resources, and the implementation modules responsible for core functionality.
 
-
-### File Organization
-
-Files are arranged with top-level repository and deployment/configuration artifacts at the root (Dockerfile, docker-compose.yml, READMEs, static HTML/CSS/JS) and implementation code grouped by function in subdirectories (app/ for the core application module and backend/ for backend-related code). This keeps runtime code isolated from packaging and web assets, simplifying builds and developer onboarding.
-
-## 📂 Subdirectories
-
-This directory contains the following subdirectories:
-
-### [📁 app](./app/README.md)
-
-**Purpose:** Contains the core application module for a small desktop web app that manages music projects and export operations; includes zi_app.py which implements project orchestration and export functionality.
+The app directory hosts the primary runtime code for the desktop web app.
 
 ![Files: 1](https://img.shields.io/badge/Files-1-blue)
 
 ---
 
-### [📁 backend](./backend/README.md)
+## 📊 Documentation Statistics
 
-**Purpose:** Contains 1 documented file providing backend-side logic or support for the application.
-
-![Files: 1](https://img.shields.io/badge/Files-1-blue)
-
----
-## Dependencies
-
-### Internal Dependencies
-
-| Dependency | Usage |
-| --- | --- |
-| `app` | Holds the core application orchestration (zi_app.py) for project management and exports; other components rely on it for runtime behavior. |
-| `backend` | Provides backend-side logic or utilities used by the application; referenced by runtime and possibly by UI for server interactions. |
-
-## Architecture Notes
-
-- Separation of concerns: runtime code is split into app/ (core orchestration) and backend/ (supporting logic) while the root holds deployment and static UI assets.
-- Container-focused deployment: presence of Dockerfile and docker-compose.yml at the root indicates intended use of containerized runs for development or distribution.
+- **Files Documented**: 1
+- **Directories**: 2
+- **Coverage**: 6%
+- **Eligible Source Files**: 18
+- **Last Updated**: 2026-11-27
 
 ---
 
-## Navigation
+## 🧭 How to Navigate
 
-**↑ Parent Directory:** [Go up](../README.md)
-**🔗 Related:** [app](./app/README.md) • [backend](./backend/README.md)
+> ℹ️ **INFO**
+> Each directory has its own README.md with detailed information about that section. Use the breadcrumb navigation at the top of each page to navigate back to parent directories.
+
+### Navigation Features
+
+- **Breadcrumbs** - At the top of each page, showing your current location
+- **Directory READMEs** - Each folder has a comprehensive overview
+- **File Documentation** - Click through to individual file documentation
+- **Search** - Use GitHub's search or your IDE's search functionality
 
 ---
 
-*Generated by Woden Docbot*
+## 🤖 About Woden DocBot
+
+This documentation is automatically generated and kept up-to-date by Woden DocBot, an AI-powered documentation assistant. DocBot analyzes code on every pull request and updates documentation to reflect changes.
+
+### Features
+
+- **Automatic Updates** - Documentation updates on every PR
+- **Comprehensive Coverage** - Files, functions, classes, and directories
+- **Smart Navigation** - Breadcrumbs, related files, and parent links
+- **AI-Powered** - Uses Azure GPT models for intelligent documentation generation
+
+---
+
+*Generated by Woden DocBot for zi*
