@@ -1,0 +1,19 @@
+{
+  "project": "Zi Music Studio - Rahal",
+  "updated": "2026-11-27 22:35",
+  "items": [
+    {"group": "App & code", "name": "This PC app", "url": "https://github.com/ira7al/zi/pull/12", "status": "in progress", "note": "v1 built and tested on Linux. PR #12 open (branch dev-app), main untouched. Windows run not tested yet."},
+    {"group": "App & code", "name": "GitHub repo ira7al/zi", "url": "https://github.com/ira7al/zi", "status": "live", "note": "Created Nov 25. Branches: main + dev-app (PR #12 open). Engine v2 notebook being pushed to branch dev-engine."},
+    {"group": "App & code", "name": "Colab notebook (render engine)", "url": "https://colab.research.google.com/drive/1XEp2EGInpNE3qfxikhwDb9kGMNxA6nAY", "status": "live", "note": "Zi_Music_Studio_Team.ipynb renders tracks with ACE-Step. v2 engine built (native 5-10 min, quality presets, mastering chain), Colab T4 test + PR in flight."},
+    {"group": "Music", "name": "Google Drive - Zi_Music", "url": "https://drive.google.com/drive/folders/12gBfcjxO9OnlpYbEqG2_VxWrbTTf-wis", "status": "live", "note": "21 track folders + releases.csv. Includes the 8 long 'Extended' 6-minute versions from Nov 27."},
+    {"group": "Music", "name": "Long tracks (6 min)", "url": "https://drive.google.com/drive/folders/12gBfcjxO9OnlpYbEqG2_VxWrbTTf-wis", "status": "in progress", "note": "8 tracks rendered at 360s: Progressive Build 5034, Deep Afro House 4957, Indie Dance Night Drive 4915, Melodic Techno 4834, Indie Dance 4555, AfroDance Techno 4718, Peak Techno 4753, MidTempo Techno 4636. Mastering to -14 LUFS running now."},
+    {"group": "Socials", "name": "YouTube channel", "url": "https://www.youtube.com/@rahalofficialmusic", "status": "live", "note": "@rahalofficialmusic. Posting starts once the mastered long tracks are delivered (cadence: 1 track/day + Shorts)."},
+    {"group": "Socials", "name": "Instagram", "url": "https://www.instagram.com/rahal.official.music/", "status": "live", "note": "@rahal.official.music created."},
+    {"group": "Socials", "name": "Facebook page", "url": "https://www.facebook.com/profile.php?id=61597045319184", "status": "live", "note": "Rahal page created."},
+    {"group": "Team tools", "name": "Slack workspace", "url": "https://rahal-music.slack.com", "status": "live", "note": "rahal-music.slack.com on the free plan, created and connected Nov 27."},
+    {"group": "Distribution", "name": "RouteNote", "url": "https://www.routenote.com", "status": "in progress", "note": "Account created and email validated; fixing an activation/login issue before the first release upload."},
+    {"group": "Plans", "name": "YouTube monetization plan", "url": "", "status": "done", "note": "Plan ready: 1 quality-gated track/day (7/week, ~30/month), unique art and title each, Shorts teasers, community posts, a mix every 4th week. No fake views or bought subs. Ask Instinct for the file."},
+    {"group": "Plans", "name": "Gigs & outreach drafts", "url": "", "status": "done", "note": "6 drafts ready: radio (Sufi Soul, re:union) and promoters/venues (Yalla Techno, Veldt, Scope, CJC). Sending waits for final tracks and the AI-disclosure line; promoter emails need Rahal's approval. Ask Instinct for the file."},
+    {"group": "Plans", "name": "Market investigation report", "url": "", "status": "in progress", "note": "AI-music market, competitors, pricing and opportunities - research running now."}
+  ]
+}
