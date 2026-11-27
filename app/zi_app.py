@@ -116,11 +116,10 @@ def make_cover(path, title, seed):
     img.save(path, quality=95); return True
 
 def export_release(track_id, title, genre, language="Instrumental", explicit="No"):
-    known = {it["id"] for it in scan_library()}
-    if track_id not in known: raise ValueError("Track not found")
-    src = os.path.normpath(os.path.join(LIB, track_id))
-    lib_root = os.path.normpath(LIB)
-    if not src.startswith(lib_root + os.sep) or not os.path.isfile(src): raise ValueError("Track not found")
+    tracks = {it["id"]: os.path.join(LIB, it["id"]) for it in scan_library()}
+    if track_id not in tracks: raise ValueError("Track not found")
+    src = tracks[track_id]
+    if not os.path.isfile(src): raise ValueError("Track not found")
     meta = read_json(os.path.splitext(src)[0] + ".json", {}) or {}
     title = title or meta.get("title") or os.path.splitext(os.path.basename(src))[0]
     genre = genre or meta.get("genre") or "Electronic"
