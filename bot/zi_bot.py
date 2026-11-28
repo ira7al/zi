@@ -45,6 +45,7 @@ Every track is AI-generated and delivered with that label."""
 class TG:
     def __init__(self, token):
         self.token = token
+        self.thread_of = None      # callable(chat_id) -> message_thread_id or None
 
     def call(self, method, **fields):
         url = API.format(token=self.token, method=method)
@@ -56,8 +57,14 @@ class TG:
             raise RuntimeError(f"telegram {method} failed: {out.get('description')}")
         return out["result"]
 
+    def _thread(self, chat_id):
+        try:
+            return self.thread_of(chat_id) if self.thread_of else None
+        except Exception:
+            return None
+
     def send(self, chat_id, text, keyboard=None):
-        fields = {"chat_id": chat_id, "text": text[:4000]}
+        fields = {"chat_id": chat_id, "text": text[:4000], "message_thread_id": self._thread(chat_id)}
         if keyboard:
             fields["reply_markup"] = json.dumps({"inline_keyboard": keyboard})
         return self.call("sendMessage", **fields)
@@ -75,6 +82,9 @@ class TG:
             else:
                 parts.append(f'Content-Disposition: form-data; name="{extra[0]}"\r\n\r\n{extra[1]}\r\n'.encode())
         head(("chat_id", str(chat_id)))
+        th = self._thread(chat_id)
+        if th:
+            head(("message_thread_id", str(th)))
         if caption:
             head(("caption", caption[:1000]))
         head(None, is_file=True)
@@ -99,6 +109,7 @@ class TG:
 class Bot:
     def __init__(self, token, out_root, work, make_track=None, run_queue=None):
         self.tg = TG(token)
+        self.tg.thread_of = lambda cid: self.threads.get(cid)
         self.out_root = out_root
         self.work = work
         self.make_track = make_track
@@ -109,6 +120,7 @@ class Bot:
         self.owner = self._load(self.owner_path, {}).get("chat_id")
         self.pair_code = None
         self.jobs = queue.Queue()
+        self.threads = {}    # chat_id -> message_thread_id (topic chats)
         self.queued = []     # titles waiting behind the current render
         self.current = None
         self.builders = {}   # chat_id -> dict of the guided /track flow
@@ -171,6 +183,8 @@ class Bot:
             except queue.Empty:
                 continue
             chat_id, spec = job
+            if spec.get("_thread"):
+                self.threads[chat_id] = spec["_thread"]
             self.current = spec.get("title") or spec.get("name") or spec["genre"]
             try:
                 if self.queued:
@@ -206,15 +220,25 @@ class Bot:
     def _handle(self, u):
         cb = u.get("callback_query")
         if cb:
-            chat_id = cb["message"]["chat"]["id"]
-            if not self._is_owner(chat_id):
+            cmsg = cb.get("message") or {}
+            chat_id = (cmsg.get("chat") or {}).get("id")
+            if chat_id is None or not self._is_owner(chat_id):
                 return
+            if cmsg.get("message_thread_id"):
+                self.threads[chat_id] = cmsg["message_thread_id"]
+            # stop the button spinner even if the handler below fails
+            try:
+                self.tg.call("answerCallbackQuery", callback_query_id=cb["id"])
+            except Exception as e:
+                print("answerCallbackQuery failed:", e)
             self._callback(chat_id, cb["data"])
             return
         msg = u.get("message") or {}
         chat_id = (msg.get("chat") or {}).get("id")
         if chat_id is None:
             return
+        if msg.get("message_thread_id"):
+            self.threads[chat_id] = msg["message_thread_id"]
         text = (msg.get("text") or "").strip()
         doc = msg.get("document")
         if not self._is_owner(chat_id):
@@ -271,6 +295,12 @@ class Bot:
                 return
             self._get(chat_id, folder, audio=True)
             return
+        if not b and data in GENRE_PRESETS:
+            # A tap can arrive after a session restart or on a second bot instance
+            # that has no builder for this chat; start one instead of going dead.
+            self.builders[chat_id] = {"step": "genre", "spec": {"lang": "en", "quality": "high",
+                                                               "instrumental": True, "seconds": 330}}
+            b = self.builders[chat_id]
         if not b:
             self.tg.send(chat_id, "That builder expired. /track starts a new one.")
             return
@@ -357,6 +387,7 @@ class Bot:
             return
         spec.setdefault("seconds", 330)
         spec["seconds"] = max(60, min(600, int(spec["seconds"])))
+        spec["_thread"] = self.threads.get(chat_id)
         self.jobs.put((chat_id, spec))
         self.queued.append(spec.get("title") or spec.get("name") or spec.get("genre") or "track")
         n = self.jobs.qsize()
