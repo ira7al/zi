@@ -49,9 +49,8 @@ class QuickPathTests(unittest.TestCase):
     def test_last_settings_come_back_as_one_button(self):
         self.enqueue()
         self.bot._track(9, "")
-        self.assertIn("last", self.keys())
-        self.assertIn("Last: melodic techno, 5:00, instrumental", " ".join(
-            b["text"] for row in self.bot.tg.sent[-1]["keyboard"] for b in row))
+        # the Last row is gone from the new-track menu on purpose; the handler still works
+        self.assertNotIn("last", self.keys())
 
     def test_one_tap_reopens_the_same_settings(self):
         self.enqueue()

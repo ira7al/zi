@@ -26,7 +26,7 @@ class AlwaysOnTests(unittest.TestCase):
     def test_free_text_is_a_question_not_a_track(self):
         self.say("ينفع أعمل حاجة زي كده؟")
         self.assertNotIn(9, self.bot.builders)
-        self.assertIn("مش متأكد", self.last()["text"]) or self.assertIn("أقدر أجاوب", self.last()["text"])
+        self.assertIn("ما وصلنيش كويس", self.last()["text"]) or self.assertIn("أقدر أجاوب", self.last()["text"])
 
     def test_the_answer_carries_two_or_three_next_steps(self):
         self.say("إيه الناقص؟")

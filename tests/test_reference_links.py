@@ -43,10 +43,10 @@ class LinkAndPhotoTests(unittest.TestCase):
         self.send(text="https://open.spotify.com/track/abc123")
         shown = self.joined()
         self.assertIn("قريت من اللينك: Some Track - song by Some Artist", shown)
-        self.assertIn("فهمت من المرجع", shown)
-        built = self.bot.builders[9]["built"]
-        self.assertIn("melodic techno", built["prompt"])
-        self.assertNotIn("Some Artist", built["prompt"])
+        self.assertIn("خدت المرجع كستايل بس", shown)
+        self.assertNotIn("Some Artist", shown.split("قريت من اللينك")[1].split("خدت المرجع")[1])
+        self.assertEqual(self.bot.builders[9]["step"], "own_prompt")
+        self.assertEqual(self.bot.builders[9]["own_ref"]["style"], "melodic techno")
 
     def test_a_link_at_the_ai_idea_step_becomes_a_reference(self):
         self.builder("ai_idea")
@@ -79,14 +79,13 @@ class LinkAndPhotoTests(unittest.TestCase):
             self.send(photo=[{"file_id": "big"}])
         shown = self.joined()
         self.assertIn("قريت من الصورة", shown)
-        self.assertIn("فهمت من المرجع", shown)
+        self.assertIn("خدت المرجع كستايل بس", shown)
 
     def test_a_reference_derived_prompt_says_nothing_was_stripped(self):
         self.builder("own_prompt")
         self.send(text="https://www.youtube.com/watch?v=abc")
         shown = self.joined()
         self.assertNotIn("\u26a0\ufe0f", shown)          # nothing was taken from him
-        self.assertIn("\u2705", shown)
 
     def test_a_plain_message_is_still_prompt_text(self):
         self.builder("own_prompt")

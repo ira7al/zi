@@ -108,6 +108,33 @@ def intent_of(question):
     return best
 
 
+FEEDBACK_VERBS = ("خلي ", "خلّي", "ضيف", "شيل", "غيّر", "غير ", "عدّل", "عدل ", "زوّد", "زود ", "بدّل", "بدل ",
+                  "انقل", "نقّل", "المفروض", "اقتراح", "ملاحظة", "فيدباك", "feedback", "عايزك تغير", "عايزك تضيف")
+FEEDBACK_NOUNS = ("زرار", "زراير", "الأزرار", "الازرار", "قايمة", "القائمة", "المينيو", "شاشة", "الشاشة",
+                  "الواجهة", "اللينك", "مرجع", "المرجع", "البرومبت", "الرسالة", "الرد", "الشكل", "الصوت",
+                  "التراك", "اللغة", "الخيارات", "الستايل")
+
+
+def is_feedback(text):
+    """A request to change how the bot looks or behaves, not a question about his tracks.
+
+    A change word plus a screen word, or an explicit suggestion word. Questions about the
+    project (missing, status, publishing) are never feedback.
+    """
+    q = (text or "").strip().lower()
+    if len(q) < 8:
+        return False
+    if q.endswith(("؟", "?")) and intent_of(q) in ("missing", "next", "status", "dataset", "publish", "liked", "lora"):
+        return False
+    explicit = any(w in q for w in ("اقتراح", "ملاحظة", "فيدباك", "feedback"))
+    verb = any(w in q for w in FEEDBACK_VERBS)
+    noun = any(w in q for w in FEEDBACK_NOUNS)
+    return explicit or (verb and noun)
+
+
+FEEDBACK_REPLY = "وصّلتها للمطوّر \U0001f44c هتلاقيها في التعديلات الجاية."
+
+
 def answer(question, state):
     """Short Egyptian Arabic, from the state only."""
     q = (question or "").strip()
@@ -162,8 +189,9 @@ def answer(question, state):
         return ("أهلاً بيك. أنا مساعدك الشخصي.\n" + dataset_line(state)
                 + "\nتحب أقولك إيه الناقص، ولا نبدأ تراك؟")
     # nothing matched: say what it can answer instead of guessing
-    return ("مش متأكد إني فهمت السؤال. أقدر أجاوب على: اللي ناقص، اللي تعمله بعد كده، "
-            "حالة الشغل، تراكات التدريب، اللي حفظته، النشر، وموديل مستر درغام.")
+    return ("ما وصلنيش كويس، ممكن تعيدها؟ أو دوس /menu وكل حاجة قدامك.\n"
+            "وأقدر أجاوب على: اللي ناقص، اللي تعمله بعد كده، حالة الشغل، تراكات التدريب، "
+            "اللي حفظته، والنشر.")
 
 
 # ---------- optional: a free hosted model, when a key is present ----------
@@ -187,6 +215,8 @@ SYSTEM = ("أنت المساعد الشخصي بتاع راهال، جوّه ب�
           "في كلام المشروع بس: كل حقيقة لازم تكون من المعلومات اللي تحت، ولو حاجة مش فيها قول إنك مش شايفها. "
           "ما تخترعش أرقام ولا مميزات، وما تقولش إنك عملت حاجة، وما تقولش إن ميزة شغالة أو مفعّلة "
           "إلا لو مكتوبة في المعلومات. ماتكلمش عن أي مفاتيح أو أسرار.\n"
+          "لو الكلام مش واضح أو شكله متلخبط (كلام الصوت ساعات بيتسمع غلط): قول بلُطف ودفا \"ما وصلنيش كويس، "
+          "ممكن تعيدها؟\" وبعدها اعرض عليه /menu. ممنوع تقول \"مش فاهم\" أو \"مش فاهم الكلام ده\" أو أي رد جاف.\n"
           "ماتتكلمش عن الإنجين ولا المحرك ولا النوتبوك ولا OCR ولا الصوت ولا أي حاجة تقنية عن البوت نفسه. "
           "لو الرندر مش شغال وسأل قول له يشغّل خلية الإنجين وبس.\n"
           + TONE)
@@ -481,6 +511,74 @@ def ask_groq(question, state, key, model=None, opener=None, timeout=25, sleep=No
                 print("groq failed:", type(e).__name__)
                 break
     return None
+
+
+GROQ_STT_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
+GROQ_STT_MODELS = ("whisper-large-v3-turbo", "whisper-large-v3")
+STT_HINT = "كلام مصري عن الموسيقى والتراكات والبرومبت والزراير."
+
+
+def transcribe_groq(path, key, model=None, opener=None, timeout=60, sleep=None, tries=2):
+    """Speech to text through Groq's whisper. Returns (text or None, problem).
+
+    Multipart upload, Egyptian Arabic hinted, temperature 0. The key goes in the Authorization
+    header and is never printed. Telegram voice notes are .oga; Groq wants .ogg, so only the
+    uploaded filename changes.
+    """
+    if not key:
+        return None, "no key"
+    import json as _json
+    import time as _t
+    import uuid as _uuid
+    import urllib.error as _uerr
+    import urllib.request as _req
+    sleep = sleep or _t.sleep
+    try:
+        with open(path, "rb") as fh:
+            audio = fh.read()
+    except Exception as e:
+        return None, type(e).__name__
+    if not audio or len(audio) > 24 * 1024 * 1024:
+        return None, "audio size"
+    name = os.path.basename(path)
+    if name.lower().endswith(".oga"):
+        name = name[:-4] + ".ogg"
+    problem = "empty"
+    for m in ([model] if model else list(GROQ_STT_MODELS)):
+        boundary = "zi" + _uuid.uuid4().hex
+        parts = []
+        for k, v in (("model", m), ("language", "ar"), ("response_format", "json"),
+                     ("temperature", "0"), ("prompt", STT_HINT)):
+            parts.append(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + k + "\"\r\n\r\n" + v + "\r\n").encode("utf-8"))
+        parts.append(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"" + name +
+                      "\"\r\nContent-Type: application/octet-stream\r\n\r\n").encode("utf-8"))
+        parts.append(audio)
+        parts.append(("\r\n--" + boundary + "--\r\n").encode("utf-8"))
+        body = b"".join(parts)
+        for attempt in range(tries):
+            req = _req.Request(GROQ_STT_URL, data=body, method="POST",
+                               headers={"Content-Type": "multipart/form-data; boundary=" + boundary,
+                                        "Authorization": "Bearer " + key, "User-Agent": "zi-studio-bot/1.0"})
+            try:
+                with (_opener(opener))(req, timeout=timeout) as r:
+                    data = _json.loads(r.read())
+                text = (data.get("text") or "").strip() if isinstance(data, dict) else ""
+                if text:
+                    return text, ""
+                problem = m + ": empty"
+                break
+            except _uerr.HTTPError as e:
+                print("groq stt HTTP", e.code, m)               # the code and model only
+                problem = m + ": " + str(e.code)
+                if e.code == 429 and attempt + 1 < tries:
+                    sleep(2 * (attempt + 1))
+                    continue
+                break
+            except Exception as e:
+                print("groq stt failed:", type(e).__name__)
+                problem = m + ": " + type(e).__name__
+                break
+    return None, problem
 
 
 GROQ_VISION_MODEL = "qwen/qwen3.8-27b"

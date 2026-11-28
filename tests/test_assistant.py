@@ -73,7 +73,7 @@ class AnswerTests(unittest.TestCase):
 
     def test_an_unknown_question_does_not_guess(self):
         text = za.answer("طب إيه رأيك في البحر؟", READY)
-        self.assertIn("مش متأكد", text)
+        self.assertIn("ما وصلنيش كويس", text)
         self.assertIn("ناقص", text)
 
     def test_status_reads_like_a_status(self):
