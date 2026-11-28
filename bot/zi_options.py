@@ -14,6 +14,7 @@ audio_duration, bpm, key_scale, vocal_language, inference_steps, guidance_scale,
 There is no negative prompt, no weirdness dial, no LoRA and no reference-audio field in
 the generation path, which is why those are marked the way they are.
 """
+import json
 import re
 
 # ---------- option definitions (the UI reads this) ----------
@@ -642,3 +643,111 @@ def audio_style_for(res, styles):
         if cost < best_cost:
             best, best_cost = name, cost
     return best
+
+
+# ---------- private user records (build .49) ----------
+# Profile basics of whoever opens the bot, plus the owner's library metadata, go to a PRIVATE GitHub repo.
+# Only whitelisted fields are ever written, so a token or a path cannot leak into it.
+USERS_NOTICE = "بنسجّل رقم تيليجرام واسمك وتاريخ دخولك وبيانات استخدامك في مكان خاص بصاحب البوت بس."
+PROFILE_FIELDS = ("telegram_id", "username", "name", "language_code", "first_seen", "last_seen", "is_owner", "role", "plan")
+TRACK_FIELDS = ("title", "genre", "prompt", "caption", "bpm", "key", "language", "instrumental",
+                "actual_duration_sec", "quality", "seed", "created", "kept", "when")
+
+
+def user_from_update(frm):
+    """Profile basics from a Telegram `from` object; None when there is no id."""
+    if not isinstance(frm, dict) or frm.get("id") is None:
+        return None
+    name = " ".join(x for x in (frm.get("first_name"), frm.get("last_name")) if x).strip()
+    return {"telegram_id": frm["id"], "username": frm.get("username") or "", "name": name,
+            "language_code": frm.get("language_code") or ""}
+
+
+def note_user(users, prof, now, is_owner=False):
+    """Add or refresh one profile in the dict. Returns (is_new, changed)."""
+    if not prof:
+        return False, False
+    key = str(prof["telegram_id"])
+    cur = users.get(key)
+    if cur is None:
+        users[key] = dict(prof, first_seen=now, last_seen=now, is_owner=bool(is_owner),
+                          role="admin" if is_owner else "user", plan="owner" if is_owner else "free")
+        return True, True
+    changed = False
+    if "plan" not in cur or "role" not in cur:      # records written before plans existed
+        cur["role"] = "admin" if (is_owner or cur.get("is_owner")) else "user"
+        cur["plan"] = "owner" if (is_owner or cur.get("is_owner")) else "free"
+        changed = True
+    for f in ("username", "name", "language_code"):
+        if prof.get(f) and cur.get(f) != prof[f]:
+            cur[f] = prof[f]
+            changed = True
+    if is_owner and not cur.get("is_owner"):
+        cur["is_owner"] = True
+        cur["role"], cur["plan"] = "admin", "owner"
+        changed = True
+    cur["last_seen"] = now          # kept in memory, written with the next change
+    return False, changed
+
+
+def clean_profile(p):
+    return {k: p.get(k) for k in PROFILE_FIELDS if k in p}
+
+
+def clean_track(meta, extra=None):
+    out = {k: meta.get(k) for k in TRACK_FIELDS if isinstance(meta, dict) and meta.get(k) not in (None, "")}
+    for k, v in (extra or {}).items():
+        out[k] = v
+    return out
+
+
+def github_put(repo, token, path, content_bytes, message, opener=None, timeout=30):
+    """Create or update one file through the contents API. Returns (ok, problem). The token goes in a header only."""
+    import base64
+    import urllib.error as _uerr
+    import urllib.request as _req
+    op = opener or _req.urlopen
+    url = f"https://api.github.com/repos/{repo}/contents/{path}"
+    hdr = {"Authorization": "Bearer " + token, "User-Agent": "zi-studio-bot/1.0",
+           "Accept": "application/vnd.github+json"}
+    sha = None
+    try:
+        with op(_req.Request(url, headers=hdr), timeout=timeout) as r:
+            sha = json.loads(r.read()).get("sha")
+    except _uerr.HTTPError as e:
+        if e.code != 404:
+            return False, "HTTP " + str(e.code)
+    except Exception as e:
+        return False, type(e).__name__
+    body = {"message": message, "content": base64.b64encode(content_bytes).decode()}
+    if sha:
+        body["sha"] = sha
+    try:
+        req = _req.Request(url, data=json.dumps(body).encode(), method="PUT",
+                           headers=dict(hdr, **{"Content-Type": "application/json"}))
+        with op(req, timeout=timeout) as r:
+            r.read()
+        return True, ""
+    except _uerr.HTTPError as e:
+        return False, "HTTP " + str(e.code)
+    except Exception as e:
+        return False, type(e).__name__
+
+
+def sync_private(repo, token, files, last_hashes, opener=None):
+    """Push {path: text} files whose content changed since last_hashes. Returns (pushed, problems)."""
+    import hashlib
+    pushed, problems = [], []
+    if not repo or not token:
+        return pushed, ["no repo or token"]
+    for path, text in sorted(files.items()):
+        h = hashlib.md5(text.encode("utf-8")).hexdigest()
+        if last_hashes.get(path) == h:
+            continue
+        ok, why = github_put(repo, token, path, text.encode("utf-8"), "sync " + path, opener=opener)
+        if ok:
+            last_hashes[path] = h
+            pushed.append(path)
+        else:
+            problems.append(path + ": " + why)
+    return pushed, problems

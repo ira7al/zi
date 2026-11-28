@@ -11,7 +11,8 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.48"
+VERSION = "2026-11-28.49"
+OWNER_ID_DEFAULT = 7835590874      # Rahal's Telegram id, used only when no owner file exists
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -389,7 +390,24 @@ class Bot:
         self.owner_path = os.path.join(out_root, "zi_bot_owner.json")
         self.state = self._load(self.state_path, {"offset": 0})
         self.owner = self._load(self.owner_path, {}).get("chat_id")
+        self.users_path = os.path.join(out_root, "zi_users.json")
+        self.users = self._load(self.users_path, {})
+        if not isinstance(self.users, dict):
+            self.users = {}
+        self.sync_hashes = {}
+        self.sync_dirty = bool(self.users)
+        self.sync_lock = threading.Lock()
+        self.sync_status = "not run yet"
+        self.sync_wake = threading.Event()
         self.pair_code = None
+        if self.owner is None:
+            # the owner is known by Telegram id, so a wiped device needs no pairing code again
+            try:
+                oid = int(self._secret("ZI_OWNER_ID") or OWNER_ID_DEFAULT)
+                self.owner = oid
+                self._save(self.owner_path, {"chat_id": oid})
+            except Exception:
+                pass
         self.jobs = queue.Queue()
         self.threads = {}    # chat_id -> message_thread_id (topic chats)
         self.gpu_marker = os.environ.get("ZI_GPU_MARKER") or os.path.join(out_root, ".gpu_busy")
@@ -465,6 +483,76 @@ class Bot:
         self._register_commands()
         threading.Thread(target=self._worker, daemon=True).start()
         threading.Thread(target=self._poll, daemon=True).start()
+        threading.Thread(target=self._sync_loop, daemon=True).start()
+
+    # ---------- private user records ----------
+    SYNC_EVERY = 1800
+
+    def _data_conf(self):
+        return (self._secret("ZI_DATA_REPO") or "ira7al/zi-private-data"), self._secret("ZI_DATA_TOKEN")
+
+    def _track_user(self, frm):
+        """Remember whoever opens the bot. Returns True the first time this person is seen."""
+        try:
+            prof = opt.user_from_update(frm)
+            if not prof:
+                return False
+            now = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
+            with self.sync_lock:
+                is_new, changed = opt.note_user(self.users, prof, now, self._is_owner(prof["telegram_id"]))
+                if changed:
+                    self.sync_dirty = True
+                    self._save(self.users_path, self.users)
+            if is_new:
+                self.sync_wake.set()
+            return is_new
+        except Exception as e:
+            print("user record failed:", type(e).__name__)
+            return False
+
+    def _sync_files(self):
+        files = {}
+        with self.sync_lock:
+            for uid, prof in self.users.items():
+                files[f"users/{uid}.json"] = json.dumps(opt.clean_profile(prof), ensure_ascii=False, indent=2, sort_keys=True)
+        if self.owner:
+            liked = self._liked().get("tracks", {})
+            tracks = []
+            for d in self._release_folders():
+                meta = self._load(os.path.join(self.out_root, d, "metadata.json"), {})
+                entry = liked.get(self._lib_key(d)) or {}
+                extra = {"id": self._lib_key(d), "starred": bool(entry.get("kept"))}
+                tracks.append(opt.clean_track(meta, extra))
+            files[f"library/{self.owner}.json"] = json.dumps(
+                {"owner_telegram_id": self.owner, "count": len(tracks), "tracks": tracks},
+                ensure_ascii=False, indent=2, sort_keys=True)
+        return files
+
+    def _sync_once(self, force=False):
+        repo, token = self._data_conf()
+        if not token:
+            self.sync_status = "saved on this device only (no ZI_DATA_TOKEN)"
+            return False
+        if not (self.sync_dirty or force):
+            return True
+        self.sync_dirty = False
+        pushed, problems = opt.sync_private(repo, token, self._sync_files(), self.sync_hashes)
+        if problems:
+            self.sync_dirty = True
+            self.sync_status = "failed: " + "; ".join(problems)[:150]
+            print("private sync problem:", self.sync_status)
+            return False
+        self.sync_status = time.strftime("ok %H:%M:%S") + f" ({len(pushed)} files)"
+        return True
+
+    def _sync_loop(self):
+        while not self.stop.is_set():
+            try:
+                self._sync_once(force=not self.sync_hashes)
+            except Exception as e:
+                print("private sync crashed:", type(e).__name__)
+            self.sync_wake.wait(self.SYNC_EVERY)
+            self.sync_wake.clear()
 
     def _poll(self):
         import builtins
@@ -1705,6 +1793,7 @@ class Bot:
         except Exception:
             pass
         if cb:
+            self._track_user(cb.get("from"))
             cmsg = cb.get("message") or {}
             chat_id = (cmsg.get("chat") or {}).get("id")
             if chat_id is None:
@@ -1748,15 +1837,17 @@ class Bot:
             self.threads[chat_id] = msg["message_thread_id"]
         text = (msg.get("text") or "").strip()
         doc = msg.get("document")
+        first_time = self._track_user(msg.get("from"))
         if not self._is_owner(chat_id):
             if text.startswith("/start") and self.pair_code and text.endswith(self.pair_code):
                 self.owner = chat_id
                 self._save(self.owner_path, {"chat_id": chat_id})
                 self.pair_code = None
-                self.tg.send(chat_id, "تمام. البوت ده بيرد عليك إنت بس دلوقتي.\n\n" + HELP)
+                self._track_user(msg.get("from"))
+                self.tg.send(chat_id, "تمام. البوت ده بيرد عليك إنت بس دلوقتي.\n" + opt.USERS_NOTICE + "\n\n" + HELP)
                 self._launcher(chat_id)
             else:
-                self.tg.send(chat_id, "ده بوت استوديو خاص.")
+                self.tg.send(chat_id, "ده بوت استوديو خاص." + ("\n" + opt.USERS_NOTICE if first_time else ""))
             return
         if not self._launcher_sent:
             # after a restart or a cleared chat the buttons are gone until the bot
@@ -2644,6 +2735,7 @@ class Bot:
 
     def _diag(self, chat_id):
         lines = [f"build {VERSION}",
+                 f"users recorded: {len(self.users)}, private sync: {self.sync_status}",
                  f"messages handled: {self.stats.get('message', 0)}",
                  f"callbacks handled: {self.stats.get('callback', 0)}",
                  f"last update: {self.stats.get('last', '?')}"]
