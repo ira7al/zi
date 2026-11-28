@@ -117,6 +117,12 @@ It comes from a Google Cloud project with the YouTube Data API enabled, an OAuth
 
 The 9:16 video is used for the channel, reels and shorts; the YouTube button renders a 1280x720 version from the same cover on demand so the full track reads properly on YouTube.
 
+## Keeping a track ("this is the one")
+
+Under every delivered track the publish menu has one star row: **⭐ This is the one**. A tap copies that release into `liked/<key>_<title>/` on the notebook machine - the 320 kbps MP3, the cover, the lyrics and metadata.json - and records it in `zi_bot_liked.json` next to the bot state. `/liked` lists the keepers with the date each was marked.
+
+That folder is the LoRA set later: pick the ones you like in chat as you generate, and nothing else has to be sorted out afterwards. If the notebook restarted and the release folder is gone, the bot says so instead of silently doing nothing.
+
 ## Training set for the Mr Dorgham model
 
 The bot now collects the training data. Send a track to the bot (audio file or voice note) and it is saved on the machine running the notebook:
@@ -136,14 +142,14 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
-## Bot build 2026-11-28.15: reload and engine patch
+## Bot build 2026-11-28.16: reload and engine patch
 
 The bot now loads a second file (`bot/zi_options.py`), so a cell 5 that only fetches `zi_bot.py` fails. Use this cell instead; it pins the commit and fetches both.
 
 ```python
-# pinned reload - build .15 (bot + its shared option model)
+# pinned reload - build .16 (bot + its shared option model)
 import os, sys, importlib.util, urllib.request
-SHA = "35e0b27a972a5374f09a9581ba2de788380f8343"
+SHA = "83d0488033bc2ab3b167ad341f41249db17ddfba"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
