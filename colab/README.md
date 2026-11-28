@@ -214,6 +214,20 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
+## Bot build 2026-11-28.52: music quality
+
+- Image or cover-art text is never used as a music idea any more. A visual description is replaced by a genre prompt, and a pasted image prompt is refused.
+- Fix: style tags, avoid list, weirdness and maqam were dropped before reaching the prompt. They now arrive.
+- "This is bad / make another" (text or voice) goes to a redo: new seed, previous prompt adjusted, then the usual summary and Generate button. Nothing generates by itself.
+- Speech parsing: Egyptian number words next to tempo or time words, more BPM spellings, maqam names (Saba and others), solfege keys. The speech hint sent to whisper is a neutral vocabulary list.
+- Models the box does not have are dropped from the spec and from the model button.
+- Trace log `zi_bot_trace.jsonl` (no tokens, no audio), owner command `/trace` shows the last 20 lines.
+- Engine patch cell (paste after the engine cell): caps turbo at 8 steps, drops guidance for turbo, prefers the XL turbo model if listed, records the engine used.
+
+```python
+exec(urllib.request.urlopen("https://raw.githubusercontent.com/ira7al/zi/e7454280d3eb7374689b959c9c7f1999f04b2f42/colab/engine_patch_52.py").read().decode())
+```
+
 ## Bot build 2026-11-28.51: QC fixes
 
 - YouTube confirm step offers Public, Unlisted or Private. Each button is its own explicit tap, so nothing uploads without one. Public is the first button, as before.
@@ -379,9 +393,9 @@ What .25 changes for whoever is testing:
 - `/diag` prints which voice engines are on the box and whether screenshots have a key.
 
 ```python
-# pinned reload - build .51 (bot + options + assistant + voice + art)
+# pinned reload - build .52 (bot + options + assistant + voice + art)
 import os, sys, importlib.util, urllib.request
-SHA = "4d1d40a8ae5bc5a327d6c1a7b768457f0651dc11"
+SHA = "e7454280d3eb7374689b959c9c7f1999f04b2f42"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
