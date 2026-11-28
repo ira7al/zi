@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, subprocess, threading, time, traceback, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.12"
+VERSION = "2026-11-28.13"
 
 API = "https://api.telegram.org/bot{token}/{method}"
 FILE_API = "https://api.telegram.org/file/bot{token}/{path}"
@@ -40,6 +40,37 @@ LENGTH_KEYS = ("seconds", "duration", "duration_sec", "target_sec")
 QUALITIES = [("high", "High (2 seeds, best pick)"), ("standard", "Standard"), ("fast", "Fast draft")]
 AI_LABEL = "AI-generated music (ACE-Step 1.5, MIT licence). Label it AI-generated wherever you release it."
 
+# ---------- publishing ----------
+# The bot token administers the channel (that is how its photo and description were
+# set), so the channel is the one platform that posts end to end from here.
+CHANNEL = "@rahal_music"
+PUBLISH_AI = "AI-generated with ACE-Step under Rahal's direction and selection."
+PUBLISH_TAGS = "#melodictechno #indiedance #progressivehouse #afrohouse"
+PLATFORMS = [("yt", "YouTube"), ("ig", "Instagram"), ("tt", "TikTok"),
+             ("tg", "Telegram channel"), ("fb", "Facebook")]
+PLATFORM_LABEL = dict(PLATFORMS)
+
+# Verified profile links only. Facebook is left out on purpose: its page URL was never
+# confirmed, and a wrong link is worse than no button. Add it as one more tuple once the
+# exact URL is verified.
+SOCIAL = [("\u25b6\ufe0f YouTube", "https://www.youtube.com/@rahalofficialmusic"),
+          ("\U0001f4f8 Instagram", "https://www.instagram.com/rahal.official.music/"),
+          ("\U0001f3b5 TikTok", "https://www.tiktok.com/@rahalofficialmusic"),
+          ("\U0001f4e3 Telegram channel", "https://t.me/rahal_music")]
+
+COMMANDS = [("track", "make a track (guided builder)"),
+            ("queue", "what is rendering and what is waiting"),
+            ("status", "engine and session status"),
+            ("library", "latest releases"),
+            ("publish", "publish the last track"),
+            ("social", "links to the profiles"),
+            ("get", "send a track's audio, cover and video"),
+            ("routenote", "RouteNote form text for a track"),
+            ("batch", "send several tracks as JSON"),
+            ("jobs", "import jobs saved by the Windows app"),
+            ("diag", "build version and update counts"),
+            ("help", "all commands")]
+
 HELP = """Zi Music Studio bot - make tracks from chat.
 /track - guided track builder (style, theme, length, vocals, quality)
 /track <spec> - one-shot, e.g.: /track melodic techno, night drive, 330s, instrumental, high
@@ -49,6 +80,8 @@ HELP = """Zi Music Studio bot - make tracks from chat.
 /library - latest releases (buttons to fetch)
 /get <title> - send a track's MP3 + cover + info
 /routenote <title> - send the RouteNote form text for a track
+/publish [title] - post the last track (or the named one) to YouTube, Instagram, TikTok, the Telegram channel, Facebook
+/social - links to the YouTube, Instagram, TikTok and Telegram channel profiles
 /jobs - import jobs saved by the Windows app (Drive zi_data/jobs)
 /diag - build version and update counts (for debugging)
 /cancel - cancel the current builder step
@@ -236,6 +269,7 @@ class Bot:
     # ---------- main loops ----------
     def start(self):
         self.ensure_pairing()
+        self._register_commands()
         threading.Thread(target=self._worker, daemon=True).start()
         threading.Thread(target=self._poll, daemon=True).start()
 
@@ -403,7 +437,17 @@ class Bot:
         except Exception as e:
             print("cover send failed:", e)
         self.tg.audio(chat_id, mp3, caption=info)
+        try:
+            vid = self._make_video(folder)
+            if vid and os.path.getsize(vid) < TG_LIMIT:
+                self.tg._upload("sendVideo", chat_id, "video", vid, caption=title)
+        except Exception as e:
+            print("video step failed:", repr(e))
         self.tg.send(chat_id, "Saved in Drive: " + os.path.basename(folder) + " (WAV/FLAC/MP3, cover, lyrics, metadata, RouteNote form).")
+        try:
+            self._publish_menu(chat_id, folder, title)
+        except Exception as e:
+            print("publish menu failed:", repr(e))
 
     # ---------- update handling ----------
     def _handle(self, u):
@@ -478,7 +522,7 @@ class Bot:
         cmd, _, arg = text.partition(" ")
         cmd = cmd.lower().split("@")[0]
         if cmd == "/start" or cmd == "/help":
-            self.tg.send(chat_id, HELP)
+            self.tg.send(chat_id, HELP, keyboard=[[{"text": "\U0001f310 Social links", "callback_data": "social"}]])
         elif cmd == "/cancel":
             self.builders.pop(chat_id, None)
             self.tg.send(chat_id, "Cancelled.")
@@ -498,6 +542,10 @@ class Bot:
             self._get(chat_id, arg.strip(), audio=False)
         elif cmd == "/routenote":
             self._routenote(chat_id, arg.strip())
+        elif cmd == "/publish":
+            self._publish_cmd(chat_id, arg.strip())
+        elif cmd == "/social":
+            self._social(chat_id)
         elif cmd == "/diag":
             self._diag(chat_id)
         elif cmd == "/jobs":
@@ -506,6 +554,14 @@ class Bot:
             self.tg.send(chat_id, "Unknown command. /help lists them.")
 
     def _callback(self, chat_id, data):
+        if data == "social":
+            self._social(chat_id)
+            return
+        if data.startswith("pub:"):
+            # a publish tap is an approval for that one post, so it must never
+            # depend on a builder still being alive
+            self._publish_cb(chat_id, data)
+            return
         b = self.builders.get(chat_id)
         if data.startswith("lib:"):
             folder = self._lib_folder(data[4:])
@@ -813,6 +869,264 @@ class Bot:
             self.tg.send(chat_id, "No RouteNote form text in that folder.")
             return
         self.tg.send(chat_id, open(p).read())
+
+    # ---------- publishing ----------
+    def _run_ffmpeg(self, args, timeout=1800):
+        subprocess.run(args, check=True, timeout=timeout,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+
+    @staticmethod
+    def _video_filter(w, h):
+        # the cover art stays whole and centred, with a blurred copy filling the frame,
+        # so a square 3000x3000 cover survives both 9:16 and 16:9 without cropping text
+        return (f"[0:v]split=2[v1][v2];"
+                f"[v1]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},boxblur=40:5[bg];"
+                f"[v2]scale={w}:{h}:force_original_aspect_ratio=decrease[fg];"
+                f"[bg][fg]overlay=(W-w)/2:(H-h)/2,format=yuv420p[out]")
+
+    def _make_video(self, folder, kind="9x16"):
+        """Visual for a track: the cover art with the mastered audio under it.
+
+        A still frame compresses to almost nothing, so a 5-minute track stays far
+        below Telegram's upload limit. Returns the path, or None when there is
+        nothing to build from or ffmpeg is unavailable.
+        """
+        w, h = (720, 1280) if kind == "9x16" else (1280, 720)
+        want = "_reel_9x16.mp4" if kind == "9x16" else "_youtube_16x9.mp4"
+        if kind == "9x16":
+            existing = self._release_video(folder)
+            if existing and existing.endswith(want):
+                return existing
+        audio = self._release_audio(folder)
+        cover = os.path.join(folder, "cover_3000x3000.jpg")
+        if not audio or not os.path.exists(cover):
+            return None
+        stem = os.path.basename(audio)
+        for suffix in ("_320kbps.mp3", "_preview_128k.mp3"):
+            if stem.endswith(suffix):
+                stem = stem[:-len(suffix)]
+        out = os.path.join(folder, stem + want)
+        if os.path.exists(out) and os.path.getsize(out) > 0:
+            return out
+        args = ["ffmpeg", "-y", "-loglevel", "error",
+                "-loop", "1", "-i", cover, "-i", audio,
+                "-filter_complex", self._video_filter(w, h),
+                "-map", "[out]", "-map", "1:a",
+                "-c:v", "libx264", "-preset", "veryfast", "-tune", "stillimage", "-crf", "30",
+                "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", out]
+        try:
+            self._run_ffmpeg(args)
+        except Exception as e:
+            print("video render failed:", repr(e))
+            return None
+        if os.path.exists(out) and os.path.getsize(out) > 0:
+            return out
+        return None
+
+    # ---------- YouTube (Data API, needs the OAuth client) ----------
+    def _yt_token(self):
+        """The OAuth client + refresh token, once the Google Cloud task leaves them here."""
+        for p in (os.path.join(self.out_root, "youtube_token.json"),
+                  os.path.join(os.path.dirname(self.out_root.rstrip("/")), "zi_data", "youtube_token.json")):
+            if os.path.exists(p):
+                try:
+                    with open(p) as fh:
+                        tok = json.load(fh)
+                    if tok.get("client_id") and tok.get("client_secret") and tok.get("refresh_token"):
+                        return tok
+                except Exception as e:
+                    print("youtube_token.json unreadable:", repr(e))
+        return None
+
+    def _yt_access_token(self, tok):
+        data = urllib.parse.urlencode({"client_id": tok["client_id"], "client_secret": tok["client_secret"],
+                                       "refresh_token": tok["refresh_token"],
+                                       "grant_type": "refresh_token"}).encode()
+        req = urllib.request.Request("https://oauth2.googleapis.com/token", data=data)
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return json.loads(r.read())["access_token"]
+
+    def _youtube_upload(self, folder, title, caption):
+        """Upload the 16:9 visual of a release to YouTube. Returns the watch URL."""
+        tok = self._yt_token()
+        if not tok:
+            raise RuntimeError("no youtube_token.json yet (the Google Cloud OAuth client is still being set up)")
+        video = self._make_video(folder, "16x9")
+        if not video:
+            raise RuntimeError("no video to upload (no cover or audio in the release folder)")
+        access = self._yt_access_token(tok)
+        body = {"snippet": {"title": title[:100],
+                            "description": caption + "\n\nMade with ACE-Step 1.5 (MIT licence).",
+                            "tags": PUBLISH_TAGS.replace("#", "").split(),
+                            "categoryId": "10"},
+                "status": {"privacyStatus": "public",
+                           "selfDeclaredMadeForKids": False,
+                           "containsSyntheticMedia": True}}
+        req = urllib.request.Request(
+            "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
+            data=json.dumps(body).encode(),
+            headers={"Authorization": "Bearer " + access,
+                     "Content-Type": "application/json; charset=UTF-8",
+                     "X-Upload-Content-Type": "video/mp4",
+                     "X-Upload-Content-Length": str(os.path.getsize(video))})
+        with urllib.request.urlopen(req, timeout=120) as r:
+            loc = r.headers.get("Location")
+        if not loc:
+            raise RuntimeError("YouTube returned no upload URL")
+        with open(video, "rb") as fh:
+            payload = fh.read()
+        req2 = urllib.request.Request(loc, data=payload, method="PUT",
+                                      headers={"Content-Type": "video/mp4",
+                                               "Content-Length": str(len(payload))})
+        with urllib.request.urlopen(req2, timeout=3600) as r:
+            out = json.loads(r.read())
+        if not out.get("id"):
+            raise RuntimeError("YouTube upload returned no video id: " + json.dumps(out)[:200])
+        return "https://youtu.be/" + out["id"]
+
+    def _last_release(self):
+        folders = self._release_folders()
+        return os.path.join(self.out_root, folders[0]) if folders else None
+
+    def _release_video(self, folder):
+        """A video for this release if one was rendered, 9:16 first (reels/shorts)."""
+        try:
+            vids = [f for f in os.listdir(folder) if f.lower().endswith((".mp4", ".mov"))]
+        except Exception:
+            return None
+        if not vids:
+            return None
+        return os.path.join(folder, sorted(vids, key=lambda n: (0 if "9x16" in n.lower() else
+                                                               1 if "16x9" in n.lower() else 2, n))[0])
+
+    def _release_audio(self, folder):
+        try:
+            names = os.listdir(folder)
+        except Exception:
+            return None
+        for suffix in ("_320kbps.mp3", "_preview_128k.mp3"):
+            for n in names:
+                if n.endswith(suffix):
+                    return os.path.join(folder, n)
+        return None
+
+    def _publish_caption(self, folder):
+        meta = self._load(os.path.join(folder, "metadata.json"), {})
+        title = (meta.get("title") or re.sub(r"^\d{8}-\d{6}_", "",
+                 os.path.basename(folder)).replace("_", " ")).strip()
+        line = f"{title} - Rahal. {PUBLISH_AI}"
+        return title, line, line + "\n\n" + PUBLISH_TAGS
+
+    def _social(self, chat_id):
+        kb = [[{"text": name, "url": url}] for name, url in SOCIAL]
+        self.tg.send(chat_id, "Rahal everywhere:" if kb else
+                     "No verified profile links yet.", keyboard=kb or None)
+
+    def _register_commands(self):
+        """Keep the Telegram command menu in step with the code."""
+        try:
+            self.tg.call("setMyCommands", commands=json.dumps(
+                [{"command": c, "description": d} for c, d in COMMANDS]))
+        except Exception as e:
+            print("setMyCommands failed:", repr(e))
+
+    def _publish_menu(self, chat_id, folder, title=None):
+        key = self._lib_key(os.path.basename(folder))
+        title = title or self._publish_caption(folder)[0]
+        kb = [[{"text": PLATFORM_LABEL[c], "callback_data": f"pub:{c}:{key}"} for c in ("yt", "ig")],
+              [{"text": PLATFORM_LABEL[c], "callback_data": f"pub:{c}:{key}"} for c in ("tt", "tg")],
+              [{"text": "Facebook (manual)", "callback_data": f"pub:fb:{key}"},
+               {"text": "All", "callback_data": f"pub:all:{key}"}]]
+        self.tg.send(chat_id, f"Publish {title}?\n"
+                              "A tap posts only the platform you tap, once.", keyboard=kb)
+
+    def _publish_cmd(self, chat_id, arg):
+        folder = self._find_folder(arg) if arg else self._last_release()
+        if not folder:
+            self.tg.send(chat_id, "Nothing found for that. /library lists releases." if arg
+                         else "No release in this session's folder yet. /track makes one.")
+            return
+        self._publish_menu(chat_id, folder)
+
+    def _publish_cb(self, chat_id, data):
+        parts = data.split(":")
+        code = parts[1] if len(parts) > 1 else ""
+        key = parts[2] if len(parts) > 2 else ""
+        name = self._lib_folder(key)
+        folder = os.path.join(self.out_root, name) if name else None
+        if not folder or not os.path.isdir(folder):
+            self.tg.send(chat_id, "That release is not in this session's folder any more. /library lists the current ones.")
+            return
+        if code not in PLATFORM_LABEL and code != "all":
+            self.tg.send(chat_id, "Unknown publish target. /publish reopens the menu.")
+            return
+        self._publish(chat_id, code, folder)
+
+    def _publish(self, chat_id, code, folder):
+        title, line, caption = self._publish_caption(folder)
+        video = self._release_video(folder)
+        audio = self._release_audio(folder)
+        cover = os.path.join(folder, "cover_3000x3000.jpg")
+        cover = cover if os.path.exists(cover) else None
+        print(f"publish {code} {title} ({time.strftime('%H:%M:%S')})")
+
+        def to_channel():
+            if video and os.path.getsize(video) < TG_LIMIT:
+                self.tg._upload("sendVideo", CHANNEL, "video", video, caption=caption)
+                return "video"
+            if not audio:
+                raise RuntimeError("no audio or video file in the release folder")
+            if cover:
+                try:
+                    self.tg.photo(CHANNEL, cover, caption=title)
+                except Exception as e:
+                    print("channel cover failed:", repr(e))
+            self.tg.audio(CHANNEL, audio, caption=caption)
+            return "audio + cover"
+
+        def package(platform):
+            req = {"platform": platform, "title": title, "caption": caption,
+                   "ai_wording": PUBLISH_AI, "tags": PUBLISH_TAGS, "folder": folder,
+                   "files": [p for p in (video, audio, cover) if p],
+                   "approved_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                   "approved_by": "owner tap in Telegram",
+                   "status": "packaged - post by hand or by the posting agent"}
+            path = os.path.join(folder, f"publish_request_{platform}.json")
+            with open(path, "w") as fh:
+                json.dump(req, fh, indent=2)
+            return path
+
+        targets = list(PLATFORM_LABEL) if code == "all" else [code]
+        done, failed = [], []
+        for p in targets:
+            try:
+                if p == "tg":
+                    how = to_channel()
+                    done.append(f"Telegram channel: posted ({how}) - https://t.me/rahal_music")
+                elif p == "yt":
+                    try:
+                        url = self._youtube_upload(folder, title, caption)
+                        done.append(f"YouTube: posted - {url}")
+                    except Exception as e:
+                        package("yt")
+                        done.append("YouTube: not uploaded yet (" + f"{type(e).__name__}: {str(e)[:160]}" +
+                                    "). The post package is in the release folder as publish_request_yt.json, "
+                                    "and this button uploads for real once the OAuth client is in place.")
+                elif p == "fb":
+                    done.append("Facebook: caption below, file ready. Posting stays manual by your call.")
+                else:
+                    package(p)
+                    done.append(f"{PLATFORM_LABEL[p]}: no posting API on our side, so I wrote the post "
+                                f"package (caption + files) into the release folder as publish_request_{p}.json "
+                                "for a one-pass manual post.")
+            except Exception as e:
+                failed.append(f"{PLATFORM_LABEL.get(p, p)} failed: {type(e).__name__}: {str(e)[:200]}")
+        msg = ["\n".join(done)] if done else []
+        if failed:
+            msg.append("\n".join(failed))
+        if "fb" in targets:
+            msg.append("Facebook caption:\n" + caption)
+        self.tg.send(chat_id, "\n\n".join(msg) or "Nothing to publish.")
 
     def _jobs(self, chat_id):
         roots = [os.path.join(self.out_root, "jobs"),
