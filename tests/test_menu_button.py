@@ -46,7 +46,7 @@ class MenuButtonTests(unittest.TestCase):
 
     def test_menu_does_not_go_to_the_assistant(self):
         self.say("Menu")
-        self.assertIn("one tap", self.bot.tg.sent[-1]["text"])
+        self.assertIn("\u0628\u0636\u063a\u0637\u0629", self.bot.tg.sent[-1]["text"])
         self.assertNotIn("مش متأكد", self.bot.tg.sent[-1]["text"])
 
 

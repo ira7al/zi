@@ -195,7 +195,9 @@ class PublishTests(unittest.TestCase):
     def test_social_buttons_are_the_verified_profiles(self):
         self.bot._social(self.chat)
         kb = self.bot.tg.sent[-1]["keyboard"]
-        urls = [b["url"] for row in kb for b in row]
+        urls = [b["url"] for row in kb for b in row if "url" in b]
+        for row in kb:
+            self.assertLessEqual(len(row), 2)
         self.assertEqual(urls, [u for _, u in zb.SOCIAL])
         for u in urls:
             self.assertTrue(u.startswith("https://"), u)
@@ -203,6 +205,7 @@ class PublishTests(unittest.TestCase):
         self.assertIn("instagram.com/rahal.official.music", " ".join(urls))
         self.assertIn("tiktok.com/@rahalofficialmusic", " ".join(urls))
         self.assertIn("t.me/rahal_music", " ".join(urls))
+        self.assertIn("soundcloud.com/rahal-835976183", " ".join(urls))
 
     def test_social_button_works_without_a_builder(self):
         self.bot._callback(self.chat, "social")
