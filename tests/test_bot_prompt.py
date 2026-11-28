@@ -107,15 +107,10 @@ class BuilderTests(unittest.TestCase):
         self.bot._handle({"message": {"chat": {"id": self.chat, "type": "private"},
                                       "from": {"id": self.chat},
                                       "text": "124 BPM melodic house, uplifting, F# major, airy pluck, long intro"}})
-        self.assertIn("الخيارات.", self.bot.tg.sent[-1]["text"])
-        self.tap("o:sec")
-        self.assertIn("الطول؟", self.bot.tg.sent[-1]["text"])
-        self.tap("330")
-        self.tap("v:1")
-        self.tap("q:high")
+        self.assertIn("هعمل:", self.bot.tg.sent[-1]["text"])
+        self.assertEqual(sorted(buttons(self.bot.tg.sent[-1])), ["ask", "go"])
         text = self.bot.tg.sent[-1]["text"]
-        self.assertIn("Ready:", text)
-        self.assertIn("Prompt: 124 BPM melodic house", text)
+        self.assertIn("124 BPM melodic house", text)
         spec = self.bot.builders[self.chat]["spec"]
         self.assertIn("124 BPM melodic house", spec["idea"])
         self.assertEqual(spec["bpm"], 124)
@@ -135,7 +130,7 @@ class BuilderTests(unittest.TestCase):
         self.tap("p:again")
         self.assertNotEqual(self.bot.tg.sent[-1]["text"], shown["text"])
         self.tap("p:use")
-        self.assertIn("الخيارات.", self.bot.tg.sent[-1]["text"])
+        self.assertIn("هعمل:", self.bot.tg.sent[-1]["text"])
         self.tap("o:sec")
         self.assertIn("الطول؟", self.bot.tg.sent[-1]["text"])
         self.tap("330")
@@ -166,24 +161,9 @@ class BuilderTests(unittest.TestCase):
                                       "from": {"id": self.chat},
                                       "text": "124 BPM melodic techno, dark, A minor, tight kick, hypnotic arp"}})
 
-    def test_options_screen_has_parity_partial_and_coming_buttons(self):
+    def test_options_screen_is_just_generate_and_ask(self):
         self._to_options()
-        data = buttons(self.bot.tg.sent[-1])
-        for live in ("o:instr", "o:lyrics", "o:tags", "o:excl", "o:bpm", "o:key",
-                     "o:title", "o:steps", "o:seed", "o:model", "o:sec", "go"):
-            self.assertIn(live, data)
-        for partial in ("o:weird", "o:infl"):
-            self.assertIn(partial, data)
-        for coming in ("o:coming:reference_audio", "o:coming:lora", "o:coming:cover"):
-            self.assertIn(coming, data)
-
-    def test_coming_button_explains_itself_and_changes_nothing(self):
-        self._to_options()
-        before = dict(self.bot.builders[self.chat]["spec"])
-        self.tap("o:coming:lora")
-        self.assertIn("لسه مش شغال", self.bot.tg.sent[-1]["text"])
-        self.assertIn("Mr Dorgham", self.bot.tg.sent[-1]["text"])
-        self.assertEqual(self.bot.builders[self.chat]["spec"], before)
+        self.assertEqual(sorted(buttons(self.bot.tg.sent[-1])), ["ask", "go"])
 
     def test_exclude_and_weirdness_reach_the_prompt(self):
         self._to_options()

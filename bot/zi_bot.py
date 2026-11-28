@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.42"
+VERSION = "2026-11-28.43"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -337,6 +337,7 @@ class Bot:
         self.cur_msg = {}    # chat_id -> id of the message being answered
         self.reacted = {}    # (chat_id, message_id) -> emoji already set
         self.last_react = 0.0
+        self.heard_raw = {}  # chat_id -> (what the voice note said, time)
         self.pending = {}    # chat_id -> an image or link waiting for his instruction
         self.last_say = {}   # chat_id -> his latest text or voice, so an image right after joins it
         self.stop = threading.Event()
@@ -647,7 +648,7 @@ class Bot:
                      keyboard=[[{"text": "\U0001f916 اسألني", "callback_data": "ask"},
                                 {"text": "\U0001f3b5 تراك تاني", "callback_data": "sug:track"}]])
         try:
-            self._publish_menu(chat_id, folder, title)
+            self._approve_menu(chat_id, folder, title)
         except Exception as e:
             print("publish menu failed:", repr(e))
 
@@ -1098,7 +1099,8 @@ class Bot:
                             "when": time.strftime("%Y-%m-%d %H:%M:%S")}
         self._save(self._liked_path(), d)
         total = sum(1 for v in d["tracks"].values() if v.get("kept"))
-        self.tg.send(chat_id, f"\u2b50 اتحفظ في المفضلة: {title}\n{dest}\n{copied} ملف. {total} تراك مفضّل. /liked بيعرضهم.",
+        self.tg.send(chat_id, f"\u2b50 اتحفظ في المفضلة: {title}\n{dest}\n{copied} ملف. {total} تراك مفضّل. /liked بيعرضهم.\n"
+                              "الخطوة الجاية: غلاف، فيديو، وبعدين نشر.",
                      keyboard=self._visual_kb(key))
 
     def _liked_cmd(self, chat_id):
@@ -1341,6 +1343,7 @@ class Bot:
                                   "أو اكتب الفكرة.")
             return None
         self.tg.send(chat_id, "سمعتك: " + text)
+        self.heard_raw[chat_id] = (text, time.time())
         if opt.has_arabic(text):
             english, leftover = opt.to_english(text)
             if english:
@@ -1842,7 +1845,9 @@ class Bot:
             b["spec"]["quality"] = data[2:]
             self._confirm(chat_id, b)
         elif step == "options" and data == "go":
-            self._confirm(chat_id, b)
+            # the summary line was the confirmation: Generate starts it
+            self.builders.pop(chat_id, None)
+            self._enqueue(chat_id, b["spec"])
         elif step == "confirm":
             spec = b["spec"]
             self.builders.pop(chat_id, None)
@@ -1856,44 +1861,51 @@ class Bot:
                     "own_prompt": "ابعت البرومبت في رسالة واحدة، أو /cancel.",
                     "edit_prompt": "ابعت نسختك من البرومبت، أو /cancel.",
                     "ai_idea": "ابعت فكرة قصيرة: النوع، المود، الجو. من غير أسماء مغنيين.",
-                    "options": "دوس على زرار من فوق، أو ولّد لما يبقى تمام.",
+                    "options": "قول التعديل بصوتك أو كتابة، أو دوس ولّد لما يبقى تمام.",
                     "seconds": "اختار الطول من الأزرار اللي فوق.",
                     "instrumental": "اختار موسيقى بس أو بكلمات من فوق.",
                     "quality": "اختار الجودة من الأزرار اللي فوق."}.get(step, "/track starts a new one.")
             self.tg.send(chat_id, hint)
 
-    def _options_kb(self, spec):
-        seed = spec.get("seed")
-        seed_txt = "random" if seed in (None, "") else str(seed)
-        return [
-            [{"text": ("موسيقى بس: شغال" if spec.get("instrumental") else "موسيقى بس: مقفول"), "callback_data": "o:instr"},
-             {"text": ("Lyrics" + (" (set)" if (spec.get("lyrics") or "").strip() else "")), "callback_data": "o:lyrics"}],
-            [{"text": "تاجات الستايل", "callback_data": "o:tags"}, {"text": "ستايلات تتشال", "callback_data": "o:excl"}],
-            [{"text": f"Weirdness {spec.get('weirdness', 50)}", "callback_data": "o:weird"},
-             {"text": f"تأثير الستايل {spec.get('style_influence', 50)}", "callback_data": "o:infl"}],
-            [{"text": f"BPM {spec.get('bpm') or '-'}", "callback_data": "o:bpm"},
-             {"text": f"Key {spec.get('key') or '-'}", "callback_data": "o:key"}],
-            [{"text": f"Title {spec.get('title') or '-'}", "callback_data": "o:title"},
-             {"text": f"Steps {spec.get('steps') or 'auto'}", "callback_data": "o:steps"}],
-            [{"text": f"Seed {seed_txt}", "callback_data": "o:seed"},
-             {"text": f"Model {spec.get('model') or 'turbo'}", "callback_data": "o:model"}],
-            [{"text": "صوت مرجعي (قريباً)", "callback_data": "o:coming:reference_audio"},
-             {"text": "LoRA (قريباً)", "callback_data": "o:coming:lora"}],
-            [{"text": "كفر / إعادة رسم (قريباً)", "callback_data": "o:coming:cover"}],
-            [{"text": f"Length {spec.get('seconds', 330)}s", "callback_data": "o:sec"},
-             {"text": "\u25b6\ufe0f ولّد", "callback_data": "go"}],
-        ]
-
     def _show_options(self, chat_id, b):
         b["step"] = "options"
         s = b["spec"]
         prompt = (s.get("idea") or "").strip()
-        kb = self._options_kb(s)
-        kb.append([{"text": "\U0001f916 اسألني", "callback_data": "ask"}])
+        kb = [[{"text": "\u25b6\ufe0f ولّد", "callback_data": "go"},
+               {"text": "\U0001f916 اسألني", "callback_data": "ask"}]]
         self.tg.send(chat_id,
-                     "الخيارات. كل حاجة هنا زرار؛ دوس ولّد لما يبقى تمام.\n\n"
-                     f"البرومبت: {prompt[:900]}{'...' if len(prompt) > 900 else ''}\n\n" + ASSIST_HINT,
+                     opt.spec_summary(s) + "\n\n"
+                     f"البرومبت: {prompt[:900]}{'...' if len(prompt) > 900 else ''}\n\n"
+                     "عايز تغيّر حاجة (الطول، BPM، المقام، بكلمات ولا موسيقى بس، العنوان...)؟ قولها بصوتك أو اكتبها. "
+                     "ولو تمام دوس ولّد.\n\n" + ASSIST_HINT,
                      keyboard=kb)
+
+    def _options_text(self, chat_id, b, text):
+        """His words on the summary screen: change what he named, show the line again."""
+        raw = self.heard_raw.get(chat_id)
+        said = text
+        if raw and time.time() - raw[1] < 10:
+            said = raw[0] + " " + text
+        if opt.is_go_word(said):
+            self._callback(chat_id, "go")
+            return
+        ch, notes = opt.parse_spec_edits(said, b["spec"])
+        if not ch:
+            self.tg.send(chat_id, "ما وصلنيش كويس، ممكن تعيدها؟ مثلاً: \"خليها ٤ دقايق\" أو \"بكلمات\" أو \"١٢٠ BPM\". "
+                                  "أو دوس ولّد لو تمام.",
+                         keyboard=[[{"text": "\u25b6\ufe0f ولّد", "callback_data": "go"},
+                                    {"text": "\U0001f916 اسألني", "callback_data": "ask"}]])
+            return
+        spec = b["spec"]
+        for k, v in ch.items():
+            if v is None:
+                spec.pop(k, None)
+            else:
+                spec[k] = v
+        if ch.get("instrumental"):
+            spec.pop("lyrics", None)
+        self.tg.send(chat_id, "غيّرت: " + "، ".join(notes) + ".")
+        self._show_options(chat_id, b)
 
     def _option_step(self, chat_id, b, code):
         spec = b["spec"]
@@ -2029,7 +2041,9 @@ class Bot:
             self.tg.send(chat_id, "الموديل بيفهم إنجليزي، فاكتبها بالإنجليزي: كلمتين كفاية، "
                                   "مثلاً 'night drive, longing, warm bass'. ابعتها تاني، أو /cancel.")
             return
-        if b["step"] == "theme":
+        if b["step"] == "options":
+            self._options_text(chat_id, b, text)
+        elif b["step"] == "theme":
             b["spec"]["idea"] = b["spec"]["idea"] + text
             b["step"] = "seconds"
             self.tg.send(chat_id, "الطول؟", keyboard=self._length_kb())
@@ -2502,7 +2516,8 @@ class Bot:
     @staticmethod
     def _visual_kb(key):
         return [[{"text": "\U0001f3a8 \u0623\u0631\u062a \u0648\u0631\u0643 \u0644\u0644\u062a\u0631\u0627\u0643", "callback_data": f"art:{key}"},
-                 {"text": "\U0001f3ac \u0641\u064a\u062f\u064a\u0648 \u064a\u0648\u062a\u064a\u0648\u0628", "callback_data": f"vid:{key}"}]]
+                 {"text": "\U0001f3ac \u0641\u064a\u062f\u064a\u0648 \u064a\u0648\u062a\u064a\u0648\u0628", "callback_data": f"vid:{key}"}],
+                [{"text": "\U0001f4e3 \u0627\u0646\u0634\u0631", "callback_data": f"pubmenu:{key}"}]]
 
     def _mood_text(self, folder):
         meta = self._load(os.path.join(folder, "metadata.json"), {})
@@ -2851,6 +2866,14 @@ class Bot:
               [{"text": "\u2630 \u0627\u0644\u0642\u0627\u0626\u0645\u0629", "callback_data": "menu"}]]
         self.tg.send(chat_id, f"عايز تنشر {title}؟\n"
                               "الضغطة بتنشر على المنصة اللي دست عليها بس، مرة واحدة.", keyboard=kb)
+
+    def _approve_menu(self, chat_id, folder, title=None):
+        """Right after a render: listen first. Cover, video and publishing come after he approves."""
+        key = self._lib_key(os.path.basename(folder))
+        title = title or self._publish_caption(folder)[0]
+        self.tg.send(chat_id, f"{title} جاهز. اسمعه، ولو هو ده دوس \u2b50 وأطلعلك الغلاف والفيديو والنشر.",
+                     keyboard=[[{"text": "\u2b50 \u062f\u0647 \u0627\u0644\u062a\u0631\u0627\u0643 \u0627\u0644\u0645\u0637\u0644\u0648\u0628", "callback_data": f"keep:{key}"}],
+                               [{"text": "\U0001f3b5 تراك تاني", "callback_data": "sug:track"}]])
 
     def _publish_cmd(self, chat_id, arg):
         folder = self._find_folder(arg) if arg else self._last_release()
