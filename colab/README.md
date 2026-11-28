@@ -117,6 +117,14 @@ It comes from a Google Cloud project with the YouTube Data API enabled, an OAuth
 
 The 9:16 video is used for the channel, reels and shorts; the YouTube button renders a 1280x720 version from the same cover on demand so the full track reads properly on YouTube.
 
+## The assistant (build .21)
+
+Menu > Assistant, or `/ask <question>`, or `/ask` alone for a short chat (ends with `/end` or "خروج"). It answers in Egyptian Arabic, short, from the bot's own state: build, engine loaded or not, what is rendering, the queue, the training set count and split, how many tracks are liked, which platforms are really connected, whether the LoRA is trained, and whether voice and OCR are available on the box.
+
+There is no model and no key in it. Every sentence comes from a field the bot already has, which is why it cannot invent a number or promise a feature. When it does not understand, it says so and lists what it can answer.
+
+What it cannot do: free conversation. It is not a chatbot that discusses anything - it is a status and next-step assistant with intent matching. A hosted free-tier model would allow real conversation; that needs a key (through a vault link, never in chat) and would send the question plus a state summary to that provider. `zi_assistant.context_block()` already renders the facts for that, so adding it later changes the wording only.
+
 ## Menu and Studio under the message box (build .20)
 
 Two buttons now sit under the message box in the bot chat:
@@ -181,14 +189,14 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
-## Bot build 2026-11-28.20: reload and engine patch
+## Bot build 2026-11-28.21: reload and engine patch
 
 The bot now loads a second file (`bot/zi_options.py`), so a cell 5 that only fetches `zi_bot.py` fails. Use this cell instead; it pins the commit and fetches both.
 
 ```python
-# pinned reload - build .20 (bot + its shared option model)
+# pinned reload - build .21 (bot + its shared option model)
 import os, sys, importlib.util, urllib.request
-SHA = "db3bd7f1cd478a189f9748b942875b6d8817d572"
+SHA = "5916fa116c1fcc89be607c29dcf463dbfeac4c76"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
