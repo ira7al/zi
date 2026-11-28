@@ -214,6 +214,13 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
+## Bot build 2026-11-28.47: any language in, English prompt out
+
+- Prompts and voice notes in any language (Arabic, English, Russian, German and others) work. Groq (gpt-oss-120b, then qwen) detects the language and writes a clean English music prompt, style only, no real artist or track names. The bot shows it in one short line, then continues.
+- English input passes through unchanged and never waits on a model. A pasted "البرومبت:" or "Prompt (...)" label is stripped first. That label was why the English prompt in the screenshot got the "write it in English" reply: the Arabic word tripped the script check.
+- The "write it in English" refusal is gone. With no Groq key, Arabic falls back to the local word list. Other scripts get a polite "ما وصلنيش كويس، ممكن تعيدها؟".
+- Voice: whisper-large-v3-turbo with the language auto-detected, nothing forced.
+
 ## Bot build 2026-11-28.46: remix/cover and remaster in the library
 
 Beside "📣 انشر" under each library track: "♻️ ريميكس/كفر" and "🎚 ريماستر". Each button appears only when the engine cell defines it (`COVER_TASKS` and `remaster_release`), so until the patch below runs, nothing new shows.
@@ -346,9 +353,9 @@ What .25 changes for whoever is testing:
 - `/diag` prints which voice engines are on the box and whether screenshots have a key.
 
 ```python
-# pinned reload - build .46 (bot + options + assistant + voice + art)
+# pinned reload - build .47 (bot + options + assistant + voice + art)
 import os, sys, importlib.util, urllib.request
-SHA = "d5c60c10d1c49589b90592eed43ec067af2d9d5d"
+SHA = "fb68aa7d0fbae685f9f1259b6ce68f58b3e1616c"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
