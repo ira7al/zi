@@ -210,7 +210,7 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
-## Bot build 2026-11-28.25: reload and engine patch
+## Bot build 2026-11-28.26: reload and engine patch
 
 The bot loads three files (`bot/zi_bot.py`, `bot/zi_options.py`, `bot/zi_assistant.py`), so a cell that only fetches `zi_bot.py` fails. Use this cell instead; it pins the commit and fetches all three.
 
@@ -218,12 +218,13 @@ What .25 changes for whoever is testing:
 
 - Typed text with nothing open goes to the assistant and gets an answer plus two or three next-step buttons. A spoken idea still starts a track; a spoken question goes to the assistant.
 - A one-line hint and an "اسألني" button sit on the track menu, the prompt preview, the options screen, the ready card and the message after delivery.
-- The bot asks Telegram for a native commands menu button at start. Telegram accepts it, but the bot's BotFather menu button still wins, so the corner button stays "Studio" until that BotFather setting is removed or edited.
+- The Menu button under the message box is the real menu: one tap puts every action in the chat as inline buttons. Telegram's own corner button can only open the command list (Bot API allows a commands button, a web app, or nothing; it cannot send /menu), so that list is now six commands and starts with /menu. The full list is in /help and in the inline menu.
+- The corner button reads "Menu" now that the BotFather web app button is gone; the bot re-asserts the commands type at start, globally and for the owner chat.
 
 ```python
-# pinned reload - build .25 (bot + its shared option model + the assistant)
+# pinned reload - build .26 (bot + its shared option model + the assistant)
 import os, sys, importlib.util, urllib.request
-SHA = "3cd504be4555dd33b284deaf15832129b1567673"
+SHA = "ea7199a6e01afdc5f7d2ea70ba85d32e41a3e080"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
