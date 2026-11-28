@@ -214,6 +214,14 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
+## Bot build 2026-11-28.43: no option grid, settings from his words
+
+- Under the prompt there are only "ولّد" and "اسألني". The bot shows one line, "هعمل: ... تمام؟" (genre, music only or lyrics, length, BPM, key, title, tags). Generate starts the track.
+- He changes settings by voice or text: "خليها ٤ دقايق", "بكلمات", "من غير كلام", "١٢٠ BPM", "A minor", "العنوان X", "avoid X", "weirdness 70", "steps", "seed". Unclear words get "ما وصلنيش كويس". A short "يلا" or "ولّد" starts it. Defaults are unchanged (instrumental).
+- After a render only "⭐ ده التراك المطلوب" shows. After he approves: 🎨 غلاف, 🎬 فيديو, 📣 انشر (publishing still needs its own confirm tap).
+
+Reload with the pinned cell below.
+
 ## Bot build 2026-11-28.42: reactions and playful tone
 
 - Every voice note or photo he sends gets a 👀 reaction. Casual chat gets a fitting one by code rules (thanks 👍, laughing 😂, win 🔥, love ❤), at most one every 15 seconds. Work messages get none.
@@ -301,9 +309,9 @@ What .25 changes for whoever is testing:
 - `/diag` prints which voice engines are on the box and whether screenshots have a key.
 
 ```python
-# pinned reload - build .42 (bot + options + assistant + voice + art)
+# pinned reload - build .43 (bot + options + assistant + voice + art)
 import os, sys, importlib.util, urllib.request
-SHA = "fb6b81a21ad27f388be26dd5f95cca0fae8a0e9d"
+SHA = "c2f6e3c18c4a597c63f46a05d2995c27dd203e1a"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
