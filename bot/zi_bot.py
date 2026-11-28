@@ -11,6 +11,8 @@
 
 import hashlib, json, os, queue, random, re, subprocess, threading, time, urllib.request, urllib.parse, uuid
 
+VERSION = "2026-11-28.4"
+
 API = "https://api.telegram.org/bot{token}/{method}"
 FILE_API = "https://api.telegram.org/file/bot{token}/{path}"
 TG_LIMIT = 49 * 1024 * 1024  # bot upload practical limit
@@ -133,6 +135,7 @@ class Bot:
         self.current = None
         self.builders = {}   # chat_id -> dict of the guided /track flow
         self.stop = threading.Event()
+        self.conflict_warned = False
         os.makedirs(out_root, exist_ok=True)
 
     @staticmethod
@@ -181,7 +184,14 @@ class Bot:
                     except Exception as e:
                         print("bot handle error:", e)
             except Exception as e:
-                print("bot poll error:", e)
+                msg = str(e)
+                if "409" in msg or "Conflict" in msg or "terminated by other" in msg:
+                    if not self.conflict_warned:
+                        print("BOT CONFLICT: another instance is polling getUpdates for this token. "
+                              "Stop it (ZI_BOT.stop.set() in an earlier cell, or restart the kernel) and start this one again.")
+                        self.conflict_warned = True
+                else:
+                    print("bot poll error:", e)
                 time.sleep(5)
 
     def _gpu_busy(self):
@@ -649,5 +659,5 @@ def start_engine_bot(token, make_track, run_queue, out_root, work):
     bot = Bot(token, out_root=out_root, work=work, make_track=make_track, run_queue=run_queue)
     bot.start()
     builtins._zi_bot_instance = bot
-    print("Zi Telegram bot running. Chat with the bot in Telegram; /help lists commands.")
+    print(f"Zi Telegram bot running (build {VERSION}). Chat with the bot in Telegram; /help lists commands.")
     return bot
