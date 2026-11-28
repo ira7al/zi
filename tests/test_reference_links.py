@@ -91,7 +91,7 @@ class LinkAndPhotoTests(unittest.TestCase):
         self.builder("own_prompt")
         self.send(text="melodic techno, punchy kick, 122 bpm, dark pads")
         self.assertNotIn("From the link", self.joined())
-        self.assertIn("الخيارات.", self.joined())      # it went to the options screen, not a reference
+        self.assertIn("هعمل:", self.joined())      # it went to the options screen, not a reference
 
 
 if __name__ == "__main__":

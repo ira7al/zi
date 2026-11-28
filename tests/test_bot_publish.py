@@ -96,7 +96,7 @@ class PublishTests(unittest.TestCase):
         kinds = [u[0] for u in self.bot.tg.uploads]
         self.assertEqual(kinds, ["sendPhoto", "sendAudio", "sendVideo"])
         self.assertTrue(self.bot.tg.uploads[2][2].endswith("_reel_9x16.mp4"))
-        self.assertIn("عايز تنشر Night Drive؟", self.bot.tg.sent[-1]["text"])
+        self.assertIn("Night Drive جاهز", self.bot.tg.sent[-1]["text"])
         self.assertTrue(self.bot.tg.sent[-1]["keyboard"])
 
     def test_delivery_survives_ffmpeg_being_unavailable(self):
@@ -109,7 +109,7 @@ class PublishTests(unittest.TestCase):
                                       "folder": folder, "title": "Night Drive"})
         kinds = [u[0] for u in self.bot.tg.uploads]
         self.assertEqual(kinds, ["sendPhoto", "sendAudio"])
-        self.assertIn("عايز تنشر Night Drive؟", self.bot.tg.sent[-1]["text"])
+        self.assertIn("Night Drive جاهز", self.bot.tg.sent[-1]["text"])
 
     # ---- the video render ----
     def test_video_render_is_vertical_and_reuses_an_existing_file(self):

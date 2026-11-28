@@ -430,3 +430,114 @@ def to_english(text):
     out = re.sub(r"[\u0600-\u06ff]+", " ", out)
     out = re.sub(r"\s{2,}", " ", out).strip(" ,.;-")
     return out, leftover
+
+
+# ---------- settings from his words (voice or text), no option buttons ----------
+_AR_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
+_GO_WORDS = ("ولد", "يلا", "ابدأ", "ابدا", "ابدأ بقى", "generate", "go", "نفذ", "ابدأ يلا")
+
+
+def is_go_word(text):
+    t = re.sub(r"[\u064b-\u0652]", "", (text or "").translate(_AR_DIGITS))
+    t = re.sub(r"[\s!.،]+", " ", t).strip().lower()
+    return len(t) <= 14 and t in _GO_WORDS
+
+
+def parse_spec_edits(text, spec=None):
+    """Read settings out of a free message. Returns (changes dict, short Arabic notes).
+
+    Only things he clearly said are changed. Anything else is left alone.
+    """
+    t = (text or "").translate(_AR_DIGITS)
+    low = t.lower()
+    ch, notes = {}, []
+    if re.search(r"\[(intro|verse|chorus|bridge|outro|pre-chorus)[^\]]*\]", low):
+        ch["lyrics"] = t.strip()
+        ch["instrumental"] = False
+        notes.append("بكلمات (الكلمات اللي بعتها)")
+    elif re.search(r"من غير (كلام|كلمات|غنا|غناء|صوت)|بدون (كلام|كلمات|غناء|صوت)|موسيقى بس|instrumental|no vocals", low):
+        ch["instrumental"] = True
+        notes.append("موسيقى بس")
+    elif re.search(r"بكلام|بكلمات|بغنا|بصوت|مع (كلام|كلمات|غنا|صوت)|with lyrics|vocals?\b|lyrics", low):
+        ch["instrumental"] = False
+        notes.append("بكلمات")
+    m = re.search(r"(?:bpm|بي بي ام|بي بي إم)\s*(?:على|=|:)?\s*(\d{2,3})|(\d{2,3})\s*(?:bpm|بي بي ام|بي بي إم|ضربة)", low)
+    if m:
+        v = int(m.group(1) or m.group(2))
+        if 60 <= v <= 180:
+            ch["bpm"] = v
+            notes.append(f"{v} BPM")
+    m = re.search(r"\b([a-g][#b]?)\s*(major|minor|maj|min)\b", low)
+    if m:
+        ch["key"] = m.group(1).upper() + " " + ("minor" if m.group(2).startswith("min") else "major")
+        notes.append("مقام " + ch["key"])
+    secs = None
+    if re.search(r"دقيقتين|دقيقتان", low):
+        secs = 120
+    else:
+        m = re.search(r"(\d+(?:\.\d+)?)\s*(?:دقيقة|دقايق|دقيقه|min|minutes?)", low)
+        if m:
+            secs = int(float(m.group(1)) * 60)
+        else:
+            m = re.search(r"(\d+)\s*(?:ثانية|ثانيه|sec|seconds?)", low)
+            if m:
+                secs = int(m.group(1))
+    if secs:
+        secs = max(60, min(600, secs))
+        ch["seconds"] = secs
+        notes.append(f"{secs // 60}:{secs % 60:02d} دقيقة")
+    for key, pat, label in (("weirdness", r"(?:weirdness|غرابة)\s*(\d{1,3})", "الغرابة"),
+                            ("style_influence", r"(?:style influence|تأثير الستايل)\s*(\d{1,3})", "تأثير الستايل"),
+                            ("steps", r"(?:steps|خطوات)\s*(\d{1,2})", "الخطوات"),
+                            ("seed", r"(?:seed|سيد)\s*(\d+)", "السيد")):
+        m = re.search(pat, low)
+        if m:
+            v = int(m.group(1))
+            if key in ("weirdness", "style_influence"):
+                v = max(0, min(100, v))
+            if key == "steps":
+                v = max(4, min(60, v))
+            ch[key] = v if not (key == "seed" and v == 0) else None
+            notes.append(f"{label} {v}")
+    if "weirdness" not in ch:
+        if re.search(r"أغرب|اغرب|غريب أكتر|غريب اكتر|more weird", low):
+            ch["weirdness"] = 70
+            notes.append("أغرب شوية")
+        elif re.search(r"مش غريب|أهدى|اهدى|عادي أكتر|عادي اكتر", low):
+            ch["weirdness"] = 20
+            notes.append("أهدى وأعادي")
+    if re.search(r"shift ?3|شيفت", low):
+        ch["model"] = "turbo-shift3"
+        notes.append("موديل shift3")
+    for key, pat, label in (("title", r"(?:العنوان|title|سميه|اسمه)\s*[:=]?\s*([A-Za-z0-9][A-Za-z0-9 '\-]{1,60})", "العنوان"),
+                            ("style_tags", r"(?:تاجات|tags?)\s*[:=]?\s*([A-Za-z0-9][A-Za-z0-9 ,'\-]{2,120})", "تاجات"),
+                            ("exclude", r"(?:avoid|exclude|تجنب|تجنّب|شيل)\s*[:=]?\s*([A-Za-z][A-Za-z0-9 ,'\-]{2,80})", "هتجنب")):
+        m = re.search(pat, t, re.I)
+        if m:
+            ch[key] = m.group(1).strip(" ,.-")
+            notes.append(f"{label}: {ch[key]}")
+    return ch, notes
+
+
+def spec_summary(spec):
+    """One short Egyptian line of what will be made."""
+    s = spec or {}
+    secs = int(s.get("seconds") or 330)
+    parts = [s.get("genre") or s.get("name") or "تراك",
+             "موسيقى بس" if s.get("instrumental", True) else "بكلمات",
+             f"{secs // 60}:{secs % 60:02d} دقيقة"]
+    if s.get("bpm"):
+        parts.append(f"{s['bpm']} BPM")
+    if s.get("key"):
+        parts.append("مقام " + str(s["key"]))
+    if s.get("title"):
+        parts.append("العنوان " + str(s["title"]))
+    if s.get("style_tags"):
+        parts.append("تاجات: " + str(s["style_tags"])[:60])
+    if s.get("exclude"):
+        parts.append("من غير: " + str(s["exclude"])[:50])
+    if s.get("weirdness") not in (None, 50):
+        parts.append(f"غرابة {s['weirdness']}")
+    if s.get("style_influence") not in (None, 50):
+        parts.append(f"تأثير الستايل {s['style_influence']}")
+    return "هعمل: " + "، ".join(str(x) for x in parts) + ". تمام؟"
