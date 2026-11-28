@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.34"
+VERSION = "2026-11-28.35"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -342,6 +342,7 @@ class Bot:
         self._launcher_sent = False
         self._llm_ready = None
         self.llm_key = ""
+        self.groq_key = ""
         self.llm_model = ""
         self.render_note_minutes = 5   # how often a long render says it is still alive
         os.makedirs(out_root, exist_ok=True)
@@ -704,15 +705,18 @@ class Bot:
         """True when a free model key is configured. The key itself is never printed."""
         if self._llm_ready is None:
             self.llm_key = self._secret("ZI_LLM_KEY")
+            self.groq_key = self._secret("ZI_GROQ_KEY") or self._secret("GROQ_API_KEY")
             self.llm_model = (os.environ.get("ZI_LLM_MODEL") or ziassist.DEFAULT_MODEL).strip()
             self._llm_ready = True
+            if self.groq_key:
+                print("assistant: Groq on (" + (os.environ.get("ZI_GROQ_MODEL") or ziassist.GROQ_DEFAULT_MODEL) + ")")
             if self.llm_key:
                 print("assistant: free model on (" + self.llm_model + ")")
-        return bool(self.llm_key)
+        return bool(self.llm_key or self.groq_key)
 
     def _vision_text(self, path, mime="image/jpeg"):
         """Read a screenshot with the free model. None when there is no key or it refuses."""
-        if not self._llm() or not hasattr(ziassist, "read_image"):
+        if not self._llm() or not self.llm_key or not hasattr(ziassist, "read_image"):
             return None
         try:
             with open(path, "rb") as fh:
@@ -779,11 +783,21 @@ class Bot:
             state = {"build": VERSION}
         text = None
         if self._llm():
-            try:
-                text = ziassist.ask_llm(question, state, self.llm_key, self.llm_model)
-            except Exception as e:                 # never let the model path break the bot
-                print("assistant llm call failed:", type(e).__name__)
-                text = None
+            for provider in ("groq", "gemini"):
+                try:
+                    if provider == "groq" and self.groq_key:
+                        text = ziassist.ask_groq(question, state, self.groq_key)
+                    elif provider == "gemini" and self.llm_key:
+                        text = ziassist.ask_llm(question, state, self.llm_key, self.llm_model)
+                except Exception as e:             # never let the model path break the bot
+                    print("assistant " + provider + " call failed:", type(e).__name__)
+                    text = None
+                if text and ziassist.has_jargon(text):
+                    # it answered with technical status or the wrong intro: try the next one
+                    print("assistant answer dropped: jargon (" + provider + ")")
+                    text = None
+                if text:
+                    break
             if text and ziassist.has_jargon(text):
                 # it answered with technical status or the wrong intro: use the grounded
                 # answer instead, so he never reads a capability claim that is not live
@@ -2044,7 +2058,9 @@ class Bot:
             lines.append("voice out: " + (on or "none - text only"))
         except Exception:
             pass
-        lines.append("screenshots: " + ("vision" if (self.llm_key or self._llm()) else "no key"))
+        self._llm()
+        lines.append("screenshots: " + ("vision" if self.llm_key else "no key"))
+        lines.append("chat model: " + ("groq" if self.groq_key else "no groq key") + " / " + ("gemini" if self.llm_key else "no gemini key"))
         try:
             raw = self.stats.get("last_cb_raw")
             if raw:

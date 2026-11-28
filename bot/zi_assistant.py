@@ -387,6 +387,67 @@ def read_image(image_bytes, key, model=None, mime="image/jpeg", opener=None, tim
     return {"text": text, "code": None, "error": None} if detail else text
 
 
+# ---------- Groq (OpenAI-compatible, free plan): tried before Gemini ----------
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_DEFAULT_MODEL = "llama-3.3-70b-versatile"
+GROQ_SYSTEM = ("أنت المساعد الشخصي للمستخدم. ردّ بالمصري، قصير ومباشر، وبناءً على حالة البوت الحقيقية "
+               "اللي هتتبعتلك بس. متخترعش حاجة مش موجودة في الحالة. ") + SYSTEM
+
+
+def build_groq_request(question, state, model=None):
+    """The exact body sent to Groq: system prompt, the real state, then the question."""
+    return {"model": (model or os.environ.get("ZI_GROQ_MODEL") or GROQ_DEFAULT_MODEL).strip(),
+            "messages": [{"role": "system", "content": GROQ_SYSTEM},
+                         {"role": "user", "content": "الحالة الحقيقية للبوت:\n" + context_block(state) +
+                          "\n\nسؤاله: " + (question or "").strip()}],
+            "temperature": 0.4, "max_tokens": 700}
+
+
+def parse_groq(data):
+    try:
+        t = data["choices"][0]["message"]["content"]
+    except Exception:
+        return None
+    return t.strip() if isinstance(t, str) and t.strip() else None
+
+
+def ask_groq(question, state, key, model=None, opener=None, timeout=25, sleep=None, tries=3):
+    """One Groq chat call. None on any failure so Gemini and then the grounded answers take over.
+
+    429 is retried with a short backoff (Retry-After, capped at 6 s), then it falls through.
+    The key goes in the Authorization header only and is never printed.
+    """
+    if not key:
+        return None
+    import json as _json
+    import time as _t
+    import urllib.error as _uerr
+    import urllib.request as _req
+    sleep = sleep or _t.sleep
+    body = _json.dumps(build_groq_request(question, state, model)).encode()
+    for attempt in range(tries):
+        req = _req.Request(GROQ_URL, data=body, method="POST",
+                           headers={"Content-Type": "application/json", "Authorization": "Bearer " + key,
+                                    "User-Agent": "zi-studio-bot/1.0"})
+        try:
+            with (_opener(opener))(req, timeout=timeout) as r:
+                return parse_groq(_json.loads(r.read()))
+        except _uerr.HTTPError as e:
+            print("groq HTTP", e.code)                 # the code only, never the key
+            if e.code == 429 and attempt + 1 < tries:
+                try:
+                    wait = float((e.headers or {}).get("Retry-After") or 0)
+                except Exception:
+                    wait = 0
+                sleep(min(max(wait, 1.5 * (attempt + 1)), 6))
+                continue
+            return None
+        except Exception as e:
+            print("groq failed:", type(e).__name__)
+            return None
+    return None
+
+
 def _opener(opener):
     if opener is not None:
         return opener
