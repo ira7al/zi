@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.32"
+VERSION = "2026-11-28.33"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -87,7 +87,7 @@ REQUIRED_SPEC_KEYS = ("name", "genre", "idea", "lang", "instrumental", "seconds"
 LENGTH_KEYS = ("seconds", "duration", "duration_sec", "target_sec")
 QUALITIES = [("high", "High (2 seeds, best pick)"), ("standard", "Standard"), ("fast", "Fast draft")]
 ASSIST_HINT = "\U0001f916 محتاج حاجة؟ اكتب سؤالك هنا في أي وقت، أو دوس اسألني."
-VISION_HINT = ("مش قادر أقرا الصورة دلوقتي (الحد اليومي للموديل المجاني خلص). "
+VISION_HINT = ("مش قادر أقرا الصورة دلوقتي، القراءة مش مدّية نتيجة. "
                "ابعت اسم التراك أو المغني بالكلام، أو فويس نوت، وأنا أطلع الستايل من غير ما أستخدم الاسم.")
 AI_LABEL = "AI-generated music (ACE-Step 1.5, MIT licence). Label it AI-generated wherever you release it."
 
@@ -722,19 +722,16 @@ class Bot:
             return None
         if len(data) > 6 * 1024 * 1024:
             return None
-        # the same model the assistant uses first, then the vision default, so a quota
-        # problem on one model does not take screenshots down with it
-        for model in [self.llm_model, getattr(ziassist, "VISION_MODEL", "")]:
-            if not model:
-                continue
-            try:
-                text = ziassist.read_image(data, self.llm_key, model=model, mime=mime)
-            except Exception as e:
-                print("vision call failed:", type(e).__name__)
-                text = None
-            if text:
-                return text
-        return None
+        models = ziassist.vision_models(self.llm_key, extra=[self.llm_model])
+        try:
+            text, problem = ziassist.read_image_retry(data, self.llm_key, models=models, mime=mime)
+        except Exception as e:
+            print("vision call failed:", type(e).__name__)
+            text, problem = None, type(e).__name__
+        self.vision_problem = problem
+        if problem:
+            print("vision: no model could read it (" + problem + ")")
+        return text or None
 
     SUGGESTIONS = (("\u2753 إيه الناقص؟", "sug:missing"),
                    ("\u27a1\ufe0f أعمل إيه بعد كده؟", "sug:next"),
@@ -899,21 +896,24 @@ class Bot:
         except Exception as e:
             self.tg.send(chat_id, f"I could not save that screenshot: {str(e)[:120]}")
             return
-        text = ""
-        try:
-            import pytesseract                      # noqa: PLC0415 - optional on this box
-            from PIL import Image
-            text = pytesseract.image_to_string(Image.open(path)) or ""
-        except Exception as e:
-            print("ocr unavailable:", repr(e))
+        # the vision model reads layouts far better than OCR, so it goes first when there is a key
+        text = (self._vision_text(path) or "") if self._llm() else ""
+        if len(text) < 3:
+            try:
+                import pytesseract                  # noqa: PLC0415 - optional on this box
+                from PIL import Image
+                text = pytesseract.image_to_string(Image.open(path)) or ""
+            except Exception as e:
+                print("ocr unavailable:", repr(e))
+            text = re.sub(r"\s+", " ", text).strip()
+            # OCR on a busy screenshot is mostly noise: keep it only if it holds real words
+            if len([w for w in re.findall(r"[A-Za-z\u0600-\u06FF]{3,}", text)]) < 2:
+                text = ""
         text = re.sub(r"\s+", " ", text).strip()
         if len(text) < 3:
-            # no OCR on the box: read the screenshot with the free vision model instead
-            text = self._vision_text(path) or ""
-            if len(text) < 3:
-                self.tg.send(chat_id, VISION_HINT)
-                return
-        self.tg.send(chat_id, "From the screenshot I read: " + text[:160])
+            self.tg.send(chat_id, VISION_HINT)
+            return
+        self.tg.send(chat_id, "\u0642\u0631\u064a\u062a \u0645\u0646 \u0627\u0644\u0635\u0648\u0631\u0629: " + text[:160])
         self._reference_text(chat_id, text[:200])
 
     def _reference_text(self, chat_id, text):

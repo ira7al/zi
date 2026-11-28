@@ -149,7 +149,7 @@ class ReferenceTests(unittest.TestCase):
         with mock.patch.dict(sys.modules, {"pytesseract": fake, "PIL": pil, "PIL.Image": pil_image}):
             self.bot._handle({"message": {"chat": {"id": 9, "type": "private"}, "from": {"id": 9},
                                           "photo": [{"file_id": "big"}]}})
-        self.assertIn("From the screenshot I read: Nils Frahm Says", self.bot.tg.sent[-2]["text"])
+        self.assertIn("قريت من الصورة: Nils Frahm Says", self.bot.tg.sent[-2]["text"])
         self.assertIn("From your reference I understood:", self.text())
 
     def test_a_voice_note_reference_uses_the_transcript(self):

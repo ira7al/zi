@@ -61,21 +61,53 @@ def engines():
     return {"edge-tts": have_edge(), "gTTS": have_gtts(), "ffmpeg": have_ffmpeg()}
 
 
+def _edge_cli(text, name, out):
+    """edge-tts in its own process: no event loop of ours (Jupyter, nest_asyncio) can get in the way."""
+    import subprocess
+    import sys
+    cmd = [sys.executable, "-m", "edge_tts", "--voice", name, "--text", text, "--write-media", out]
+    try:
+        subprocess.run(cmd, check=True, timeout=90, capture_output=True)
+    except Exception as e:
+        print("edge-tts cli", name, "failed:", type(e).__name__)
+
+
+def _edge_thread(text, name, out):
+    """Fallback: a private event loop in a fresh thread, which has no running loop to clash with."""
+    import threading
+    import edge_tts
+    err = []
+
+    def work():
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(edge_tts.Communicate(text, name).save(out))
+        except Exception as e:
+            err.append(e)
+        finally:
+            loop.close()
+    t = threading.Thread(target=work, daemon=True)
+    t.start()
+    t.join(90)
+    if err:
+        print("edge-tts thread", name, "failed:", type(err[0]).__name__)
+
+
 def _edge(text, voice, out):
     try:
-        import edge_tts
+        import edge_tts  # noqa: F401
     except Exception:
         return None
-    async def run(name):
-        com = edge_tts.Communicate(text, name)
-        await com.save(out)
     for name in (voice,) + tuple(v for v in FALLBACK_VOICES if v != voice):
-        try:
-            asyncio.run(run(name))
-            if os.path.exists(out) and os.path.getsize(out) > 1000:
-                return out
-        except Exception as e:
-            print("edge-tts", name, "failed:", type(e).__name__)
+        for how in (_edge_cli, _edge_thread):
+            try:
+                if os.path.exists(out):
+                    os.remove(out)
+                how(text, name, out)
+                if os.path.exists(out) and os.path.getsize(out) > 1000:
+                    return out
+            except Exception as e:
+                print("edge-tts", name, "failed:", type(e).__name__)
     return None
 
 
