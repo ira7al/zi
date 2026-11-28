@@ -200,14 +200,14 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
-## Bot build 2026-11-28.22: reload and engine patch
+## Bot build 2026-11-28.23: reload and engine patch
 
 The bot now loads a second file (`bot/zi_options.py`), so a cell 5 that only fetches `zi_bot.py` fails. Use this cell instead; it pins the commit and fetches both.
 
 ```python
-# pinned reload - build .22 (bot + its shared option model + the assistant)
+# pinned reload - build .23 (bot + its shared option model + the assistant)
 import os, sys, importlib.util, urllib.request
-SHA = "b015dcee64a14385eb94189ce58707fd8aec0302"
+SHA = "194631f1dbada2e6701aedf6bd90b159392d8b11"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
