@@ -214,6 +214,14 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
+## Bot build 2026-11-28.41: image, link and words as one request
+
+- An image or link plus text or voice (either order, within 90 seconds, a caption, or a reply to the image) is handled as one request. The bot looks at the image (Groq vision, then Gemini), reads what he said, and answers once.
+- Reference words (مرجع, ستايل, زي ده...) make it a style-only reference for the prompt flow. A lone image or link waits with buttons "ستايل مرجع" and "سيبها".
+- If the image cannot be read, the bot says so and asks what is in it. Nothing is claimed that did not run.
+
+Reload with the pinned cell below.
+
 ## Bot build 2026-11-28.40: menu rework
 
 - المكتبة holds every track (made ones, with the running job and queue shown on top). Opening a track sends it with a "انشر" button that starts the publish flow (artwork, video, metadata, confirm tap) for that track.
@@ -285,9 +293,9 @@ What .25 changes for whoever is testing:
 - `/diag` prints which voice engines are on the box and whether screenshots have a key.
 
 ```python
-# pinned reload - build .40 (bot + options + assistant + voice + art)
+# pinned reload - build .41 (bot + options + assistant + voice + art)
 import os, sys, importlib.util, urllib.request
-SHA = "526b0f8c05093fee878646560b8b06505f031024"
+SHA = "22cef313549e48f4d8dc97509df097077ce29507"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
