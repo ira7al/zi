@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.44"
+VERSION = "2026-11-28.46"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -338,6 +338,7 @@ class Bot:
         self.reacted = {}    # (chat_id, message_id) -> emoji already set
         self.last_react = 0.0
         self.heard_raw = {}  # chat_id -> (what the voice note said, time)
+        self.remix = {}      # chat_id -> {'key','idea'} while a remix is being set up
         self.tweak = {}      # chat_id -> the settings he is adjusting for a second try
         self.last_enq = {}   # chat_id -> the settings of the last track sent to render
         self.pending = {}    # chat_id -> an image or link waiting for his instruction
@@ -1363,6 +1364,128 @@ class Bot:
         return text
 
 
+    # ---------- remix / cover and remaster of a saved track ----------
+    COVER_CLOSE = (("قريب من الأصلي", 0.8), ("وسط", 0.65), ("بعيد عنه", 0.4))
+
+    def _engine_has(self, name):
+        """A capability is live only when the engine cell defines it."""
+        try:
+            glob = getattr(self.make_track, "__globals__", {}) or {}
+            return bool(glob.get(name))
+        except Exception:
+            return False
+
+    def _folder_for(self, key):
+        name = self._lib_folder(key)
+        folder = os.path.join(self.out_root, name) if name else None
+        return folder if folder and os.path.isdir(folder) else None
+
+    def _remix_cb(self, chat_id, data):
+        kind, _, rest = data.partition(":")
+        key = rest.split(":")[0]
+        folder = self._folder_for(key)
+        if not folder:
+            self.tg.send(chat_id, "التراك ده مش في فولدر الجلسة تاني. دوس المكتبة تاني.")
+            return
+        title = self._publish_caption(folder)[0]
+        if kind == "rmt":
+            self._remaster(chat_id, folder, title)
+            return
+        if not self._engine_has("COVER_TASKS"):
+            self.tg.send(chat_id, "الريميكس لسه مش شغال على الجهاز ده.")
+            return
+        if kind == "rmx":
+            self.remix[chat_id] = {"key": key, "idea": None}
+            self.tg.send(chat_id, f"ريميكس لـ {title}. قولي عايزه يبقى إيه: النوع أو الجو، بصوتك أو كتابة "
+                                  "(مثلاً: afro house دافي، أو lo-fi هادي). الأصل هيفضل زي ما هو والنتيجة تراك جديد.")
+            return
+        st = self.remix.get(chat_id)          # rmxs:<key>:<strength index>
+        if not st or st.get("idea") is None or st["key"] != key:
+            self.tg.send(chat_id, "الجلسة دي انتهت. دوس ريميكس من تحت التراك تاني.")
+            return
+        try:
+            strength = self.COVER_CLOSE[int(rest.split(":")[1])][1]
+        except Exception:
+            strength = 0.65
+        self.remix.pop(chat_id, None)
+        self._enqueue(chat_id, self._cover_spec(folder, st["idea"], strength))
+        self.tg.send(chat_id, "ماشي، بعمل الريميكس. هيظهر تراك جديد في المكتبة.")
+
+    def _remix_text(self, chat_id, text):
+        st = self.remix[chat_id]
+        said = text
+        raw = self.heard_raw.get(chat_id)
+        if raw and time.time() - raw[1] < 10:
+            said = raw[0]
+        idea = said
+        if opt.has_arabic(said):
+            english, _left = opt.to_english(said)
+            idea = english
+        if not idea or len(idea.strip()) < 4 or has_non_latin(idea):
+            self.tg.send(chat_id, "ما وصلنيش كويس، ممكن تعيدها؟ اكتب النوع أو الجو بالإنجليزي، مثلاً: warm afro house.")
+            return
+        clean, _removed = clean_idea(idea)
+        st["idea"] = clean if len(clean) >= 4 else idea
+        folder = self._folder_for(st["key"])
+        title = self._publish_caption(folder)[0] if folder else "التراك"
+        kb = [[{"text": f"ولّد: {self.COVER_CLOSE[0][0]}", "callback_data": f"rmxs:{st['key']}:0"},
+               {"text": f"ولّد: {self.COVER_CLOSE[1][0]}", "callback_data": f"rmxs:{st['key']}:1"}],
+              [{"text": f"ولّد: {self.COVER_CLOSE[2][0]}", "callback_data": f"rmxs:{st['key']}:2"}]]
+        self.tg.send(chat_id, f"هعمل ريميكس لـ {title} بالستايل ده: {st['idea']}.\n"
+                              "اختار قد إيه يقرّب من الأصلي وأبدأ (الأصل مش هيتغيّر):", keyboard=kb)
+
+    def _cover_spec(self, folder, idea, strength):
+        meta = self._load(os.path.join(folder, "metadata.json"), {})
+        flacs = sorted(f for f in os.listdir(folder) if f.lower().endswith(".flac"))
+        src = os.path.join(folder, flacs[0]) if flacs else None
+        title = self._publish_caption(folder)[0]
+        secs = int(min(600, max(60, float(meta.get("actual_duration_sec") or meta.get("target_duration_sec") or 180))))
+        instrumental = bool(meta.get("instrumental", True))
+        style = opt.pick_style(idea)
+        built = build_prompt(idea, secs, 0, instrumental=instrumental, style=style)
+        spec = {"task_type": "cover", "src_audio_path": src, "cover_strength": strength,
+                "idea": built["prompt"], "genre": built["genre"], "name": built["genre"],
+                "title": f"{title} (Remix)", "seconds": secs, "instrumental": instrumental,
+                "quality": "high", "lang": meta.get("language") or "en",
+                "bpm": built["bpm"], "key": built["key"]}
+        if not instrumental:
+            try:
+                ly = open(os.path.join(folder, "lyrics.txt"), encoding="utf-8").read().strip()
+                if ly and ly != "[Instrumental]":
+                    spec["lyrics"] = ly
+            except OSError:
+                pass
+        return spec
+
+    def _remaster(self, chat_id, folder, title):
+        fn = None
+        try:
+            fn = (getattr(self.make_track, "__globals__", {}) or {}).get("remaster_release")
+        except Exception:
+            pass
+        if not fn:
+            self.tg.send(chat_id, "الريماستر لسه مش شغال على الجهاز ده.")
+            return
+        self.tg.send(chat_id, f"بعمل ريماستر لـ {title}. دقيقة وراجعلك. الأصل هيفضل زي ما هو.")
+
+        def work():
+            try:
+                r = fn(folder)
+            except Exception as e:
+                print("remaster failed:", repr(e))
+                self.tg.send(chat_id, f"الريماستر فشل: {str(e)[:200]}")
+                return
+            rep = r.get("mastering") or {}
+            if rep.get("verified") is False:
+                self.tg.send(chat_id, f"الريماستر خلص بس القياس مش على الهدف (لاود {rep.get('out_i')} LUFS، "
+                                      f"بيك {rep.get('out_tp')} dBTP). شوفه بنفسك قبل ما تنشر.")
+            try:
+                self._deliver(chat_id, r)
+            except Exception as e:
+                print("remaster delivery failed:", repr(e))
+                self.tg.send(chat_id, f"الريماستر اتعمل بس التسليم فشل: {str(e)[:200]}")
+        threading.Thread(target=work, daemon=True).start()
+
     # ---------- reactions ----------
     def _react(self, chat_id, message_id, emoji, always=False):
         """Set one emoji reaction on his message. Never raises, never spams."""
@@ -1620,6 +1743,9 @@ class Bot:
                 self._hold(chat_id, "link", link.group(1))
                 return
             self._remember_say(chat_id, text)
+        if chat_id in self.remix and not text.startswith("/") and self.remix[chat_id].get("idea") is None:
+            self._remix_text(chat_id, text)
+            return
         if chat_id in self.ds_lyrics and not text.startswith("/"):
             self._ds_save_lyrics(chat_id, text=text)
             return
@@ -1723,6 +1849,9 @@ class Bot:
                 pass
             self._show_options(chat_id, b)
             return
+        if data.startswith("rmx:") or data.startswith("rmxs:") or data.startswith("rmt:"):
+            self._remix_cb(chat_id, data)
+            return
         if data == "lora:t":
             self._lora_toggle(chat_id)
             return
@@ -1814,9 +1943,18 @@ class Bot:
                 self.tg.send(chat_id, "التراك ده مش في فولدر الجلسة تاني. /library بيعرض الحاليين.")
                 return
             self._get(chat_id, folder, audio=True)
-            self.tg.send(chat_id, "عايز تنشره؟", keyboard=[[
-                {"text": "\U0001f4e3 \u0627\u0646\u0634\u0631", "callback_data": "pubmenu:" + data[4:]},
-                {"text": "\u2630 \u0627\u0644\u0642\u0627\u0626\u0645\u0629", "callback_data": "menu"}]])
+            key = data[4:]
+            kb = [[{"text": "\U0001f4e3 \u0627\u0646\u0634\u0631", "callback_data": "pubmenu:" + key}]]
+            extra = []
+            if self._engine_has("COVER_TASKS"):
+                extra.append({"text": "\u267b\ufe0f ريميكس/كفر", "callback_data": "rmx:" + key})
+            if self._engine_has("remaster_release"):
+                extra.append({"text": "\U0001f39a ريماستر", "callback_data": "rmt:" + key})
+            kb[0] += extra[:1]
+            if len(extra) > 1:
+                kb.append(extra[1:])
+            kb.append([{"text": "\u2630 \u0627\u0644\u0642\u0627\u0626\u0645\u0629", "callback_data": "menu"}])
+            self.tg.send(chat_id, "عايز تعمل إيه فيه؟", keyboard=kb)
             return
         if data.startswith("pubmenu:"):
             name = self._lib_folder(data[8:])
