@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.47"
+VERSION = "2026-11-28.48"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -85,6 +85,69 @@ OPTIONS = opt.OPTIONS
 # names for the length, so the bot fills all of them with the same value.
 REQUIRED_SPEC_KEYS = ("name", "genre", "idea", "lang", "instrumental", "seconds", "quality")
 LENGTH_KEYS = ("seconds", "duration", "duration_sec", "target_sec")
+# ---------- button labels are English; every message stays Egyptian Arabic ----------
+BUTTON_EN = {
+    "إيه الناقص؟": "\u2753 What's Missing", "أعمل إيه بعد كده؟": "\u27a1\ufe0f What's Next",
+    "الحالة": "\U0001f4ca Status", "اعمل تراك": "\U0001f3b5 New Track", "تراك تاني": "\U0001f3b5 Another Track",
+    "ترك جديد": "\U0001f3b5 New Track", "تراك جديد": "\U0001f3b5 New Track",
+    "المكتبة": "\U0001f4da Library", "بروموبت من عندي": "\u270d\ufe0f Prompt + Reference",
+    "برومبت من عندي": "\u270d\ufe0f Prompt + Reference", "الذكاء يكتبه": "\u2728 AI Writes It",
+    "لينكات السوشيال": "\U0001f310 Social Links", "الدرغام": "\U0001f9ec Dorgham",
+    "الدرغام: شغال \u2705": "\U0001f9ec Dorgham: On \u2705", "استخدم الدرغام": "\U0001f9ec Use Dorgham",
+    "فورم RouteNote": "\U0001f9fe RouteNote Form", "حاجات تانية": "\u2699\ufe0f More",
+    "الستوديو (الويب)": "\U0001f39b Studio", "ولّد": "\u25b6\ufe0f Generate", "اسألني": "\U0001f916 Ask Me",
+    "إلغاء": "\u274c Cancel", "ارفع تراك/MP3 كمرجع": "\U0001f3a7 Upload Reference",
+    "استخدمه كمرجع": "\U0001f50e Use as Reference", "استخدمه": "\u2705 Use It", "عدّل": "\u270f\ufe0f Edit",
+    "واحد تاني": "\U0001f504 Another One", "مرجع جديد": "\U0001f50e New Reference",
+    "أرت ورك للتراك": "\U0001f3a8 Cover Art", "غيّر الأرت ورك": "\U0001f3a8 Change Art", "أرت وورك للتراك": "\U0001f3a8 Cover Art", "أرتورك": "\U0001f3a8 Cover Art",
+    "غيّر الأرت وورك": "\U0001f3a8 Change Art", "فيديو يوتيوب": "\U0001f3ac Video", "فيديو YouTube": "\U0001f3ac Video",
+    "انشر": "\U0001f4e3 Publish", "ارفع على يوتيوب": "\u25b6\ufe0f Upload to YouTube",
+    "أشكال تانية": "\U0001f504 More Options", "فيسبوك (يدوي)": "\U0001f4d8 Facebook (Manual)",
+    "فيسبوك (هتتضاف)": "\U0001f4d8 Facebook (Soon)", "صفحة فيسبوك (هتتضاف)": "\U0001f4d8 Facebook Page (Soon)",
+    "الكل": "\U0001f680 All", "دي التراك المطلوب": "\u2b50 Mark as The One",
+    "ده التراك المطلوب": "\u2b50 Mark as The One", "القائمة": "\u2630 Menu",
+    "ولّد تاني بالتعديل": "\u25b6\ufe0f Regenerate", "عدّل وولّد تاني": "\U0001f39b Tweak & Regenerate",
+    "بصوت": "\U0001f3a4 With Vocals", "بكلمات": "\U0001f3a4 With Lyrics", "موسيقى بس": "\U0001f3b9 Instrumental",
+    "ضيف كلمات": "\u270d\ufe0f Add Lyrics", "تخطّى": "Skip", "ستايل مرجع": "\U0001f50e Style Reference",
+    "سيبها": "\u274c Drop It", "ريميكس/كفر": "\u267b\ufe0f Remix / Cover", "ريماستر": "\U0001f39a Remaster",
+    "أيوه، ارفع": "\u2705 Yes, Upload", "لأ": "\u274c No", "تشخيص": "\U0001f6e0 Diagnostics",
+    "المساعد": "\U0001f916 Assistant", "مساعدة": "\u2753 Help", "قناة تيليجرام": "\U0001f4e3 Telegram Channel",
+    "عالية (نسختين، تختار الأحسن)": "High (2 takes, pick the best)", "عادية": "Standard", "مسودة سريعة": "Fast Draft",
+    "ولّد: قريب من الأصلي": "\u25b6\ufe0f Close to Original", "ولّد: وسط": "\u25b6\ufe0f Medium",
+    "ولّد: بعيد عنه": "\u25b6\ufe0f Far From It",
+}
+_TWEAK_EN = {"الغرابة": "Weirdness", "تأثير الستايل": "Style Influence", "الطول": "Length", "السرعة (BPM)": "Speed"}
+_LESSMORE_EN = {"أقل": "Less", "أكتر": "More", "أقصر": "Shorter", "أطول": "Longer", "أبطأ": "Slower", "أسرع": "Faster"}
+_AR = re.compile("[\u0600-\u06ff]")
+
+
+def en_button(text):
+    """English label for a button. Text with no Arabic (names, numbers, links) is returned as is."""
+    if not text or not _AR.search(text):
+        return text
+    i = 0
+    while i < len(text) and not text[i].isalnum():
+        i += 1
+    core = text[i:].strip()
+    if core in BUTTON_EN:
+        return BUTTON_EN[core]
+    for lab, en in _TWEAK_EN.items():
+        if core.startswith(lab + " "):
+            word = core[len(lab) + 1:]
+            if word in _LESSMORE_EN:
+                w = _LESSMORE_EN[word]
+                return f"{w} {en}" if w in ("Less", "More") else f"{en} {w}"
+    return text
+
+
+def en_keyboard(keyboard):
+    """The same inline keyboard with every button label in English."""
+    out = []
+    for row in keyboard or []:
+        out.append([dict(b, text=en_button(b.get("text"))) if isinstance(b, dict) else b for b in row])
+    return out
+
+
 QUALITIES = [("high", "عالية (نسختين، تختار الأحسن)"), ("standard", "عادية"), ("fast", "مسودة سريعة")]
 ASSIST_HINT = "\U0001f916 محتاج حاجة؟ اكتب سؤالك هنا في أي وقت، أو دوس اسألني."
 VISION_HINT = ("مش قادر أقرا الصورة دلوقتي، القراءة مش مدّية نتيجة. "
@@ -248,7 +311,7 @@ class TG:
     def send(self, chat_id, text, keyboard=None, reply=None):
         fields = {"chat_id": chat_id, "text": text[:4000], "message_thread_id": self._thread(chat_id)}
         if keyboard:
-            fields["reply_markup"] = json.dumps({"inline_keyboard": keyboard})
+            fields["reply_markup"] = json.dumps({"inline_keyboard": en_keyboard(keyboard)})
         elif reply:
             fields["reply_markup"] = json.dumps(reply)
         try:
