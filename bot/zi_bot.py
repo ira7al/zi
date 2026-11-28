@@ -9,7 +9,7 @@
 # the owner sends "/start <code>" in the bot chat to bind. Only the bound
 # owner can use the bot - anyone else is refused (GPU hours are capped).
 
-import json, os, queue, random, re, threading, time, urllib.request, urllib.parse, uuid
+import hashlib, json, os, queue, random, re, threading, time, urllib.request, urllib.parse, uuid
 
 API = "https://api.telegram.org/bot{token}/{method}"
 FILE_API = "https://api.telegram.org/file/bot{token}/{path}"
@@ -109,6 +109,7 @@ class Bot:
         self.owner = self._load(self.owner_path, {}).get("chat_id")
         self.pair_code = None
         self.jobs = queue.Queue()
+        self.queued = []     # titles waiting behind the current render
         self.current = None
         self.builders = {}   # chat_id -> dict of the guided /track flow
         self.stop = threading.Event()
@@ -171,6 +172,11 @@ class Bot:
                 continue
             chat_id, spec = job
             self.current = spec.get("title") or spec.get("name") or spec["genre"]
+            try:
+                if self.queued:
+                    self.queued.pop(0)
+            except Exception:
+                pass
             self.tg.send(chat_id, f"Rendering: {self.current} ({spec.get('seconds', 330)}s, {spec.get('quality', 'standard')}). A high-quality track takes 10-25 min on the free GPU - I will send it here when done.")
             try:
                 r = self.make_track(spec, "Rahal", "Rahal")
@@ -239,7 +245,9 @@ class Bot:
             self._track(chat_id, arg.strip())
         elif cmd == "/batch":
             self._batch_text(chat_id, arg.strip())
-        elif cmd == "/queue" or cmd == "/status":
+        elif cmd == "/queue":
+            self._queue(chat_id)
+        elif cmd == "/status":
             self._status(chat_id)
         elif cmd == "/library":
             self._library(chat_id)
@@ -257,7 +265,11 @@ class Bot:
     def _callback(self, chat_id, data):
         b = self.builders.get(chat_id)
         if data.startswith("lib:"):
-            self._get(chat_id, data[4:], audio=True)
+            folder = self._lib_folder(data[4:])
+            if not folder:
+                self.tg.send(chat_id, "That release is not in this session's folder any more. /library lists the current ones.")
+                return
+            self._get(chat_id, folder, audio=True)
             return
         if not b:
             self.tg.send(chat_id, "That builder expired. /track starts a new one.")
@@ -346,6 +358,7 @@ class Bot:
         spec.setdefault("seconds", 330)
         spec["seconds"] = max(60, min(600, int(spec["seconds"])))
         self.jobs.put((chat_id, spec))
+        self.queued.append(spec.get("title") or spec.get("name") or spec.get("genre") or "track")
         n = self.jobs.qsize()
         self.tg.send(chat_id, f"Queued: {spec.get('title') or spec.get('name') or spec['genre']} ({spec['seconds']}s, {spec.get('quality','standard')})." + (f" {n-1} ahead of it." if n > 1 and not self.current else ""))
 
@@ -379,16 +392,60 @@ class Bot:
             s.setdefault("idea", s.get("genre", ""))
             s.setdefault("lang", "en")
             self.jobs.put((chat_id, s))
+            self.queued.append(s.get("title") or s.get("name") or s.get("genre") or "track")
         self.tg.send(chat_id, f"Batch queued: {len(specs)} track(s). They render back to back and land here as they finish.")
 
     def _status(self, chat_id):
-        up = self.jobs.qsize()
         msg = []
-        msg.append("Rendering now: " + self.current if self.current else "Idle.")
-        if up:
-            msg.append(f"In queue: {up}")
+        msg.append("Engine: ready" if self.make_track else "Engine: not loaded in this session (run the notebook's engine cell, then this bot cell)")
+        msg.append("Rendering now: " + self.current if self.current else "Rendering now: nothing")
+        msg.append(f"Waiting: {self.jobs.qsize()}")
         msg.append(f"Outputs save to: {self.out_root}")
+        if self.out_root.startswith("/kaggle"):
+            msg.append("Note: Kaggle keeps outputs in the notebook's Output section, not Drive. Save Version before the session ends.")
+        msg.append("Owner: paired" if self.owner else "Owner: not paired yet")
         self.tg.send(chat_id, "\n".join(msg))
+
+    def _queue(self, chat_id):
+        q = list(self.queued)
+        msg = ["Rendering now: " + (self.current or "nothing")]
+        if q:
+            msg.append(f"Waiting ({len(q)}):")
+            for i, t in enumerate(q[:10], 1):
+                msg.append(f"{i}. {t}")
+            if len(q) > 10:
+                msg.append(f"...and {len(q) - 10} more")
+        else:
+            msg.append("Nothing waiting. /track starts a new one.")
+        self.tg.send(chat_id, "\n".join(msg))
+
+    def _release_folders(self):
+        """Folders in out_root that are real releases (skip _archive_wav, jobs, zi_data...)."""
+        if not os.path.isdir(self.out_root):
+            return []
+        out = []
+        for d in sorted(os.listdir(self.out_root), reverse=True):
+            full = os.path.join(self.out_root, d)
+            if not os.path.isdir(full) or d.startswith("_") or d in ("jobs", "zi_data"):
+                continue
+            try:
+                names = os.listdir(full)
+            except Exception:
+                continue
+            if "metadata.json" in names or any(n.endswith("_320kbps.mp3") for n in names):
+                out.append(d)
+        return out
+
+    @staticmethod
+    def _lib_key(folder):
+        # Telegram caps callback_data at 64 bytes; a release folder name can reach 66.
+        return hashlib.md5(folder.encode()).hexdigest()[:24]
+
+    def _lib_folder(self, key):
+        for d in self._release_folders():
+            if self._lib_key(d) == key:
+                return d
+        return None
 
     def _find_folder(self, needle):
         if not needle or not os.path.isdir(self.out_root):
@@ -402,15 +459,11 @@ class Bot:
         return None
 
     def _library(self, chat_id):
-        if not os.path.isdir(self.out_root):
-            self.tg.send(chat_id, "No releases yet.")
-            return
-        folders = [d for d in sorted(os.listdir(self.out_root), reverse=True)
-                   if os.path.isdir(os.path.join(self.out_root, d)) and not d.startswith("_")][:8]
+        folders = self._release_folders()[:8]
         if not folders:
-            self.tg.send(chat_id, "No releases yet.")
+            self.tg.send(chat_id, "No releases yet in this session's folder. /track makes one; /status shows where they save.")
             return
-        kb = [[{"text": re.sub(r"^\d{8}-\d{6}_", "", f).replace("_", " "), "callback_data": "lib:" + f}] for f in folders]
+        kb = [[{"text": re.sub(r"^\d{8}-\d{6}_", "", f).replace("_", " ")[:60], "callback_data": "lib:" + self._lib_key(f)}] for f in folders]
         self.tg.send(chat_id, "Latest releases (tap to fetch):", keyboard=kb)
 
     def _get(self, chat_id, needle, audio=True):
@@ -472,6 +525,7 @@ class Bot:
             j.setdefault("idea", j.get("genre", ""))
             j.setdefault("lang", "en")
             self.jobs.put((chat_id, j))
+            self.queued.append(j.get("title") or j.get("name") or j.get("genre") or "track")
         self.tg.send(chat_id, f"Imported {len(found)} app job(s) into the queue.")
 
 
