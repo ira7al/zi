@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.43"
+VERSION = "2026-11-28.44"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -338,6 +338,8 @@ class Bot:
         self.reacted = {}    # (chat_id, message_id) -> emoji already set
         self.last_react = 0.0
         self.heard_raw = {}  # chat_id -> (what the voice note said, time)
+        self.tweak = {}      # chat_id -> the settings he is adjusting for a second try
+        self.last_enq = {}   # chat_id -> the settings of the last track sent to render
         self.pending = {}    # chat_id -> an image or link waiting for his instruction
         self.last_say = {}   # chat_id -> his latest text or voice, so an image right after joins it
         self.stop = threading.Event()
@@ -846,6 +848,8 @@ class Bot:
             except Exception as e:
                 print("assistant answer failed:", repr(e))
                 text = "حصلت مشكلة وأنا بجهز الرد. جرب تاني، أو /status."
+        if spoken and text.startswith("ما وصلنيش كويس"):
+            text += "\n(سمعت: " + question.strip()[:200] + ")"
         text, tag = ziassist.split_reaction(text)
         if tag:
             self._react(chat_id, self.cur_msg.get(chat_id), tag)
@@ -1335,20 +1339,24 @@ class Bot:
         except Exception as e:
             self.tg.send(chat_id, f"معرفتش أجيب الفويس نوت دي: {str(e)[:150]}")
             return None
-        self.tg.send(chat_id, "بسمع...")
+        try:
+            self.tg.call("sendChatAction", chat_id=chat_id, action="typing")
+        except Exception:
+            pass
         text = self._transcribe(path)
         if not text:
             self.tg.send(chat_id, "لسه مش قادر أحوّل الصوت لكلام على الجهاز ده. شغّل في النوتبوك "
                                   "`!pip install -q faster-whisper` وأعد تشغيل البوت وبعدين قول تاني. "
                                   "أو اكتب الفكرة.")
             return None
-        self.tg.send(chat_id, "سمعتك: " + text)
         self.heard_raw[chat_id] = (text, time.time())
         if opt.has_arabic(text):
             english, leftover = opt.to_english(text)
             if english:
-                note = f"\n(مفيش ترجمة إنجليزي لـ: {', '.join(leftover[:5])})" if leftover else ""
-                self.tg.send(chat_id, "بالإنجليزي: " + english + note)
+                if leftover:
+                    # unsure: show what was understood and what was not
+                    self.tg.send(chat_id, "سمعت: " + text + "\nفهمت منها: " + english +
+                                 f"\n(مفيش ترجمة إنجليزي لـ: {', '.join(leftover[:5])})")
                 return english
             # no music words in it: it is a question, so the assistant answers it
             return text
@@ -1712,6 +1720,9 @@ class Bot:
                 pass
             self._show_options(chat_id, b)
             return
+        if data.startswith("tw:"):
+            self._tweak_cb(chat_id, data)
+            return
         if data.startswith("keep:"):
             self._keep(chat_id, data.split(":", 1)[1])
             return
@@ -1891,7 +1902,8 @@ class Bot:
             return
         ch, notes = opt.parse_spec_edits(said, b["spec"])
         if not ch:
-            self.tg.send(chat_id, "ما وصلنيش كويس، ممكن تعيدها؟ مثلاً: \"خليها ٤ دقايق\" أو \"بكلمات\" أو \"١٢٠ BPM\". "
+            heard = (" (سمعت: " + raw[0][:150] + ")") if raw and time.time() - raw[1] < 10 else ""
+            self.tg.send(chat_id, "ما وصلنيش كويس، ممكن تعيدها؟" + heard + " مثلاً: \"خليها ٤ دقايق\" أو \"بكلمات\" أو \"١٢٠ BPM\". "
                                   "أو دوس ولّد لو تمام.",
                          keyboard=[[{"text": "\u25b6\ufe0f ولّد", "callback_data": "go"},
                                     {"text": "\U0001f916 اسألني", "callback_data": "ask"}]])
@@ -1909,11 +1921,6 @@ class Bot:
 
     def _option_step(self, chat_id, b, code):
         spec = b["spec"]
-        if code.startswith("coming:"):
-            key = code.split(":", 1)[1]
-            note = next((o.get("note_ar") or o.get("note", "") for o in OPTIONS if o["key"] == key), "")
-            self.tg.send(chat_id, f"الخيار ده لسه مش شغال: {note}")
-            return
         if code == "instr":
             spec["instrumental"] = not spec.get("instrumental", True)
             if spec["instrumental"]:
@@ -2194,6 +2201,10 @@ class Bot:
         if not self.make_track:
             self.tg.send(chat_id, "مفيش موديل شغال في الجلسة دي. شغّل خلية الموديل في النوتبوك الأول.")
             return
+        try:
+            self.last_enq[chat_id] = {k: v for k, v in dict(spec).items() if not str(k).startswith("_")}
+        except Exception:
+            pass
         spec = self._normalize_spec(spec)
         self._remember(spec)
         spec["_thread"] = self.threads.get(chat_id)
@@ -2873,7 +2884,73 @@ class Bot:
         title = title or self._publish_caption(folder)[0]
         self.tg.send(chat_id, f"{title} جاهز. اسمعه، ولو هو ده دوس \u2b50 وأطلعلك الغلاف والفيديو والنشر.",
                      keyboard=[[{"text": "\u2b50 \u062f\u0647 \u0627\u0644\u062a\u0631\u0627\u0643 \u0627\u0644\u0645\u0637\u0644\u0648\u0628", "callback_data": f"keep:{key}"}],
-                               [{"text": "\U0001f3b5 تراك تاني", "callback_data": "sug:track"}]])
+                               [{"text": "\U0001f39b عدّل وولّد تاني", "callback_data": "tw:open"},
+                                {"text": "\U0001f3b5 تراك تاني", "callback_data": "sug:track"}]])
+
+    # ---------- tweak after listening ----------
+    TWEAKS = {  # code: (key, step, low, high, default, label, one-line explanation)
+        "w": ("weirdness", 20, 0, 100, 50, "الغرابة",
+              "كل ما زادت، التراك بيجرّب حاجات مفاجئة وأغرب. كل ما قلّت، بيمشي على المضمون."),
+        "i": ("style_influence", 15, 0, 100, 50, "تأثير الستايل",
+              "كل ما زاد، التراك بيمسك الستايل اللي كتبته أكتر. كل ما قلّ، بياخد حرية أكتر."),
+        "s": ("seconds", 60, 60, 600, 330, "الطول", "بالدقايق، أقصر أو أطول."),
+        "b": ("bpm", 4, 60, 180, None, "السرعة (BPM)", "أبطأ أو أسرع شوية."),
+    }
+
+    def _tweak_screen(self, chat_id):
+        sp = self.tweak.get(chat_id)
+        if not sp:
+            self.tg.send(chat_id, "مفيش تراك أعدّله دلوقتي. دوس تراك جديد.")
+            return
+        lines = []
+        for code, (key, step, lo, hi, dflt, label, why) in self.TWEAKS.items():
+            if key == "bpm" and not sp.get("bpm"):
+                continue
+            cur = sp.get(key, dflt)
+            shown = f"{int(cur) // 60}:{int(cur) % 60:02d}" if key == "seconds" else cur
+            lines.append(f"{label} (دلوقتي {shown}): {why}")
+        kb = []
+        for code, (key, step, lo, hi, dflt, label, why) in self.TWEAKS.items():
+            if key == "bpm" and not sp.get("bpm"):
+                continue
+            lessw, morew = ("أقصر", "أطول") if key == "seconds" else (("أبطأ", "أسرع") if key == "bpm" else ("أقل", "أكتر"))
+            kb.append([{"text": f"{label} {lessw}", "callback_data": f"tw:{code}-"},
+                       {"text": f"{label} {morew}", "callback_data": f"tw:{code}+"}])
+        kb.append([{"text": "\u25b6\ufe0f ولّد تاني بالتعديل", "callback_data": "tw:go"}])
+        self.tg.send(chat_id, "عدّل وقولي ولّد تاني:\n\n" + "\n".join(lines), keyboard=kb)
+
+    def _tweak_cb(self, chat_id, data):
+        code = data[3:]
+        if code == "open":
+            base = self.last_enq.get(chat_id) or self._last_spec()
+            if not base:
+                self.tg.send(chat_id, "مفيش تراك أعدّله دلوقتي. دوس تراك جديد.")
+                return
+            self.tweak[chat_id] = dict(base)
+            self._tweak_screen(chat_id)
+            return
+        sp = self.tweak.get(chat_id)
+        if not sp:
+            self.tg.send(chat_id, "الجلسة دي انتهت. دوس عدّل وولّد تاني من تحت التراك.")
+            return
+        if code == "go":
+            spec = dict(self.tweak.pop(chat_id))
+            spec.pop("seed", None)      # a fresh take, not the same one again
+            spec.pop("title", None)
+            self.tg.send(chat_id, "ماشي، بولّد تاني بالتعديل.")
+            self._enqueue(chat_id, spec)
+            return
+        t = self.TWEAKS.get(code[:1])
+        if not t or code[1:] not in ("+", "-"):
+            self._tweak_screen(chat_id)
+            return
+        key, step, lo, hi, dflt, label, why = t
+        cur = sp.get(key, dflt)
+        if cur is None:
+            self._tweak_screen(chat_id)
+            return
+        sp[key] = max(lo, min(hi, int(cur) + (step if code[1] == "+" else -step)))
+        self._tweak_screen(chat_id)
 
     def _publish_cmd(self, chat_id, arg):
         folder = self._find_folder(arg) if arg else self._last_release()
