@@ -62,7 +62,7 @@ class BuilderTests(unittest.TestCase):
     def test_prompt_has_the_library_shape(self):
         p = zb.build_prompt("dark melodic techno for a night drive", 330)
         self.assertIn("122 BPM", p["prompt"])
-        self.assertIn("A minor", p["prompt"])
+        self.assertIn("G minor", p["prompt"])
         self.assertIn("Structure in bars:", p["prompt"])
         self.assertIn("clean low mids", p["prompt"])
         self.assertIn("Theme: dark melodic techno for a night drive", p["prompt"])
@@ -124,7 +124,7 @@ class BuilderTests(unittest.TestCase):
                                       "from": {"id": self.chat},
                                       "text": "something dark and hypnotic for a late drive"}})
         shown = self.bot.tg.sent[-1]
-        self.assertIn("122 BPM", shown["text"])
+        self.assertIn("124 BPM", shown["text"])
         self.assertIn("Structure in bars", shown["text"])
         self.assertEqual(sorted(buttons(shown)), ["ask", "p:again", "p:edit", "p:ref", "p:use"])
         self.tap("p:again")
@@ -138,7 +138,7 @@ class BuilderTests(unittest.TestCase):
         self.tap("q:high")
         spec = self.bot.builders[self.chat]["spec"]
         self.assertIn("Structure in bars", spec["idea"])
-        self.assertEqual(spec["bpm"], 122)
+        self.assertEqual(spec["bpm"], 124)
 
     def test_edit_replaces_the_generated_prompt(self):
         self.msg("/track")
