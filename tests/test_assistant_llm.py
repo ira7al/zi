@@ -51,7 +51,9 @@ class LlmRequestTests(unittest.TestCase):
         self.assertNotIn(KEY, seen["url"])
         self.assertEqual(seen["headers"]["x-goog-api-key"], KEY)
         text = seen["body"]["contents"][0]["parts"][0]["text"]
-        self.assertIn("dataset", text)
+        self.assertIn("مستر درغام", text)
+        for jargon in ("ocr", "voice", "engine", "build"):
+            self.assertNotIn(jargon, text.lower())
         self.assertIn("إيه الناقص", text)
         self.assertIn("بالمصري", seen["body"]["system_instruction"]["parts"][0]["text"])
 

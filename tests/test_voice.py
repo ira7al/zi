@@ -88,7 +88,7 @@ class VoiceTests(unittest.TestCase):
         self.heard = "السلام عليكم ازيك عامل ايه"
         self.voice()
         self.assertNotIn(5, self.bot.builders)
-        self.assertIn("جاهز", self.texts())
+        self.assertIn("مساعدك الشخصي", self.texts())
 
     def test_lexicon_keeps_unknown_words_out_of_the_prompt(self):
         en, leftover = opt.to_english("عايز حاجة زي موسيقى الافلام")

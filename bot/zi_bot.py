@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.29"
+VERSION = "2026-11-28.31"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -107,19 +107,13 @@ SOCIAL = [("\u25b6\ufe0f YouTube", "https://www.youtube.com/@rahalofficialmusic"
           ("\U0001f3b5 TikTok", "https://www.tiktok.com/@rahalofficialmusic"),
           ("\U0001f4e3 Telegram channel", "https://t.me/rahal_music")]
 
-# Telegram's corner button can only open this list (a commands button), open a web app,
-# or do nothing. It cannot send /menu, so the list stays short: the menu itself is the
-# persistent "Menu" button under the message box, which sends the inline buttons.
-COMMANDS = [("menu", "every action, as buttons"),
-            ("track", "make a track"),
-            ("library", "latest releases"),
-            ("status", "engine and session status"),
-            ("ask", "ask the assistant (Arabic)"),
-            ("help", "all commands")]
+# One command only. Telegram's corner button can only open this list, never send a
+# message, so the shortest path is: corner -> Menu -> the inline menu in the chat.
+# Everything else is inside that menu, and /help still lists every command by name.
+COMMANDS = [("menu", "\u0643\u0644 \u0627\u0644\u0623\u0632\u0631\u0627\u0631 - Menu")]
 
 HELP = """Zi Music Studio bot - make tracks from chat.
-Menu and Studio are the buttons under the message box: Menu puts every action in the chat,
-Studio opens the web app. Telegram's own corner button only opens the short command list.
+Tap Menu in the corner, then Menu: every action arrives in the chat as buttons, Studio included.
 /menu - every action as one button (start here)
 /ask - ask the assistant what is missing or what to do next (Arabic); /ask alone opens a chat
 /end - close the assistant chat
@@ -362,19 +356,18 @@ class Bot:
         print("Send this in Telegram to the bot:  /start", self.pair_code)
         print("=" * 50)
 
-    @staticmethod
-    def launcher():
-        """The buttons under the message box: Menu opens the bot's menu in the chat, Studio opens the app."""
-        return {"keyboard": [[{"text": "Menu"}],
-                             [{"text": "\U0001f39b Studio", "web_app": {"url": STUDIO_URL}}]],
-                "resize_keyboard": True, "is_persistent": True}
+    REMOVE_KB = {"remove_keyboard": True}
+    MENU_NOTE = ("\u0634\u0644\u062a \u0627\u0644\u0623\u0632\u0631\u0627\u0631 \u0627\u0644\u0644\u064a \u062a\u062d\u062a \u0627\u0644\u0645\u0643\u062a\u0648\u0628\u0629. "
+                 "\u0636\u063a\u0637 Menu \u0641\u064a \u0627\u0644\u0631\u0643\u0646 \u0641\u0648\u0642\u060c \u0648\u0628\u0639\u062f\u064a\u0646 \u0627\u062e\u062a\u0627\u0631 Menu "
+                 "\u0645\u0646 \u0627\u0644\u0644\u0633\u062a\u0629 - \u0643\u0644 \u0627\u0644\u0623\u0632\u0631\u0627\u0631 \u0647\u062a\u062c\u064a\u0644\u0643 \u062c\u0648\u0651\u0647 \u0627\u0644\u0634\u0627\u062a.")
 
     def _launcher(self, chat_id, text=None):
-        text = text or ("\u062a\u062d\u062a \u0627\u0644\u0645\u0643\u062a\u0648\u0628\u0629: Menu \u064a\u0641\u062a\u062d \u0643\u0644 \u0627\u0644\u0623\u0632\u0631\u0627\u0631 \u062c\u0648\u0651\u0647 \u0627\u0644\u0634\u0627\u062a\u060c "
-                        "\u0648 Studio \u064a\u0641\u062a\u062d \u0627\u0644\u062a\u0637\u0628\u064a\u0642. "
-                        "\u0632\u0631 \u0627\u0644\u062a\u0644\u064a\u062c\u0631\u0627\u0645 \u0641\u064a \u0627\u0644\u0631\u0643\u0646 \u0628\u064a\u0641\u062a\u062d "
-                        "\u0644\u0633\u062a\u0629 \u0623\u0648\u0627\u0645\u0631 \u0642\u0635\u064a\u0631\u0629 \u0628\u0633.")
-        self.tg.send(chat_id, text, reply=self.launcher())
+        """No reply keyboard any more: clear the one already on his device, then show the menu."""
+        try:
+            self.tg.send(chat_id, text or self.MENU_NOTE, reply=self.REMOVE_KB)
+        except Exception as e:
+            print("could not remove the keyboard:", type(e).__name__)
+        self._menu(chat_id)
 
     def _is_owner(self, chat_id):
         return self.owner is not None and chat_id == self.owner
@@ -780,6 +773,11 @@ class Bot:
             except Exception as e:                 # never let the model path break the bot
                 print("assistant llm call failed:", type(e).__name__)
                 text = None
+            if text and ziassist.has_jargon(text):
+                # it answered with technical status or the wrong intro: use the grounded
+                # answer instead, so he never reads a capability claim that is not live
+                print("assistant answer dropped: jargon")
+                text = None
         if not text:
             try:
                 text = ziassist.answer(question, state)
@@ -797,7 +795,7 @@ class Bot:
             return
         self.ask_mode.add(chat_id)
         state = self._snapshot()
-        head = "أنا مساعد البوت. اسألني بالعربي وأنا أجاوب من حالة الشغل نفسها.\n" \
+        head = "أنا مساعدك الشخصي. اسألني بالعربي وأنا أجاوب من حالة الشغل نفسها.\n" \
                "أقدر أقولك: الناقص، اللي تعمله بعد كده، حالة الشغل، تراكات التدريب، اللي حفظته، النشر، والموديل.\n" \
                "اكتب \"خروج\" أو /end تقفل المحادثة."
         miss = ziassist.missing(state)
@@ -1311,7 +1309,7 @@ class Bot:
                 self._save(self.owner_path, {"chat_id": chat_id})
                 self.pair_code = None
                 self.tg.send(chat_id, "Bound. This bot answers only you now.\n\n" + HELP)
-                self._launcher(chat_id, "Two buttons under the box now: Menu for the bot, Studio for the web app.")
+                self._launcher(chat_id)
             else:
                 self.tg.send(chat_id, "This is a private studio bot.")
             return
@@ -1414,7 +1412,6 @@ class Bot:
                 self.tg.send(chat_id, "مفيش محادثة مفتوحة. /ask يفتحها.")
         elif cmd == "/studio":
             self.tg.send(chat_id, "Studio app: " + STUDIO_URL)
-            self._launcher(chat_id)
         elif cmd == "/cancel":
             self.builders.pop(chat_id, None)
             self.tg.send(chat_id, "Cancelled.")
@@ -1944,19 +1941,27 @@ class Bot:
         self.tg.send(chat_id, f"Batch queued: {len(specs)} track(s). They render back to back and land here as they finish.")
 
     def _status(self, chat_id):
-        msg = []
-        msg.append("Engine: ready" if self.make_track else "Engine: not loaded in this session (run the notebook's engine cell, then this bot cell)")
-        msg.append("Rendering now: " + self.current if self.current else "Rendering now: nothing")
-        msg.append(f"Waiting: {self.jobs.qsize()}")
-        msg.append(f"Outputs save to: {self.out_root}")
-        if self.out_root.startswith("/kaggle"):
-            msg.append("Note: Kaggle keeps outputs in the notebook's Output section, not Drive. Save Version before the session ends.")
-        msg.append("Owner: paired" if self.owner else "Owner: not paired yet")
+        """Plain Egyptian Arabic: what is happening now, what is waiting, and the one
+        thing he has to do before the session ends. The technical lines live in /diag."""
+        lines = []
+        if self.current:
+            lines.append("بيرندر دلوقتي: " + self.current)
+        else:
+            lines.append("مفيش حاجة بتترندر دلوقتي - البوت جاهز")
+        waiting = self.jobs.qsize()
+        lines.append("مستني في الطابور: " + ("مفيش" if not waiting else str(waiting)))
+        if not self.make_track:
+            lines.append("الرندر واقف لحد ما خلية الإنجين تشتغل في النوتبوك، وبعدها خلية البوت")
+        if str(self.out_root).startswith("/kaggle"):
+            lines.append("التراكات بتتحفظ في Output النوتبوك، فاعمل Save Version قبل ما الجلسة تقفل.")
+        else:
+            lines.append("التراكات بتتحفظ على Drive في مجلد Zi_Music.")
         try:
-            msg.append(f"Pollers in this process: {len(_bot_instances())}")
+            state = self._snapshot()
+            lines.append(ziassist.dataset_line(state))
         except Exception:
             pass
-        self.tg.send(chat_id, "\n".join(msg))
+        self.tg.send(chat_id, "\n".join(lines))
 
     def _queue(self, chat_id):
         q = list(self.queued)
@@ -2010,6 +2015,8 @@ class Bot:
             pass
         lines.append(f"threads known: {len(self.threads)}")
         lines.append(f"outputs: {self.out_root}")
+        lines.append("engine: " + ("ready" if self.make_track else "not loaded"))
+        lines.append("owner: " + ("paired" if self.owner else "not paired yet"))
         try:
             e = voice.engines()
             on = ", ".join(k for k, v in e.items() if v)
@@ -2244,7 +2251,8 @@ class Bot:
                {"text": "\U0001f4ca Status", "callback_data": "menu:status"},
                {"text": "\U0001f9fe RouteNote form", "callback_data": "menu:routenote"}],
               [{"text": "\U0001f6e0 Diag", "callback_data": "menu:diag"},
-               {"text": "\u2753 Help", "callback_data": "menu:help"}]]
+               {"text": "\u2753 Help", "callback_data": "menu:help"}],
+              [{"text": "\U0001f39b Studio (web app)", "url": STUDIO_URL}]]
         self.tg.send(chat_id, "Menu. Everything the bot can do is one tap from here.", keyboard=kb)
 
     def _menu_step(self, chat_id, what):

@@ -35,7 +35,7 @@ READY = {"build": "2026-11-28.21", "engine": True, "rendering": "Night Drive", "
 class AnswerTests(unittest.TestCase):
     def test_what_is_missing_lists_only_real_gaps(self):
         text = za.answer("ايه الناقص؟", READY)
-        self.assertIn("تراكات التدريب: 12", text)
+        self.assertIn("تراكات مستر درغام: 12", text)
         self.assertIn("1 تراك لسه من غير تصنيف", text)
         self.assertIn("مستر درغام", text)
         self.assertNotIn("يوتيوب مش موجود", text)      # it is connected in this state
@@ -87,6 +87,35 @@ class AnswerTests(unittest.TestCase):
         self.assertNotIn("50 (", text)
 
 
+class PlainLanguageTests(unittest.TestCase):
+    """No technical status in his face, no wrong intro, and the Dorgham count stays."""
+
+    def test_the_status_answer_has_no_technical_words(self):
+        text = za.status(READY)
+        for word in ("الإنجين", "OCR", "الصوت", "النسخة", "build", "engine"):
+            self.assertNotIn(word, text)
+        self.assertIn("بيترندر دلوقتي", text)
+
+    def test_the_status_answer_always_carries_the_dorgham_count(self):
+        self.assertIn("تراكات مستر درغام", za.status(READY))
+        self.assertIn("فاضل", za.status(READY))
+
+    def test_the_intro_is_personal_not_his_name(self):
+        text = za.answer("ازيك", READY)
+        self.assertIn("أنا مساعدك الشخصي", text)
+        self.assertNotIn("مساعد راهال", text)
+
+    def test_zero_tracks_reads_like_a_sentence(self):
+        text = za.dataset_line(dict(READY, dataset={"count": 0}))
+        self.assertIn("لسه معندوش تراكات", text)
+        self.assertIn("50", text)
+
+    def test_a_model_answer_that_claims_a_capability_is_dropped(self):
+        self.assertTrue(za.has_jargon("المحرك شغال والـ OCR والصوت مفعلين"))
+        self.assertTrue(za.has_jargon("أنا مساعد راهال"))
+        self.assertFalse(za.has_jargon("عندك 7 تراكات، وفاضل 43 للموديل"))
+
+
 class BotWiringTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
@@ -97,15 +126,29 @@ class BotWiringTests(unittest.TestCase):
     def say(self, text):
         self.bot._handle({"message": {"chat": {"id": 9, "type": "private"}, "from": {"id": 9}, "text": text}})
 
+    def test_status_is_plain_arabic_and_points_at_saving(self):
+        self.bot._status(9)
+        text = self.bot.tg.sent[-1]["text"]
+        for word in ("Engine", "Rendering", "Waiting", "Outputs", "Pollers", "Owner"):
+            self.assertNotIn(word, text)
+        self.assertIn("طابور", text)
+        self.assertTrue("Save Version" in text or "Drive" in text)
+
+    def test_the_technical_lines_are_in_diag(self):
+        self.bot._diag(9)
+        text = self.bot.tg.sent[-1]["text"]
+        self.assertIn("engine:", text)
+        self.assertIn("pollers", text)
+
     def test_ask_with_a_question_answers_once(self):
         self.say("/ask ايه الناقص")
-        self.assertIn("الإنجين مش محمّل", self.bot.tg.sent[-1]["text"])
+        self.assertIn("الرندر واقف", self.bot.tg.sent[-1]["text"])
         self.assertNotIn(9, self.bot.ask_mode)
 
     def test_ask_alone_opens_a_chat_and_free_text_answers(self):
         self.say("/ask")
         self.assertIn(9, self.bot.ask_mode)
-        self.assertIn("مساعد البوت", self.bot.tg.sent[-1]["text"])
+        self.assertIn("مساعدك الشخصي", self.bot.tg.sent[-1]["text"])
         self.say("اعمل ايه")
         self.assertIn("خلية الإنجين", self.bot.tg.sent[-1]["text"])
         self.assertNotIn(9, self.bot.builders)       # it did not start a track
