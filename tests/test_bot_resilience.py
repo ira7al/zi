@@ -12,7 +12,7 @@ class Rec:
     def __init__(self):
         self.sent = []
 
-    def send(self, chat_id, text, keyboard=None):
+    def send(self, chat_id, text, keyboard=None, reply=None):
         self.sent.append(text)
         return {}
 

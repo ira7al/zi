@@ -74,6 +74,16 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(self.bot.owner, 9)
         self.assertTrue(self.keyboards())
 
+    def test_the_first_message_after_a_restart_brings_the_buttons_back(self):
+        # a fresh process, chat cleared: any message from him restores the keyboard once
+        self.say("ايه الناقص")
+        boards = self.keyboards()
+        self.assertEqual(len(boards), 1)
+        self.assertEqual([b["text"] for b in boards[0]["reply"]["keyboard"][0]],
+                         ["\u2630 Menu", "\U0001f39b Studio"])
+        self.say("تاني")
+        self.assertEqual(len(self.keyboards()), 1)     # only once, not every message
+
     def test_the_old_inline_menu_button_still_works(self):
         self.say("/help")
         flat = [b["callback_data"] for m in self.bot.tg.sent if m.get("keyboard")

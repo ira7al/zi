@@ -10,7 +10,7 @@ class FakeTG:
         self.sent = []
         self.lock = threading.Lock()
 
-    def send(self, chat_id, text, keyboard=None):
+    def send(self, chat_id, text, keyboard=None, reply=None):
         with self.lock:
             self.sent.append(text)
         return {"ok": True}

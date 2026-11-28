@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.22"
+VERSION = "2026-11-28.23"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -322,6 +322,7 @@ class Bot:
         self.stats = {"message": 0, "callback": 0, "last": "nothing yet"}
         self.ds_lyrics = {}   # chat_id -> sha of the file whose lyrics we are waiting for
         self.ask_mode = set()  # chats talking to the assistant
+        self._launcher_sent = False
         self._llm_ready = None
         self.llm_key = ""
         self.llm_model = ""
@@ -1226,6 +1227,11 @@ class Bot:
             else:
                 self.tg.send(chat_id, "This is a private studio bot.")
             return
+        if not self._launcher_sent:
+            # after a restart or a cleared chat the buttons are gone until the bot
+            # sends them once; do it on his first message, whatever it is
+            self._launcher_sent = True
+            self._launcher(chat_id)
         if self._is_dataset_upload(msg):
             self._ds_intake(chat_id, msg)
             return
