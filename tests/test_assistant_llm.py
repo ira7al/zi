@@ -74,6 +74,52 @@ class LlmRequestTests(unittest.TestCase):
         self.assertIsNone(out)
 
 
+class Gemini3Tests(unittest.TestCase):
+    """gemini-3 thinking used to eat the whole token budget, so nothing came back."""
+
+    def test_thinking_is_off_and_the_budget_is_generous(self):
+        req = za.build_request("سؤال", STATE)
+        gen = req["generationConfig"]
+        self.assertEqual(gen["thinkingConfig"]["thinkingBudget"], 0)
+        self.assertGreaterEqual(gen["maxOutputTokens"], 800)
+
+    def test_the_default_model_is_the_one_that_answers(self):
+        self.assertEqual(za.DEFAULT_MODEL, "gemini-3.1-flash-lite")
+        self.assertEqual(za.VISION_MODEL, za.DEFAULT_MODEL)
+        self.assertIn(za.DEFAULT_MODEL, za.GEMINI_URL.format(model=za.DEFAULT_MODEL))
+
+    def test_thought_parts_are_not_the_answer(self):
+        data = {"candidates": [{"content": {"parts": [
+            {"text": "أفكر الأول", "thought": True},
+            {"text": "أهلاً بيك"}]}}]}
+        self.assertEqual(za.parse_response(data), "أهلاً بيك")
+
+    def test_only_thoughts_means_no_answer(self):
+        data = {"candidates": [{"content": {"parts": [{"text": "تفكير", "thought": True}]}}]}
+        self.assertIsNone(za.parse_response(data))
+
+    def test_an_empty_answer_is_none_so_the_fallback_speaks(self):
+        data = {"candidates": [{"content": {"parts": []}, "finishReason": "MAX_TOKENS"}]}
+        self.assertIsNone(za.parse_response(data))
+
+    def test_a_model_that_refuses_thinking_is_retried_without_it(self):
+        seen = []
+
+        def opener(req, timeout=None):
+            seen.append(json.loads(req.data))
+            if len(seen) == 1:
+                raise urllib.error.HTTPError("u", 400, "Bad Request", {}, io.BytesIO(b"{}"))
+            return FakeResp(json.dumps({"candidates": [{"content": {"parts": [{"text": "تم"}]}}]}).encode())
+
+        self.assertEqual(za.ask_llm("سؤال", STATE, KEY, opener=opener), "تم")
+        self.assertIn("thinkingConfig", seen[0]["generationConfig"])
+        self.assertNotIn("thinkingConfig", seen[1]["generationConfig"])
+
+    def test_the_vision_call_uses_the_same_model(self):
+        req = za.build_vision_request(b"jpeg")
+        self.assertEqual(req["generationConfig"]["thinkingConfig"]["thinkingBudget"], 0)
+
+
 class BotLlmTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()

@@ -176,26 +176,59 @@ SYSTEM = ("أنت مساعد جوّه بوت Zi Music Studio بتاع راهال
 
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
+# gemini-2.0-flash and 2.5-flash answer 404 for a new key (retired for new accounts).
+# 3.1-flash-lite is the free model that answers, so it is the default and no env is
+# needed; ZI_LLM_MODEL still overrides it.
+DEFAULT_MODEL = os.environ.get("ZI_LLM_MODEL", "gemini-3.1-flash-lite").strip() or "gemini-3.1-flash-lite"
 
-def build_request(question, state, model="gemini-2.0-flash"):
-    """The exact body sent to the free model: the state block, then the question."""
+
+def build_request(question, state, model=None, thinking_budget=0):
+    """The exact body sent to the free model: the state block, then the question.
+
+    Gemini 3 models think before they answer and the thinking is billed against
+    maxOutputTokens, which used to leave no text at all. So thinking is off by
+    default (budget 0), the token budget is generous, and ask_llm retries without
+    the thinking setting if a model refuses it.
+    """
+    gen = {"temperature": 0.4, "maxOutputTokens": 1500}
+    if thinking_budget is not None:
+        gen["thinkingConfig"] = {"thinkingBudget": int(thinking_budget)}
     return {"system_instruction": {"parts": [{"text": SYSTEM}]},
             "contents": [{"role": "user", "parts": [{"text":
                           "الحالة الحقيقية للبوت:\n" + context_block(state) +
                           "\n\nسؤاله: " + (question or "").strip()}]}],
-            "generationConfig": {"temperature": 0.4, "maxOutputTokens": 500}}
+            "generationConfig": gen}
 
 
 def parse_response(data):
+    """The answer text, whatever shape the model used.
+
+    Gemini 3 can return thought parts (marked thought: true) next to the answer,
+    and an empty part list when the budget ran out. Only the spoken parts count.
+    """
     try:
-        parts = data["candidates"][0]["content"]["parts"]
-        text = "".join(p.get("text", "") for p in parts).strip()
-        return text or None
+        cand = (data.get("candidates") or [])[0]
     except Exception:
         return None
+    if not isinstance(cand, dict):
+        return None
+    pieces = []
+    content = cand.get("content") or {}
+    for part in (content.get("parts") or []):
+        if not isinstance(part, dict):
+            continue
+        if part.get("thought") or part.get("thoughtSignature"):
+            continue                       # reasoning, not the answer
+        t = part.get("text")
+        if isinstance(t, str) and t.strip():
+            pieces.append(t)
+    text = "".join(pieces).strip()
+    if not text and isinstance(cand.get("text"), str):
+        text = cand["text"].strip()        # some shapes put it on the candidate
+    return text or None
 
 
-def ask_llm(question, state, key, model="gemini-2.0-flash", opener=None, timeout=20):
+def ask_llm(question, state, key, model=None, opener=None, timeout=20):
     """One call to the free Gemini tier. None on any failure, so the caller falls back.
 
     The key travels in a header, never in the URL, and is never printed: a 429, a
@@ -207,15 +240,26 @@ def ask_llm(question, state, key, model="gemini-2.0-flash", opener=None, timeout
     import json as _json
     import urllib.error as _uerr
     import urllib.request as _req
-    body = _json.dumps(build_request(question, state, model)).encode()
-    req = _req.Request(GEMINI_URL.format(model=model), data=body, method="POST",
-                       headers={"Content-Type": "application/json", "x-goog-api-key": key})
-    try:
+    model = (model or DEFAULT_MODEL).strip() or DEFAULT_MODEL
+
+    def once(budget):
+        body = _json.dumps(build_request(question, state, model, thinking_budget=budget)).encode()
+        req = _req.Request(GEMINI_URL.format(model=model), data=body, method="POST",
+                           headers={"Content-Type": "application/json", "x-goog-api-key": key})
         with (_opener(opener))(req, timeout=timeout) as r:
-            data = _json.loads(r.read())
+            return _json.loads(r.read())
+
+    try:
+        data = once(0)
     except _uerr.HTTPError as e:
         print("assistant llm HTTP", e.code)          # the code only, never the key
-        return None
+        if e.code != 400:
+            return None
+        try:
+            data = once(None)                        # the model refused thinkingBudget
+        except Exception as e2:
+            print("assistant llm retry failed:", getattr(e2, "code", type(e2).__name__))
+            return None
     except Exception as e:
         print("assistant llm failed:", type(e).__name__)
         return None
@@ -228,7 +272,7 @@ VISION_PROMPT = ("Read this screenshot and answer with one short line, no preamb
                  "If it is not music, answer with the main words you can read. "
                  "If nothing is readable, answer exactly: nothing")
 
-VISION_MODEL = os.environ.get("ZI_VISION_MODEL", "gemini-2.0-flash").strip() or "gemini-2.0-flash"
+VISION_MODEL = (os.environ.get("ZI_VISION_MODEL") or DEFAULT_MODEL).strip() or DEFAULT_MODEL
 
 
 def build_vision_request(image_bytes, mime="image/jpeg", prompt=None):
@@ -238,7 +282,8 @@ def build_vision_request(image_bytes, mime="image/jpeg", prompt=None):
                 {"text": prompt or VISION_PROMPT},
                 {"inlineData": {"mimeType": mime or "image/jpeg",
                                 "data": _b64.b64encode(image_bytes).decode()}}]}],
-            "generationConfig": {"temperature": 0.1, "maxOutputTokens": 120}}
+            "generationConfig": {"temperature": 0.1, "maxOutputTokens": 600,
+                                 "thinkingConfig": {"thinkingBudget": 0}}}
 
 
 def read_image(image_bytes, key, model=None, mime="image/jpeg", opener=None, timeout=30):

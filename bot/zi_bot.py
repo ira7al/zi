@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.27"
+VERSION = "2026-11-28.29"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -697,7 +697,7 @@ class Bot:
         """True when a free model key is configured. The key itself is never printed."""
         if self._llm_ready is None:
             self.llm_key = self._secret("ZI_LLM_KEY")
-            self.llm_model = (os.environ.get("ZI_LLM_MODEL") or "gemini-2.0-flash").strip()
+            self.llm_model = (os.environ.get("ZI_LLM_MODEL") or ziassist.DEFAULT_MODEL).strip()
             self._llm_ready = True
             if self.llm_key:
                 print("assistant: free model on (" + self.llm_model + ")")
@@ -715,11 +715,19 @@ class Bot:
             return None
         if len(data) > 6 * 1024 * 1024:
             return None
-        try:
-            return ziassist.read_image(data, self.llm_key, mime=mime)
-        except Exception as e:
-            print("vision call failed:", type(e).__name__)
-            return None
+        # the same model the assistant uses first, then the vision default, so a quota
+        # problem on one model does not take screenshots down with it
+        for model in [self.llm_model, getattr(ziassist, "VISION_MODEL", "")]:
+            if not model:
+                continue
+            try:
+                text = ziassist.read_image(data, self.llm_key, model=model, mime=mime)
+            except Exception as e:
+                print("vision call failed:", type(e).__name__)
+                text = None
+            if text:
+                return text
+        return None
 
     SUGGESTIONS = (("\u2753 إيه الناقص؟", "sug:missing"),
                    ("\u27a1\ufe0f أعمل إيه بعد كده؟", "sug:next"),
