@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.46"
+VERSION = "2026-11-28.47"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -1351,16 +1351,21 @@ class Bot:
                                   "أو اكتب الفكرة.")
             return None
         self.heard_raw[chat_id] = (text, time.time())
-        if opt.has_arabic(text):
-            english, leftover = opt.to_english(text)
-            if english:
-                if leftover:
-                    # unsure: show what was understood and what was not
-                    self.tg.send(chat_id, "سمعت: " + text + "\nفهمت منها: " + english +
-                                 f"\n(مفيش ترجمة إنجليزي لـ: {', '.join(leftover[:5])})")
-                return english
-            # no music words in it: it is a question, so the assistant answers it
-            return text
+        if opt.has_arabic(text) or ziassist.has_foreign_letters(text):
+            r = ziassist.to_english_prompt(text, self.groq_key) if self.groq_key else None
+            if r and r["english"] and not opt.has_arabic(text):
+                return r["english"]
+            if opt.has_arabic(text):
+                english, leftover = opt.to_english(text)
+                if english:
+                    if leftover and r and r["english"]:
+                        return r["english"]
+                    if leftover:
+                        self.tg.send(chat_id, "سمعت: " + text + "\nفهمت منها: " + english)
+                    return english
+                return text                    # no music words: a question, the assistant answers it
+            if r and r["english"]:
+                return r["english"]
         return text
 
 
@@ -1417,13 +1422,15 @@ class Bot:
         raw = self.heard_raw.get(chat_id)
         if raw and time.time() - raw[1] < 10:
             said = raw[0]
-        idea = said
-        if opt.has_arabic(said):
-            english, _left = opt.to_english(said)
-            idea = english
-        if not idea or len(idea.strip()) < 4 or has_non_latin(idea):
-            self.tg.send(chat_id, "ما وصلنيش كويس، ممكن تعيدها؟ اكتب النوع أو الجو بالإنجليزي، مثلاً: warm afro house.")
+        res = self._english_text(chat_id, said)
+        if res is None:
             return
+        idea, changed = res
+        if not idea or len(idea.strip()) < 4:
+            self.tg.send(chat_id, "ما وصلنيش كويس، ممكن تعيدها؟ قولي النوع أو الجو بكلمتين.")
+            return
+        if changed:
+            self._say_english(chat_id, idea)
         clean, _removed = clean_idea(idea)
         st["idea"] = clean if len(clean) >= 4 else idea
         folder = self._folder_for(st["key"])
@@ -1485,6 +1492,34 @@ class Bot:
                 print("remaster delivery failed:", repr(e))
                 self.tg.send(chat_id, f"الريماستر اتعمل بس التسليم فشل: {str(e)[:200]}")
         threading.Thread(target=work, daemon=True).start()
+
+    # ---------- any language in, English prompt out ----------
+    def _english_text(self, chat_id, text):
+        """(english text, changed) for a prompt in any language, or None when it cannot be made English.
+
+        English passes through unchanged and never waits on a model. Anything else goes to Groq to
+        detect the language and translate; Arabic falls back to the local lexicon. The caller
+        answers him in Egyptian either way.
+        """
+        t = ziassist.strip_prompt_label(text)
+        if ziassist.is_probably_english(t):
+            return t, t != (text or "").strip()
+        if self.groq_key and self._llm():
+            r = ziassist.to_english_prompt(t, self.groq_key)
+            if r:
+                return r["english"], r["english"].strip() != t
+        if opt.has_arabic(t):
+            english, _left = opt.to_english(t)
+            if english:
+                return english, True
+        if not ziassist.has_foreign_letters(t):
+            return t, t != (text or "").strip()      # Latin script, no model: pass it through
+        self.tg.send(chat_id, "ما وصلنيش كويس، ممكن تعيدها؟ أو قولها بكلمات تانية.")
+        return None
+
+    def _say_english(self, chat_id, english):
+        short = english if len(english) <= 220 else english[:217] + "..."
+        self.tg.send(chat_id, "فهمتها كده بالإنجليزي: " + short)
 
     # ---------- reactions ----------
     def _react(self, chat_id, message_id, emoji, always=False):
@@ -2198,11 +2233,13 @@ class Bot:
             else:
                 self._reference_text(chat_id, text)
             return
-        if has_non_latin(text) and b["step"] in ("theme", "own_prompt", "edit_prompt", "ai_idea"):
-            # the engine reads an English prompt, so the theme has to be English too
-            self.tg.send(chat_id, "الموديل بيفهم إنجليزي، فاكتبها بالإنجليزي: كلمتين كفاية، "
-                                  "مثلاً 'night drive, longing, warm bass'. ابعتها تاني، أو /cancel.")
-            return
+        if b["step"] in ("theme", "own_prompt", "edit_prompt", "ai_idea"):
+            res = self._english_text(chat_id, text)
+            if res is None:
+                return
+            text, changed = res
+            if changed:
+                self._say_english(chat_id, text)
         if b["step"] == "options":
             self._options_text(chat_id, b, text)
         elif b["step"] == "theme":

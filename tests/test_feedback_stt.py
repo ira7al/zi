@@ -62,7 +62,7 @@ class Stt(unittest.TestCase):
         self.assertTrue(seen["ct"].startswith("multipart/form-data; boundary="))
         self.assertIn(b"whisper-large-v3-turbo", seen["body"])
         self.assertIn(b'filename="v.ogg"', seen["body"])
-        self.assertIn(b'name="language"', seen["body"])
+        self.assertNotIn(b'name="language"', seen["body"])
 
     def test_falls_to_second_model_then_none(self):
         tmp = tempfile.mkdtemp()
