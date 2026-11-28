@@ -117,6 +117,17 @@ It comes from a Google Cloud project with the YouTube Data API enabled, an OAuth
 
 The 9:16 video is used for the channel, reels and shorts; the YouTube button renders a 1280x720 version from the same cover on demand so the full track reads properly on YouTube.
 
+## Reference: work out the style from something he already knows (build .19)
+
+In the prompt step, **Reference** asks for what he has in mind. Any of these works:
+
+- a track or artist name -> the free iTunes lookup returns its genre label, which picks one of the style profiles
+- a link -> the page's title and description only; no audio is fetched from YouTube, Spotify or anywhere else
+- a screenshot -> read with OCR (the setup cell installs pytesseract and tesseract, free and CPU only); without it the bot asks for the name as text
+- a voice note -> the existing transcript path, so Egyptian Arabic works
+
+Before anything is used the bot shows what it understood: style, mood, BPM range, key, instrumentation, and the prompt itself, with Use it / Edit / Another / New reference. The name is only used to choose the style - it is stripped from the prompt words - and no melody or lyrics are copied. If nothing can be worked out, it says so and asks for genre and BPM in words.
+
 ## Repeat the last settings (build .18)
 
 `/track` opens with a button carrying the last settings used: style, length, instrumental or not. One tap shows the same Ready card and one more tap renders it again; `/track again` does the same from a message. The settings are saved on every queue, so they survive a kernel restart.
@@ -161,14 +172,14 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
-## Bot build 2026-11-28.18: reload and engine patch
+## Bot build 2026-11-28.19: reload and engine patch
 
 The bot now loads a second file (`bot/zi_options.py`), so a cell 5 that only fetches `zi_bot.py` fails. Use this cell instead; it pins the commit and fetches both.
 
 ```python
-# pinned reload - build .18 (bot + its shared option model)
+# pinned reload - build .19 (bot + its shared option model)
 import os, sys, importlib.util, urllib.request
-SHA = "bca0afd91387870a90c6c002808ddd6f2ca9c014"
+SHA = "93f34784ab101c6e6963ee9262000d632926dc74"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
