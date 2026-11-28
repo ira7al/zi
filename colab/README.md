@@ -214,13 +214,18 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
+## Bot build 2026-11-28.55: house style arc
+
+- House style prompt now follows the measurements of the reference tracks: long patient intro, gradual build over about two minutes, a breakdown in the middle, a late peak with the strongest final section, bright major tonality, a soft even groove with gentle shuffled hats (no ringing offbeat hats), a steady heavy centered bass with only light sidechain, warm top.
+- Prompt-only change. The .54 engine patch cell is unchanged.
+
 ## Bot build 2026-11-28.54: XL turbo default and fallback
 
 - Notebook setup cell now starts the server with XL turbo (`ACE_MODEL`, default `acestep-v15-xl-turbo`, override with env `ZI_ACE_MODEL`) and `ACESTEP_NO_INIT=false`, so a kernel restart brings XL back. The model list drops the stale `acestep-v15-xl` name and always contains the loaded model. `MODEL_MAP["xl"]` and `pick_model` use it. Re-run the setup and engine cells from the notebook to get this.
 - Fallback patch cell (paste after the engine cell and the .52 patch cell): if an XL generation fails, it retries XL once in a light mode (batch 1, language model off), then the small turbo model if the server lists it.
 
 ```python
-exec(urllib.request.urlopen("https://raw.githubusercontent.com/ira7al/zi/5fe4f67b941d234f00f3033c48a2e84204277556/colab/engine_patch_54.py").read().decode())
+exec(urllib.request.urlopen("https://raw.githubusercontent.com/ira7al/zi/c66b40fae9e3b3316ad3be4f044c99bd49505149/colab/engine_patch_54.py").read().decode())
 ```
 
 - The track caption now says which model made it, and says so when a fallback happened.
@@ -412,9 +417,9 @@ What .25 changes for whoever is testing:
 - `/diag` prints which voice engines are on the box and whether screenshots have a key.
 
 ```python
-# pinned reload - build .54 (bot + options + assistant + voice + art)
+# pinned reload - build .55 (bot + options + assistant + voice + art)
 import os, sys, importlib.util, urllib.request
-SHA = "5fe4f67b941d234f00f3033c48a2e84204277556"
+SHA = "c66b40fae9e3b3316ad3be4f044c99bd49505149"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
