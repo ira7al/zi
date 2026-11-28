@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.41"
+VERSION = "2026-11-28.42"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -334,6 +334,9 @@ class Bot:
         self.queued = []     # titles waiting behind the current render
         self.current = None
         self.builders = {}   # chat_id -> dict of the guided /track flow
+        self.cur_msg = {}    # chat_id -> id of the message being answered
+        self.reacted = {}    # (chat_id, message_id) -> emoji already set
+        self.last_react = 0.0
         self.pending = {}    # chat_id -> an image or link waiting for his instruction
         self.last_say = {}   # chat_id -> his latest text or voice, so an image right after joins it
         self.stop = threading.Event()
@@ -842,6 +845,9 @@ class Bot:
             except Exception as e:
                 print("assistant answer failed:", repr(e))
                 text = "حصلت مشكلة وأنا بجهز الرد. جرب تاني، أو /status."
+        text, tag = ziassist.split_reaction(text)
+        if tag:
+            self._react(chat_id, self.cur_msg.get(chat_id), tag)
         self.tg.send(chat_id, text, keyboard=self._suggestion_kb(state) if suggest else None)
         if spoken:
             self._speak(chat_id, text)
@@ -1346,6 +1352,24 @@ class Bot:
         return text
 
 
+    # ---------- reactions ----------
+    def _react(self, chat_id, message_id, emoji, always=False):
+        """Set one emoji reaction on his message. Never raises, never spams."""
+        if not message_id or not emoji or (chat_id, message_id) in self.reacted:
+            return False
+        if not always and time.time() - self.last_react < 15:
+            return False
+        try:
+            self.tg.call("setMessageReaction", chat_id=chat_id, message_id=message_id,
+                         reaction=json.dumps([{"type": "emoji", "emoji": emoji}]))
+        except Exception as e:
+            print("reaction failed:", type(e).__name__)
+            return False
+        self.reacted[(chat_id, message_id)] = emoji
+        if not always:
+            self.last_react = time.time()
+        return True
+
     # ---------- one request from several pieces ----------
     JOIN_SEC = 90
 
@@ -1507,6 +1531,14 @@ class Bot:
             # sends them once; do it on his first message, whatever it is
             self._launcher_sent = True
             self._launcher(chat_id)
+        mid = msg.get("message_id")
+        self.cur_msg[chat_id] = mid
+        is_img = bool(msg.get("photo")) or str((doc or {}).get("mime_type") or "").startswith("image/")
+        is_voice = bool(msg.get("voice") or msg.get("audio") or msg.get("video_note"))
+        if is_img or is_voice:
+            self._react(chat_id, mid, ziassist.reaction_for("", "photo" if is_img else "voice"), always=True)
+        elif text and not text.startswith("/"):
+            self._react(chat_id, mid, ziassist.reaction_for(text))
         if self._is_dataset_upload(msg):
             self._ds_intake(chat_id, msg)
             return
