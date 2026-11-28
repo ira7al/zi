@@ -274,6 +274,75 @@ VISION_PROMPT = ("Read this screenshot and answer with one short line, no preamb
                  "If nothing is readable, answer exactly: nothing")
 
 VISION_MODEL = (os.environ.get("ZI_VISION_MODEL") or DEFAULT_MODEL).strip() or DEFAULT_MODEL
+MODELS_URL = "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200"
+# tried after ZI_VISION_MODEL (a comma list is fine) and before anything the key's own list adds
+VISION_FALLBACKS = ("gemini-3-flash-preview", "gemini-flash-latest", "gemini-flash-lite-latest",
+                    "gemini-2.5-flash", "gemini-3.1-flash-lite")
+_SKIP = ("embedding", "tts", "image", "imagen", "veo", "robotics", "aqa", "live", "audio", "computer", "thinking-exp")
+_models_cache = {}
+
+
+def list_models(key, opener=None, timeout=20):
+    """Models this key can call with generateContent, newest flash first. [] when the list is unreachable."""
+    if key in _models_cache:
+        return _models_cache[key]
+    import json as _json
+    import urllib.request as _req
+    out = []
+    try:
+        req = _req.Request(MODELS_URL, headers={"x-goog-api-key": key})
+        with (_opener(opener))(req, timeout=timeout) as r:
+            data = _json.loads(r.read())
+        for m in data.get("models", []):
+            name = (m.get("name") or "").split("/")[-1]
+            if (name.startswith("gemini") and "generateContent" in (m.get("supportedGenerationMethods") or [])
+                    and not any(w in name for w in _SKIP)):
+                out.append(name)
+    except Exception as e:
+        print("model list failed:", type(e).__name__)
+        return []
+    out.sort(key=lambda n: (0 if "flash" in n and "lite" not in n else 1 if "flash" in n else 2,
+                            0 if "preview" not in n and "exp" not in n else 1, n), reverse=False)
+    _models_cache[key] = out
+    return out
+
+
+def vision_models(key=None, extra=(), opener=None):
+    """Ordered, de-duplicated model ids to try for an image."""
+    env = [m.strip() for m in (os.environ.get("ZI_VISION_MODEL") or "").split(",") if m.strip()]
+    order = list(env) + [m for m in extra if m] + list(VISION_FALLBACKS)
+    if key:
+        live = list_models(key, opener=opener)
+        if live:
+            order = [m for m in order if m in live or m in env] + [m for m in live if m not in order][:4]
+    seen, out = set(), []
+    for m in order:
+        if m not in seen:
+            seen.add(m)
+            out.append(m)
+    return out
+
+
+def read_image_retry(image_bytes, key, models=None, mime="image/jpeg", opener=None, sleep=None, tries=2):
+    """Try each model, backing off on 429/5xx. Returns (text or None, last_problem)."""
+    import time as _t
+    sleep = sleep or _t.sleep
+    problem = "no model answered"
+    for model in (models or vision_models(key, opener=opener)):
+        for attempt in range(tries):
+            res = read_image(image_bytes, key, model=model, mime=mime, opener=opener, detail=True)
+            if isinstance(res, str) and res:
+                return res, ""
+            res = res if isinstance(res, dict) else {}
+            if res.get("text"):
+                return res["text"], ""
+            code = res.get("code")
+            problem = f"{model}: {code or res.get('error') or 'empty'}"
+            if code in (429, 500, 502, 503, 504) and attempt + 1 < tries:
+                sleep(2 * (attempt + 1))
+                continue
+            break
+    return None, problem
 
 
 def build_vision_request(image_bytes, mime="image/jpeg", prompt=None):
@@ -287,13 +356,15 @@ def build_vision_request(image_bytes, mime="image/jpeg", prompt=None):
                                  "thinkingConfig": {"thinkingBudget": 0}}}
 
 
-def read_image(image_bytes, key, model=None, mime="image/jpeg", opener=None, timeout=30):
+def read_image(image_bytes, key, model=None, mime="image/jpeg", opener=None, timeout=30, detail=False):
     """One vision call. None on any failure, so the bot can say so in plain words.
 
     The key goes in a header, never the URL, and never gets printed.
     """
+    def fail(code=None, error=None):
+        return {"text": None, "code": code, "error": error} if detail else None
     if not key or not image_bytes:
-        return None
+        return fail(error="no key or image")
     import json as _json
     import urllib.error as _uerr
     import urllib.request as _req
@@ -304,15 +375,16 @@ def read_image(image_bytes, key, model=None, mime="image/jpeg", opener=None, tim
         with (_opener(opener))(req, timeout=timeout) as r:
             data = _json.loads(r.read())
     except _uerr.HTTPError as e:
-        print("vision HTTP", e.code)              # the code only, never the key
-        return None
+        print("vision HTTP", e.code, model or VISION_MODEL)      # the code only, never the key
+        return fail(code=e.code)
     except Exception as e:
         print("vision failed:", type(e).__name__)
-        return None
+        return fail(error=type(e).__name__)
     text = parse_response(data)
     if not text or text.strip().lower().strip(" .!") in ("nothing", "لا شيء"):
-        return None
-    return text.strip().replace("\n", " ")[:300]
+        return fail(error="empty")
+    text = text.strip().replace("\n", " ")[:300]
+    return {"text": text, "code": None, "error": None} if detail else text
 
 
 def _opener(opener):

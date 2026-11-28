@@ -36,7 +36,7 @@ class VisionTests(unittest.TestCase):
         with mock.patch.object(zb.ziassist, "read_image", lambda *a, **k: "Desire - Goom Gum | Dance"):
             with mock.patch.dict(sys.modules, {"pytesseract": None, "PIL": None, "PIL.Image": None}):
                 self.send_photo()
-        self.assertIn("From the screenshot I read: Desire", self.text())
+        self.assertIn("قريت من الصورة: Desire", self.text())
         self.assertIn("Prompt (", self.text())            # the style draft for approval
 
     def test_the_artist_and_track_never_reach_the_prompt(self):
@@ -65,7 +65,7 @@ class VisionTests(unittest.TestCase):
                 self.bot._handle({"message": {"chat": {"id": 9, "type": "private"}, "from": {"id": 9},
                                               "document": {"file_id": "d1", "file_name": "shot.jpg",
                                                            "mime_type": "image/jpeg"}}})
-        self.assertIn("From the screenshot I read", self.text())
+        self.assertIn("قريت من الصورة", self.text())
 
     def test_a_screenshot_with_nothing_open_opens_a_reference(self):
         with mock.patch.object(zb.ziassist, "read_image", lambda *a, **k: "Dance | melodic house"):

@@ -51,6 +51,9 @@ try:
     print("Stopped the previous bot instance.")
 except Exception:
     pass
+# drop every cached copy of the bot's modules so the new files are the ones that run
+for _m in ("zi_bot", "zi_options", "zi_assistant", "zi_voice", "zi_art"):
+    sys.modules.pop(_m, None)
 for _rel in ("bot/zi_bot.py", "bot/zi_options.py", "bot/zi_assistant.py", "bot/zi_voice.py", "bot/zi_art.py"):
     _src = f"https://api.github.com/repos/ira7al/zi/contents/{_rel}?ref={SHA}"
     _raw = f"https://raw.githubusercontent.com/ira7al/zi/{SHA}/{_rel}"
@@ -247,6 +250,9 @@ try:
     print("Stopped the previous bot instance.")
 except Exception:
     pass
+# drop every cached copy of the bot's modules so the new files are the ones that run
+for _m in ("zi_bot", "zi_options", "zi_assistant", "zi_voice", "zi_art"):
+    sys.modules.pop(_m, None)
 for _rel in ("bot/zi_bot.py", "bot/zi_options.py", "bot/zi_assistant.py", "bot/zi_voice.py", "bot/zi_art.py"):
     _api = f"https://api.github.com/repos/ira7al/zi/contents/{_rel}?ref={SHA}"
     _raw = f"https://raw.githubusercontent.com/ira7al/zi/{SHA}/{_rel}"

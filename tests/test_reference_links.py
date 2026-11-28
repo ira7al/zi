@@ -78,7 +78,7 @@ class LinkAndPhotoTests(unittest.TestCase):
         with mock.patch.dict(sys.modules, {"pytesseract": fake, "PIL": pil, "PIL.Image": pil_image}):
             self.send(photo=[{"file_id": "big"}])
         shown = self.joined()
-        self.assertIn("From the screenshot I read", shown)
+        self.assertIn("قريت من الصورة", shown)
         self.assertIn("From your reference I understood", shown)
 
     def test_a_reference_derived_prompt_says_nothing_was_stripped(self):
