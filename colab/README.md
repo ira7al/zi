@@ -214,6 +214,10 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
+## Bot build 2026-11-28.37: assistant prompt and tone
+
+The assistant now answers general questions (music terms, LoRA, BPM, anything) directly and briefly. Project facts (Mr Dorgham count, queue, publishing) only appear when he asks about the project. The tone is street Egyptian with five short examples in the prompt; formal and MSA phrasing and technical words are banned. The jargon filter now matches whole words, so ordinary words like "rapid" are no longer dropped. Same prompt feeds Groq and Gemini. Reload with the pinned cell below.
+
 ## Bot build 2026-11-28.36: Groq model fix
 
 Groq default is now `openai/gpt-oss-120b`; on 404 or another HTTP error the next model is tried (`qwen/qwen3.8-27b`), `ZI_GROQ_MODEL` still goes first. Then Gemini, then the grounded answers. Screenshots stay Gemini-only and say plainly when they cannot be read. Reload with the pinned cell below.
@@ -260,9 +264,9 @@ What .25 changes for whoever is testing:
 - `/diag` prints which voice engines are on the box and whether screenshots have a key.
 
 ```python
-# pinned reload - build .36 (bot + options + assistant + voice + art)
+# pinned reload - build .37 (bot + options + assistant + voice + art)
 import os, sys, importlib.util, urllib.request
-SHA = "e25dd5d28ea043987c5df768e0c46ae52f4877c1"
+SHA = "7936b97c5ef4f02494fc3f479e87f410e9b6df20"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
