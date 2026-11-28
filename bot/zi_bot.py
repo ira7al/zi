@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.23"
+VERSION = "2026-11-28.24"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -769,6 +769,12 @@ class Bot:
         m = re.search(r"<title[^>]*>(.*?)</title>", page, re.S | re.I)
         if m:
             title = re.sub(r"\s+", " ", m.group(1)).strip()
+        for pat in (r'<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']+)',
+                    r'<meta[^>]+name=["\']twitter:title["\'][^>]+content=["\']([^"\']+)'):
+            m = re.search(pat, page, re.I)
+            if m and m.group(1).strip() and len(m.group(1).strip()) > 2:
+                title = m.group(1).strip()      # the page's own idea of its title wins
+                break
         desc = ""
         for pat in (r'<meta[^>]+property=["\']og:description["\'][^>]+content=["\']([^"\']+)',
                     r'<meta[^>]+name=["\']description["\'][^>]+content=["\']([^"\']+)'):
@@ -837,6 +843,7 @@ class Bot:
             for name in (found.get("artist"), found.get("track")):
                 if name and len(str(name)) > 1:
                     clean = re.sub(re.escape(str(name)), " ", clean, flags=re.I)
+            clean = opt.DANGLING_RE.sub(" ", clean)
             clean = re.sub(r"[\s\-|,;]+", " ", clean).strip(" ,.;-|")
         hay = (clean + " " + (query or "")).lower()
         # words he typed that name a style beat a genre label from the lookup
@@ -1236,7 +1243,7 @@ class Bot:
             self._ds_intake(chat_id, msg)
             return
         photo = msg.get("photo")
-        if photo and chat_id in self.builders and self.builders[chat_id].get("step") == "ref_wait":
+        if photo and chat_id in self.builders and self.builders[chat_id].get("step") in self.PROMPT_STEPS:
             self._reference_photo(chat_id, photo[-1])
             return
         if doc and (doc.get("file_name") or "").lower().endswith(".txt") and chat_id in self.ds_lyrics:
@@ -1390,6 +1397,17 @@ class Bot:
                 self.tg.send(chat_id, "That builder expired. /track starts a new one.")
                 return
             self._option_step(chat_id, b, data[2:])
+            return
+        if data == "p:refname":
+            if not b or not b.get("removed"):
+                self.tg.send(chat_id, "مفيش اسم اتشال أستخدمه. /nothing was removed to use as a reference.")
+                return
+            name = opt.name_from_span(b["removed"][0])
+            if not name:
+                self.tg.send(chat_id, "مش لاقي اسم في اللي اتشال. جرب Reference واكتب الاسم بنفسك.")
+                return
+            self.tg.send(chat_id, f"بستخدم {name} كمرجع للستايل / using {name} as a style reference...")
+            self._reference_from(chat_id, query=name, words="")
             return
         if data.startswith("p:"):
             if not b:
@@ -1549,7 +1567,9 @@ class Bot:
         elif code == "own":
             b["step"] = "own_prompt"
             self.tg.send(chat_id, "Send the prompt as one message. Anything the engine needs goes in it: "
-                                  "BPM, key, sound, structure. A reference to a real artist or track gets removed.")
+                                  "BPM, key, sound, structure.\n"
+                                  "A real artist or track name is taken out, and I show you exactly what I took out and why - "
+                                  "everything else stays as you wrote it.")
         elif code == "ai":
             b["step"] = "ai_idea"
             self.tg.send(chat_id, "Give me the idea in a few words: genre, mood, anything it should feel like. "
@@ -1573,23 +1593,45 @@ class Bot:
         else:
             self.tg.send(chat_id, "Tap My own prompt or AI writes it, or /cancel.")
 
+    def _removal_block(self, removed):
+        """A marker and the reason, in both languages, whenever something was taken out."""
+        if not removed:
+            return "\u2705 البرومبت زي ما هو، مفيش حاجة اتشالت.\n\u2705 Nothing removed - the prompt is your words as they are."
+        lines = ["\u26a0\ufe0f شيلت من البرومبت / Removed from the prompt:"]
+        for span in removed[:4]:
+            lines.append(f'- "{span}"')
+        lines.append("ليه / why: الأسماء الحقيقية لفنانين أو تراكات ممنوعة في خانة البرومبت. "
+                     "الوصف اللي حوالين الاسم فضل زي ما هو.\n"
+                     "Real artist or track names never go in the prompt field. The description around the name is kept.")
+        return "\n".join(lines)
+
     def _show_prompt(self, chat_id, b):
         built = b["built"]
         b["step"] = "ai_review"
         note = ""
         if b.get("ref_note"):
             note = b["ref_note"] + "\n\n"
+        note += self._removal_block(built.get("removed")) + "\n\n"
+        b["removed"] = built.get("removed") or []
+        kb = []
         if built.get("removed"):
-            note += "Removed a reference to a real artist or track: " + "; ".join(built["removed"][:3]) + "\n\n"
+            kb.append([{"text": "\U0001f50e Use as reference", "callback_data": "p:refname"}])
+        kb.append([{"text": "\u2705 Use it", "callback_data": "p:use"},
+                   {"text": "\u270f\ufe0f Edit", "callback_data": "p:edit"}])
+        kb.append([{"text": "\U0001f504 Another", "callback_data": "p:again"},
+                   {"text": "\U0001f50e New reference", "callback_data": "p:ref"}])
         self.tg.send(chat_id, f"{note}Prompt ({built['bpm']} BPM, {built['key']}, {built['genre']}):\n\n"
-                              f"{built['prompt']}",
-                     keyboard=[[{"text": "\u2705 Use it", "callback_data": "p:use"},
-                                {"text": "\u270f\ufe0f Edit", "callback_data": "p:edit"}],
-                               [{"text": "\U0001f504 Another", "callback_data": "p:again"},
-                                {"text": "\U0001f50e New reference", "callback_data": "p:ref"}]])
+                              f"{built['prompt']}", keyboard=kb)
+
+    PROMPT_STEPS = ("mode", "genre", "theme", "own_prompt", "edit_prompt", "ai_idea", "ref_wait")
 
     def _builder_text(self, chat_id, text):
         b = self.builders[chat_id]
+        link = re.search(r"(https?://\S+|www\.\S+)", text or "")
+        if link and b["step"] in self.PROMPT_STEPS:
+            # a link pasted while writing a prompt is a reference, not prompt text
+            self._reference_link(chat_id, link.group(1))
+            return
         if b["step"] == "ref_wait":
             m = re.search(r"(https?://\S+|www\.\S+)", text)
             if m:
@@ -1617,8 +1659,12 @@ class Bot:
             spec["bpm"], spec["key"] = meta["bpm"], meta["key"]
             spec.setdefault("genre", meta["genre"])
             spec.setdefault("name", meta["genre"])
+            b["removed"] = removed
             if removed:
-                self.tg.send(chat_id, "Removed a reference to a real artist or track: " + "; ".join(removed[:3]))
+                self.tg.send(chat_id, self._removal_block(removed),
+                             keyboard=[[{"text": "\U0001f50e Use as reference", "callback_data": "p:refname"}]])
+            else:
+                self.tg.send(chat_id, self._removal_block([]))
             self._show_options(chat_id, b)
         elif b["step"].startswith("opt:"):
             key = b["step"].split(":", 1)[1]
@@ -1643,7 +1689,7 @@ class Bot:
         b["step"] = "confirm"
         s = b["spec"]
         prompt = s.get("idea") or ""
-        tail = f"\n\nPrompt: {prompt[:300]}{'...' if len(prompt) > 300 else ''}" if prompt else ""
+        tail = f"\n\nPrompt: {prompt[:900]}{'...' if len(prompt) > 900 else ''}" if prompt else ""
         self.tg.send(chat_id,
             f"Ready: {s.get('genre')} | {s.get('seconds')}s | {'instrumental' if s.get('instrumental') else 'lyrics'} | {s.get('quality', 'standard')}"
             + (f" | title: {s['title']}" if s.get("title") else "") + tail,
