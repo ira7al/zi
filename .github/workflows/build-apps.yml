@@ -49,10 +49,20 @@ jobs:
         with:
           name: ZiMusicStudio-${{ matrix.label }}
           path: out/*
-      - name: Upload to release
-        if: startsWith(github.ref, 'refs/tags/')
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ZiMusicStudio-*
+          merge-multiple: true
+      - name: Create release with all installers
         shell: bash
         run: |
-          gh release create "${GITHUB_REF_NAME}" out/* --title "Zi Music Studio ${GITHUB_REF_NAME}" --generate-notes --latest || gh release upload "${GITHUB_REF_NAME}" out/* --clobber
+          ls -la
+          gh release create "${GITHUB_REF_NAME}" ZiMusicStudio-windows-x64.zip ZiMusicStudio-linux-x64.tar.gz ZiMusicStudio-macos-arm64.zip ZiMusicStudio-macos-x64.zip --title "Zi Music Studio ${GITHUB_REF_NAME}" --generate-notes --latest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
