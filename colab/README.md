@@ -131,7 +131,8 @@ The 9:16 video is used for the channel, reels and shorts; the YouTube button ren
 
 Add a secret named **ZI_LLM_KEY** (Kaggle: Add-ons > Secrets; Colab: key icon > Secrets with notebook access on) holding a free Gemini API key from Google AI Studio. Nothing else changes: the bot reads it itself, and without it the Assistant keeps answering from the bot's state exactly as in .21.
 
-- Model: `gemini-2.0-flash` by default. Override with an environment variable `ZI_LLM_MODEL` (for example `gemini-2.5-flash`) if the free tier moves.
+- Model: `gemini-3.1-flash-lite` by default, because a new free key answers 404 on `gemini-2.0-flash` and `gemini-2.5-flash` (retired for new keys). No env var is needed. `ZI_LLM_MODEL` still overrides it, and `ZI_VISION_MODEL` overrides the model used for screenshots (it defaults to the same one).
+- Gemini 3 thinking: it is billed against `maxOutputTokens`, which used to return HTTP 200 with no text at all. Thinking is now off (`thinkingBudget: 0`), the budget is 1500, and a model that refuses that setting is retried once without it. Only the answer parts count; thought parts are skipped, and an empty answer falls back to the grounded replies instead of silence.
 - Grounding: the request carries the same state block the rule-based answers use (build, engine, queue, dataset split, liked count, connected platforms, LoRA, voice/OCR). The system instruction tells the model to answer in Egyptian Arabic, short, from that state only, and to say it cannot see something rather than invent it.
 - Rate limits and failures: a 429, a quota error, a broken response or a network blip all fall back to the grounded answers, so a tap never goes unanswered.
 - The key never appears in a URL or in the logs: it travels in the `x-goog-api-key` header, and only an HTTP status code is ever printed. The state block carries no tokens or secrets.
@@ -210,7 +211,7 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
-## Bot build 2026-11-28.27: reload and engine patch
+## Bot build 2026-11-28.29: reload and engine patch
 
 The bot loads three files (`bot/zi_bot.py`, `bot/zi_options.py`, `bot/zi_assistant.py`), so a cell that only fetches `zi_bot.py` fails. Use this cell instead; it pins the commit and fetches all three.
 
@@ -226,9 +227,9 @@ What .25 changes for whoever is testing:
 - `/diag` prints which voice engines are on the box and whether screenshots have a key.
 
 ```python
-# pinned reload - build .27 (bot + its shared option model + the assistant + voice)
+# pinned reload - build .29 (bot + its shared option model + the assistant + voice)
 import os, sys, importlib.util, urllib.request
-SHA = "e8b6a46e4c5484640eada3d9e1f7561f59d937b6"
+SHA = "c1019bbdea22e1ec8ba9cd518cf38f883c3839c8"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
