@@ -110,13 +110,47 @@ def clean_idea(text):
     return out, removed
 
 
-def structure(seconds):
-    if seconds <= 180:
-        return "intro 16, build 8, drop 24, breakdown 16, second drop 24, outro 8 bars"
-    base = "intro 32, build 16, drop 32, breakdown 32, build 16, second drop 32, outro 16 bars"
+ARABIC_RANGE = re.compile(r"[\u0600-\u06ff\u0750-\u077f\ufb50-\ufdff]")
+
+
+def has_non_latin(text):
+    """True when the text carries a script the engine's English prompt should not hold."""
+    return bool(ARABIC_RANGE.search(text or ""))
+
+
+def _bars_for(seconds, bpm):
+    """How many 4/4 bars fit in the requested length at this tempo."""
+    try:
+        bpm = int(bpm)
+    except Exception:
+        bpm = 122
+    bpm = max(60, min(180, bpm))
+    bar_seconds = 240.0 / bpm
+    return max(8, int(round(float(seconds) / bar_seconds)))
+
+
+# share of the track each section takes, in order
+SECTIONS = (("intro", 0.12), ("build", 0.08), ("drop", 0.22), ("breakdown", 0.18),
+            ("build", 0.08), ("second drop", 0.22), ("outro", 0.10))
+
+
+def structure(seconds, bpm=122):
+    """A section map in bars that adds up to the length asked for, not a fixed 176 bars."""
+    total = _bars_for(seconds, bpm)
+    counts = []
+    for i, (name, share) in enumerate(SECTIONS):
+        counts.append(max(4, int(round(total * share / 4.0)) * 4))
+    diff = total - sum(counts)
+    if diff:
+        # give the remainder to the second drop (or take it from there), in whole bars
+        counts[5] = max(4, counts[5] + diff)
+    parts = []
+    for (name, _), n in zip(SECTIONS, counts):
+        parts.append(f"{name} {n}")
+    text = ", ".join(parts) + f" bars (about {sum(counts)} bars at {bpm} BPM)"
     if seconds > 360:
-        base += ", slow intro, long outro, same key and tempo throughout, no abrupt stops"
-    return base
+        text += ", slow intro, long outro, same key and tempo throughout, no abrupt stops"
+    return text
 
 
 def pick_style(idea):
@@ -127,9 +161,18 @@ def pick_style(idea):
     return "melodic techno"
 
 
-def build_prompt(idea, seconds=330, variant=0):
+VOCAL_LINE = ("Lead vocal: close-miked male baritone, clear diction, sits just behind the drop, "
+              "doubled in the chorus")
+
+
+def build_prompt(idea, seconds=330, variant=0, instrumental=True):
     """A full ACE-Step prompt from a short idea, following the library's rules."""
     clean, removed = clean_idea(idea or "")
+    if has_non_latin(clean):
+        # the engine reads an English prompt; a theme in another script only dilutes it
+        removed = removed + ["a theme written in another script"]
+        clean = ARABIC_RANGE.sub(" ", clean)
+        clean = re.sub(r"\s{2,}", " ", clean).strip(" ,.;-")
     low = clean.lower()
     style = pick_style(clean)
     prof = PROMPT_STYLES[style]
@@ -147,8 +190,9 @@ def build_prompt(idea, seconds=330, variant=0):
     if variant:
         mood = MOOD_VARIANTS[variant % len(MOOD_VARIANTS)] + ", " + mood
     theme = clean.strip().rstrip(".")
+    voice = ("Instrumental, no vocals." if instrumental else VOCAL_LINE + ".")
     prompt = (f"{bpm} BPM {prof['label']}, {mood}, {key}, {prof['sound']}. "
-              f"Structure in bars: {structure(seconds)}. {prof['mix'][0].upper() + prof['mix'][1:]}."
+              f"{voice} Structure in bars: {structure(seconds, bpm)}. {prof['mix'][0].upper() + prof['mix'][1:]}."
               + (f" Theme: {theme}." if theme else ""))
     return {"prompt": prompt, "bpm": bpm, "key": key, "genre": prof["label"],
             "removed": removed, "style": style}
@@ -201,9 +245,13 @@ def engine_payload_fields(spec):
     if spec.get("instrumental"):
         out["lyrics"] = "[inst]"
         out["instrumental"] = True
-    elif (spec.get("lyrics") or "").strip():
-        out["lyrics"] = spec["lyrics"]
+    else:
         out["instrumental"] = False
+        if (spec.get("lyrics") or "").strip():
+            out["lyrics"] = spec["lyrics"]
+        lang = (spec.get("vocal_language") or spec.get("lang") or "en")
+        if isinstance(lang, str) and lang.strip():
+            out["vocal_language"] = lang.strip()[:8]
     return out
 
 
