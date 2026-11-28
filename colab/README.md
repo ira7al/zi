@@ -214,6 +214,12 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
+## Bot build 2026-11-28.33: voice, vision, reload
+
+- Voice: edge-tts now runs as its own process (private event loop thread as backup), so it works inside Jupyter and the Egyptian voice is used before gTTS.
+- Vision: models tried in order: `ZI_VISION_MODEL` (comma list ok), then known fallbacks, then whatever the key's own model list offers for images. 429 and 5xx are retried with backoff. If none can read the picture, the bot says so plainly; OCR text is kept only if it holds real words.
+- Reload cell clears the cached bot modules first, so an old assistant module cannot stay in memory. Reload with the cell below (pinned to the build .33 commit).
+
 ## Bot build 2026-11-28.32: video, artwork, auto-filled YouTube
 
 Reload with the pinned cell below (it now also fetches `bot/zi_art.py`). Nothing new to install: numpy and Pillow come with Colab and Kaggle, and ffmpeg needs `showwaves` and `showfreqs` (standard builds have them).
@@ -242,9 +248,9 @@ What .25 changes for whoever is testing:
 - `/diag` prints which voice engines are on the box and whether screenshots have a key.
 
 ```python
-# pinned reload - build .32 (bot + options + assistant + voice + art)
+# pinned reload - build .33 (bot + options + assistant + voice + art)
 import os, sys, importlib.util, urllib.request
-SHA = "25383da3903ca539f9fad1eccf318ab02bc256a3"
+SHA = "a88e7715a0bfd2a09009ecf4505e40bf3a401e02"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
