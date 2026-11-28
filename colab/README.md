@@ -214,6 +214,10 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
+## Bot build 2026-11-28.38: vision through Groq
+
+Screenshots: Groq `qwen/qwen3.8-27b` first (same Groq key as chat; override with `ZI_GROQ_VISION_MODEL`), then Gemini, then a plain Arabic message that the picture could not be read. Sent as an OpenAI-style `image_url` data URL with `max_completion_tokens` and a normal User-Agent. 429 backs off twice. The vision prompt names nobody. Groq limits (per org): 30 requests/min, 1000/day. Reload with the pinned cell below.
+
 ## Bot build 2026-11-28.37: assistant prompt and tone
 
 The assistant now answers general questions (music terms, LoRA, BPM, anything) directly and briefly. Project facts (Mr Dorgham count, queue, publishing) only appear when he asks about the project. The tone is street Egyptian with five short examples in the prompt; formal and MSA phrasing and technical words are banned. The jargon filter now matches whole words, so ordinary words like "rapid" are no longer dropped. Same prompt feeds Groq and Gemini. Reload with the pinned cell below.
@@ -264,9 +268,9 @@ What .25 changes for whoever is testing:
 - `/diag` prints which voice engines are on the box and whether screenshots have a key.
 
 ```python
-# pinned reload - build .37 (bot + options + assistant + voice + art)
+# pinned reload - build .38 (bot + options + assistant + voice + art)
 import os, sys, importlib.util, urllib.request
-SHA = "7936b97c5ef4f02494fc3f479e87f410e9b6df20"
+SHA = "6a7bc54623119809be9b819105bdf382bfe4f000"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
