@@ -483,6 +483,63 @@ def ask_groq(question, state, key, model=None, opener=None, timeout=25, sleep=No
     return None
 
 
+GROQ_VISION_MODEL = "qwen/qwen3.8-27b"
+
+
+def build_groq_vision_request(image_bytes, mime="image/jpeg", prompt=None, model=None):
+    """OpenAI-style image_url part with a base64 data URL; max_completion_tokens, not max_tokens."""
+    import base64 as _b64
+    url = "data:" + (mime or "image/jpeg") + ";base64," + _b64.b64encode(image_bytes).decode()
+    return {"model": (model or os.environ.get("ZI_GROQ_VISION_MODEL") or GROQ_VISION_MODEL).strip(),
+            "messages": [{"role": "user", "content": [
+                {"type": "text", "text": prompt or VISION_PROMPT},
+                {"type": "image_url", "image_url": {"url": url}}]}],
+            "temperature": 0.1, "max_completion_tokens": 600}
+
+
+def read_image_groq(image_bytes, key, model=None, mime="image/jpeg", opener=None, timeout=30,
+                    sleep=None, tries=3):
+    """One screenshot through Groq vision. Returns (text or None, problem).
+
+    429 backs off (Retry-After, capped at 6 s). A normal User-Agent is sent, because the default
+    Python one gets a Cloudflare 403 (code 1010). The key is never printed.
+    """
+    if not key or not image_bytes:
+        return None, "no key or image"
+    import json as _json
+    import time as _t
+    import urllib.error as _uerr
+    import urllib.request as _req
+    sleep = sleep or _t.sleep
+    body = _json.dumps(build_groq_vision_request(image_bytes, mime, model=model)).encode()
+    problem = "empty"
+    for attempt in range(tries):
+        req = _req.Request(GROQ_URL, data=body, method="POST",
+                           headers={"Content-Type": "application/json", "Authorization": "Bearer " + key,
+                                    "User-Agent": "zi-studio-bot/1.0"})
+        try:
+            with (_opener(opener))(req, timeout=timeout) as r:
+                text = parse_groq(_json.loads(r.read()))
+        except _uerr.HTTPError as e:
+            print("groq vision HTTP", e.code)                 # the code only, never the key
+            problem = "groq: " + str(e.code)
+            if e.code == 429 and attempt + 1 < tries:
+                try:
+                    wait = float((e.headers or {}).get("Retry-After") or 0)
+                except Exception:
+                    wait = 0
+                sleep(min(max(wait, 1.5 * (attempt + 1)), 6))
+                continue
+            return None, problem
+        except Exception as e:
+            print("groq vision failed:", type(e).__name__)
+            return None, "groq: " + type(e).__name__
+        if not text or text.strip().lower().strip(" .!") in ("nothing", "لا شيء"):
+            return None, "groq: empty"
+        return text.replace("\n", " ").strip()[:300], ""
+    return None, problem
+
+
 def _opener(opener):
     if opener is not None:
         return opener

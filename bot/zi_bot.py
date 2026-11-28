@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.37"
+VERSION = "2026-11-28.38"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -715,8 +715,8 @@ class Bot:
         return bool(self.llm_key or self.groq_key)
 
     def _vision_text(self, path, mime="image/jpeg"):
-        """Read a screenshot with the free model. None when there is no key or it refuses."""
-        if not self._llm() or not self.llm_key or not hasattr(ziassist, "read_image"):
+        """Read a screenshot: Groq first, Gemini second. None when both fail (the caller says so)."""
+        if not self._llm():
             return None
         try:
             with open(path, "rb") as fh:
@@ -726,16 +726,31 @@ class Bot:
             return None
         if len(data) > 6 * 1024 * 1024:
             return None
-        models = ziassist.vision_models(self.llm_key, extra=[self.llm_model])
-        try:
-            text, problem = ziassist.read_image_retry(data, self.llm_key, models=models, mime=mime)
-        except Exception as e:
-            print("vision call failed:", type(e).__name__)
-            text, problem = None, type(e).__name__
-        self.vision_problem = problem
-        if problem:
-            print("vision: no model could read it (" + problem + ")")
-        return text or None
+        problems = []
+        if self.groq_key and hasattr(ziassist, "read_image_groq"):
+            try:
+                text, problem = ziassist.read_image_groq(data, self.groq_key, mime=mime)
+            except Exception as e:
+                print("groq vision call failed:", type(e).__name__)
+                text, problem = None, type(e).__name__
+            if text:
+                self.vision_problem = ""
+                return text
+            problems.append(problem)
+        if self.llm_key and hasattr(ziassist, "read_image_retry"):
+            models = ziassist.vision_models(self.llm_key, extra=[self.llm_model])
+            try:
+                text, problem = ziassist.read_image_retry(data, self.llm_key, models=models, mime=mime)
+            except Exception as e:
+                print("vision call failed:", type(e).__name__)
+                text, problem = None, type(e).__name__
+            if text:
+                self.vision_problem = ""
+                return text
+            problems.append(problem)
+        self.vision_problem = "; ".join(p for p in problems if p)
+        print("vision: nothing could read it (" + self.vision_problem + ")")
+        return None
 
     SUGGESTIONS = (("\u2753 إيه الناقص؟", "sug:missing"),
                    ("\u27a1\ufe0f أعمل إيه بعد كده؟", "sug:next"),
@@ -2059,7 +2074,7 @@ class Bot:
         except Exception:
             pass
         self._llm()
-        lines.append("screenshots: " + ("vision" if self.llm_key else "no key"))
+        lines.append("screenshots: " + ("vision" if (self.llm_key or self.groq_key) else "no key"))
         lines.append("chat model: " + ("groq" if self.groq_key else "no groq key") + " / " + ("gemini" if self.llm_key else "no gemini key"))
         try:
             raw = self.stats.get("last_cb_raw")
