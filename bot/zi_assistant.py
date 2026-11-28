@@ -203,7 +203,11 @@ TONE = ("الأسلوب: اتكلم زي واحد مصري عادي من الش�
         "- سأل: يعني إيه BPM؟ ← رديت: دي سرعة التراك، كام دقة في الدقيقة. ١٢٢ يعني ماشي معتدل كده، مناسب للرقص.\n"
         "- سأل: ينفع أعمل تراك هادي للسواقة بليل؟ ← رديت: طبعاً ينفع! قولي المود وأنا أظبطهولك، وغالباً هيطلع حلو.\n"
         "- سأل: مش عارف أبدأ منين ← رديت: ولا يهمك، قولي حاسس بإيه دلوقتي وأنا أطلعلك فكرة، من غير تعقيد.\n"
-        "- سأل: التراك ده طلع وحش ← رديت: ولا يهمك، نجرب تاني. قولي إيه اللي مضايقك فيه، الإيقاع ولا الجو؟")
+        "- سأل: التراك ده طلع وحش ← رديت: ولا يهمك، نجرب تاني. قولي إيه اللي مضايقك فيه، الإيقاع ولا الجو؟\n"
+        "- هزّر معاه بخفة وإحراج لطيف لو الجو هزار (زي صاحب بيرخم على صاحبه)، بس الإجابات العملية تفضل قصيرة وصح، "
+        "وإيموجي واحد أو اتنين بس.\n"
+        "لو ردك يستاهل ريأكشن على رسالته، اختم الرد بسطر لوحده بالشكل [[react:🔥]] بإيموجي واحد من: "
+        "👍 ❤ 🔥 😂 👀 🎉 🤔. لو مفيش داعي، ماتكتبهوش.")
 
 SYSTEM = ("أنت المساعد الشخصي بتاع راهال، جوّه بوت Zi Music Studio. رد بالمصري، قصير - ٤ سطور كتير.\n"
           "لو عرّفت بنفسك قول: أنا مساعدك الشخصي. ممنوع تقول \"مساعد راهال\".\n"
@@ -727,3 +731,39 @@ def combine_question(instruction, what, kind="image"):
     """One question for the assistant: his words plus what the image or link holds."""
     tag = "وصف الصورة اللي بعتها مع الرسالة" if kind == "image" else "عنوان اللينك اللي بعته مع الرسالة"
     return (instruction.strip() + "\n\n(" + tag + "، مش من كلامه: " + what.strip()[:600] + ")")
+
+
+REACTIONS = ("\U0001f44d", "\u2764", "\U0001f525", "\U0001f602", "\U0001f440", "\U0001f389", "\U0001f914")
+
+
+def split_reaction(text):
+    """Pull an optional [[react:X]] tag off a model reply. Returns (clean text, emoji or None)."""
+    import re as _re
+    m = _re.search(r"\[\[react:\s*([^\]\s]+)\s*\]\]", text or "")
+    clean = _re.sub(r"\s*\[\[react:[^\]]*\]\]\s*", "", text or "").strip()
+    emoji = m.group(1).replace("\ufe0f", "") if m else None
+    return clean, (emoji if emoji in REACTIONS else None)
+
+
+_THANKS = ("شكرا", "شكراً", "تسلم", "تسلمي", "ميرسي", "thx", "thanks", "thank you", "متشكر")
+_FUN = ("ههه", "هههه", "\U0001f602", "\U0001f923", "haha", "lol", "خخخ")
+_WIN = ("تم", "نجح", "اشتغل", "اشتغلت", "عاش", "برافو", "جامد", "تحفة", "تحفه", "طلع حلو", "\U0001f525")
+_LOVE = ("بحبك", "حبيبي", "\u2764", "ايوه كده", "أيوه كده")
+
+
+def reaction_for(text, kind="text"):
+    """Reliable, code-side pick: voice and photo get 👀, casual chat gets a fitting one, work gets none."""
+    if kind in ("voice", "photo"):
+        return "\U0001f440"
+    t = (text or "").strip().lower()
+    if not t or t.startswith("/") or len(t) > 140:
+        return None
+    if any(w in t for w in _FUN):
+        return "\U0001f602"
+    if any(w in t for w in _LOVE):
+        return "\u2764"
+    if any(w in t for w in _THANKS):
+        return "\U0001f44d"
+    if any(w in t.split() or w in t for w in _WIN) and len(t) < 60:
+        return "\U0001f525"
+    return None
