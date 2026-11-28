@@ -45,7 +45,8 @@ class ReferenceTests(unittest.TestCase):
         self.assertEqual(self.bot.builders[9]["step"], "ref_wait")
 
     def test_reference_button_sits_in_the_prompt_step(self):
-        self.assertIn("p:ref", self.keys())
+        # the separate reference button is gone: it lives inside the own-prompt flow
+        self.assertNotIn("p:ref", self.keys())
         self.enter_ref()
 
     def test_a_name_gives_a_style_and_no_name_in_the_prompt(self):

@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.38"
+VERSION = "2026-11-28.39"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -790,7 +790,23 @@ class Bot:
             print("voice send failed:", type(e).__name__)
             return False
 
+    def _save_feedback(self, text):
+        """A change request for the developer, kept as one JSON line. Returns True when saved."""
+        try:
+            with open(os.path.join(self.out_root, "feedback_notes.jsonl"), "a", encoding="utf-8") as fh:
+                fh.write(json.dumps({"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "text": (text or "")[:1000],
+                                     "build": VERSION}, ensure_ascii=False) + "\n")
+            print("feedback note saved:", (text or "")[:120])
+            return True
+        except Exception as e:
+            print("feedback note failed:", type(e).__name__)
+            return False
+
     def _assistant(self, chat_id, question, suggest=False, spoken=False):
+        if hasattr(ziassist, "is_feedback") and ziassist.is_feedback(question):
+            self._save_feedback(question)
+            self.tg.send(chat_id, ziassist.FEEDBACK_REPLY)
+            return
         try:
             state = self._snapshot()
         except Exception as e:
@@ -979,6 +995,13 @@ class Bot:
                                   "مثلاً 'melodic techno, 122 bpm, dark' - أو /cancel.")
             return
         theme = clean if clean and not opt.has_non_latin(clean) else ""
+        if b.get("step") == "own_prompt":
+            # his own prompt is coming: keep the style, never show a prompt of ours
+            b["own_ref"] = {"style": style, "theme": theme}
+            label = opt.PROMPT_STYLES.get(style, {}).get("label", style) if isinstance(style, str) else ""
+            self.tg.send(chat_id, "خدت المرجع كستايل بس" + (f" ({label})" if label else "") +
+                         ". ابعت البرومبت بتاعك دلوقتي وهستخدمهم مع بعض.")
+            return
         built = build_prompt(theme, b["spec"].get("seconds", 330), 0,
                              instrumental=b["spec"].get("instrumental", True), style=style)
         heard = []
@@ -1245,7 +1268,33 @@ class Bot:
             fh.write(r.read())
         return path
 
+    def _log_transcript(self, engine, text):
+        """One line per voice note, so a bad transcript can be debugged. No keys, no audio."""
+        print("voice transcript (" + engine + "):", (text or "")[:300])
+        try:
+            with open(os.path.join(self.out_root, "transcripts.log"), "a", encoding="utf-8") as fh:
+                fh.write(time.strftime("%Y-%m-%d %H:%M:%S") + "\t" + engine + "\t" + (text or "").replace("\n", " ")[:500] + "\n")
+        except Exception as e:
+            print("transcript log failed:", type(e).__name__)
+
     def _transcribe(self, path):
+        """Groq whisper first (much better on Egyptian Arabic), then the local model."""
+        self._llm()
+        if self.groq_key and hasattr(ziassist, "transcribe_groq"):
+            try:
+                text, problem = ziassist.transcribe_groq(path, self.groq_key)
+            except Exception as e:
+                text, problem = None, type(e).__name__
+            if text:
+                self._log_transcript("groq", text)
+                return text
+            print("groq transcription gave nothing (" + str(problem) + "), trying the local model")
+        text = self._transcribe_local(path)
+        if text:
+            self._log_transcript("local", text)
+        return text
+
+    def _transcribe_local(self, path):
         """CPU speech to text. Multilingual, because he speaks Egyptian Arabic."""
         global _WHISPER
         try:
@@ -1264,7 +1313,7 @@ class Bot:
                         print("whisper", name, "failed:", repr(e))
                 if _WHISPER is None:
                     return None
-            segments, _info = _WHISPER.transcribe(path, vad_filter=True, beam_size=1)
+            segments, _info = _WHISPER.transcribe(path, vad_filter=True, beam_size=5)
             return " ".join(seg.text.strip() for seg in segments).strip()
         except Exception as e:
             print("transcribe failed:", repr(e))
@@ -1724,10 +1773,13 @@ class Bot:
             self.tg.send(chat_id, self.REF_HINT)
         elif code == "own":
             b["step"] = "own_prompt"
+            b.pop("own_ref", None)
             self.tg.send(chat_id, "ابعت البرومبت في رسالة واحدة. كل اللي محتاجه التراك يتكتب فيها: "
                                   "BPM، المقام، الصوت، الهيكل.\n"
                                   "أي اسم مغني أو تراك حقيقي بيتشال، وبوريك بالظبط إيه اللي اتشال وليه - "
-                                  "والباقي زي ما كتبته.")
+                                  "والباقي زي ما كتبته.\n"
+                                  "ولو عايز مرجع للستايل ابعت لينك أو سكرين شوت هنا (قبل البرومبت أو بعده) "
+                                  "وهستخدمه مع البرومبت. الاسم مبيدخلش البرومبت أبداً.")
         elif code == "ai":
             b["step"] = "ai_idea"
             self.tg.send(chat_id, "قولي الفكرة في كلمتين: النوع، المود، أي إحساس عايزه. "
@@ -1814,7 +1866,17 @@ class Bot:
                 return
             spec = b["spec"]
             spec["idea"] = clean
-            meta = build_prompt(clean, spec.get("seconds", 330), 0, instrumental=spec.get("instrumental", True))
+            ref = b.get("own_ref") if b["step"] == "own_prompt" else None
+            ref_style = ref.get("style") if ref else None
+            meta = build_prompt(clean, spec.get("seconds", 330), 0, instrumental=spec.get("instrumental", True),
+                                style=ref_style if isinstance(ref_style, str) and ref_style in opt.PROMPT_STYLES else None)
+            if ref and isinstance(ref_style, str) and ref_style in opt.PROMPT_STYLES:
+                st = opt.PROMPT_STYLES[ref_style]
+                words = ", ".join(x for x in (st.get("mood"), st.get("sound")) if x)
+                if words and words.lower() not in clean.lower():
+                    spec["idea"] = clean.rstrip(" .") + ". Style reference: " + words + "."
+                spec.setdefault("genre", meta["genre"])
+                self.tg.send(chat_id, "استخدمت المرجع مع البرومبت بتاعك (ستايل بس، من غير أي اسم).")
             spec["bpm"], spec["key"] = meta["bpm"], meta["key"]
             spec.setdefault("genre", meta["genre"])
             spec.setdefault("name", meta["genre"])
@@ -1870,11 +1932,7 @@ class Bot:
                                                            "instrumental": True, "seconds": 330}}
         genres = list(GENRE_PRESETS)
         kb = [[{"text": "\u270d\ufe0f بروموبت من عندي", "callback_data": "p:own"},
-               {"text": "\u2728 الذكاء يكتبه", "callback_data": "p:ai"}],
-              [{"text": "\U0001f50e مرجع", "callback_data": "p:ref"}]]
-        last = self._last_spec()
-        if last:
-            kb.append([{"text": self._last_label(last), "callback_data": "last"}])
+               {"text": "\u2728 الذكاء يكتبه", "callback_data": "p:ai"}]]
         kb += [[{"text": g, "callback_data": g}] for g in genres]
         self.tg.send(chat_id, "تراك جديد. اختار ستايل، أو اكتب البرومبت بنفسك، "
                               "أو سيبني أكتبه من فكرة قصيرة.\n" + ASSIST_HINT, keyboard=kb)
