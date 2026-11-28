@@ -648,8 +648,9 @@ def audio_style_for(res, styles):
 # ---------- private user records (build .49) ----------
 # Profile basics of whoever opens the bot, plus the owner's library metadata, go to a PRIVATE GitHub repo.
 # Only whitelisted fields are ever written, so a token or a path cannot leak into it.
-USERS_NOTICE = "بنسجّل رقم تيليجرام واسمك وتاريخ دخولك وبيانات استخدامك في مكان خاص بصاحب البوت بس."
-PROFILE_FIELDS = ("telegram_id", "username", "name", "language_code", "first_seen", "last_seen", "is_owner", "role", "plan")
+USERS_NOTICE = "بنسجّل رقم تيليجرام واسمك ورقم موبايلك (لو شاركته) وتاريخ دخولك وبيانات استخدامك في مكان خاص بصاحب البوت بس."
+PROFILE_FIELDS = ("telegram_id", "username", "name", "language_code", "first_seen", "last_seen", "is_owner", "role", "plan",
+                  "phone", "phone_verified", "phone_verified_at")
 TRACK_FIELDS = ("title", "genre", "prompt", "caption", "bpm", "key", "language", "instrumental",
                 "actual_duration_sec", "quality", "seed", "created", "kept", "when")
 
@@ -751,3 +752,26 @@ def sync_private(repo, token, files, last_hashes, opener=None):
         else:
             problems.append(path + ": " + why)
     return pushed, problems
+
+
+# Phone proof. Telegram verifies the number itself when someone taps a request_contact button, and it is
+# free. SMS or WhatsApp codes cost money per message, so those two are empty slots for a later provider.
+PHONE_PROOF = {"telegram_contact": True, "sms": None, "whatsapp": None}
+
+
+def accept_contact(users, frm, contact, now):
+    """Store a shared number only when the contact is the sender's own. Returns (ok, phone or reason)."""
+    if not isinstance(frm, dict) or not isinstance(contact, dict):
+        return False, "no contact"
+    if contact.get("user_id") is None or contact.get("user_id") != frm.get("id"):
+        return False, "not own number"
+    phone = re.sub(r"[^0-9+]", "", str(contact.get("phone_number") or ""))
+    if len(phone) < 7:
+        return False, "no number"
+    if not phone.startswith("+"):
+        phone = "+" + phone
+    rec = users.get(str(frm["id"]))
+    if rec is None:
+        return False, "unknown user"
+    rec.update(phone=phone, phone_verified=True, phone_verified_at=now, last_seen=now)
+    return True, phone

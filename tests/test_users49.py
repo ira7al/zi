@@ -91,3 +91,32 @@ class Users(unittest.TestCase):
         b.sync_status = ""
         self.assertFalse(b._sync_once())          # no token: local only, no crash
         self.assertIn("device only", b.sync_status)
+
+
+class Phone(unittest.TestCase):
+    def test_contact_must_be_own(self):
+        users = {}
+        zo.note_user(users, zo.user_from_update({"id": 5}), "t")
+        self.assertEqual(zo.accept_contact(users, {"id": 5}, {"user_id": 6, "phone_number": "20100"}, "n"), (False, "not own number"))
+        self.assertEqual(zo.accept_contact(users, {"id": 5}, {"phone_number": "201001234567"}, "n"), (False, "not own number"))
+        self.assertNotIn("phone", users["5"])
+        ok, ph = zo.accept_contact(users, {"id": 5}, {"user_id": 5, "phone_number": "201001234567"}, "n")
+        self.assertEqual((ok, ph), (True, "+201001234567"))
+        self.assertTrue(users["5"]["phone_verified"])
+        self.assertIn("phone_verified", zo.clean_profile(users["5"]))
+
+    def test_bot_flow(self):
+        b = make()
+        hi = {"update_id": 1, "message": {"chat": {"id": 99}, "from": {"id": 99, "first_name": "S"}, "text": "hi"}}
+        seen = []
+        orig = b.tg.send
+        b.tg.send = lambda c, text, keyboard=None, reply=None: (seen.append(reply), orig(c, text, keyboard))[1]
+        b._handle(hi)
+        self.assertTrue(any("request_contact" in json.dumps(r) for r in seen if r))
+        fake = {"update_id": 2, "message": {"chat": {"id": 99}, "from": {"id": 99}, "contact": {"user_id": 123, "phone_number": "1555"}}}
+        b._handle(fake)
+        self.assertFalse(b.users["99"].get("phone_verified"))
+        good = {"update_id": 3, "message": {"chat": {"id": 99}, "from": {"id": 99}, "contact": {"user_id": 99, "phone_number": "201001234567"}}}
+        b._handle(good)
+        self.assertTrue(b.users["99"]["phone_verified"])
+        self.assertEqual(zo.PHONE_PROOF["sms"], None)
