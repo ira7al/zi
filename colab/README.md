@@ -214,6 +214,12 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
+## Bot build 2026-11-28.50: verified phone
+
+- A stranger's first message gets a Share My Number button (Telegram's request_contact). The number is accepted only when the contact's user id equals the sender's id, so Telegram has verified it and nobody can submit someone else's. It is stored as phone, phone_verified and phone_verified_at in the private record. It is optional.
+- SMS and WhatsApp codes cost money per message, so they are not built. `PHONE_PROOF` in `bot/zi_options.py` holds empty slots for them.
+- The notice in the bot and the privacy page now mention the phone number.
+
 ## Bot build 2026-11-28.49: private user records
 
 - Everyone who opens the bot is recorded: Telegram id, username, name, language, first and last seen, role (admin or user) and plan (free by default, owner for Rahal; room for paid plans later, no payments built). The owner's library metadata (title, style, settings, starred) is recorded too. Only listed fields are written, so no token or file path can reach the records.
@@ -365,9 +371,9 @@ What .25 changes for whoever is testing:
 - `/diag` prints which voice engines are on the box and whether screenshots have a key.
 
 ```python
-# pinned reload - build .49 (bot + options + assistant + voice + art)
+# pinned reload - build .50 (bot + options + assistant + voice + art)
 import os, sys, importlib.util, urllib.request
-SHA = "7ca01f6035ee68b8139a7ca2f48b2e7f568c9039"
+SHA = "2f342b8a41365497bbc441632cad2687928bbaa9"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
