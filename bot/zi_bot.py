@@ -11,12 +11,13 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.19"
+VERSION = "2026-11-28.20"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
 FILE_API = "https://api.telegram.org/file/bot{token}/{path}"
 TG_LIMIT = 49 * 1024 * 1024  # bot upload practical limit
+STUDIO_URL = "https://ira7al.github.io/zi/"   # the Studio web app (works on a phone)
 
 # GPU sharing guard: the bot renders in the same kernel as the notebook's own
 # renders (Infra's FL queue), so a bot job must wait for the GPU to be free.
@@ -91,6 +92,7 @@ COMMANDS = [("menu", "every action, as buttons"),
             ("status", "engine and session status"),
             ("library", "latest releases"),
             ("publish", "publish the last track"),
+            ("studio", "the Studio web app"),
             ("social", "links to the profiles"),
             ("liked", "tracks you kept"),
             ("dataset", "training set status"),
@@ -102,6 +104,7 @@ COMMANDS = [("menu", "every action, as buttons"),
             ("help", "all commands")]
 
 HELP = """Zi Music Studio bot - make tracks from chat.
+Menu and Studio are the two buttons under the message box.
 /menu - every action as one button (start here)
 /track - guided builder: pick a style, write your own prompt, let it write one from your idea,
          or send a reference (a name, a link, a screenshot, a voice note) to work out the style
@@ -113,6 +116,7 @@ HELP = """Zi Music Studio bot - make tracks from chat.
 /get <title> - send a track's MP3 + cover + info
 /routenote <title> - send the RouteNote form text for a track
 /publish [title] - post the last track (or the named one) to YouTube, Instagram, TikTok, the Telegram channel, Facebook
+/studio - the Studio web app link, and the Menu / Studio buttons
 /social - links to the YouTube, Instagram, TikTok and Telegram channel profiles
 /liked - tracks you marked as keepers (LoRA set)
 /dataset - training set status (files sent for the Mr Dorgham model)
@@ -214,10 +218,12 @@ class TG:
         except Exception:
             return None
 
-    def send(self, chat_id, text, keyboard=None):
+    def send(self, chat_id, text, keyboard=None, reply=None):
         fields = {"chat_id": chat_id, "text": text[:4000], "message_thread_id": self._thread(chat_id)}
         if keyboard:
             fields["reply_markup"] = json.dumps({"inline_keyboard": keyboard})
+        elif reply:
+            fields["reply_markup"] = json.dumps(reply)
         try:
             r = self.call("sendMessage", **fields)
             self._note(text, True)
@@ -328,6 +334,18 @@ class Bot:
         print("Zi bot pairing code:", self.pair_code)
         print("Send this in Telegram to the bot:  /start", self.pair_code)
         print("=" * 50)
+
+    @staticmethod
+    def launcher():
+        """The two buttons under the message box: Menu opens the bot's menu, Studio opens the app."""
+        return {"keyboard": [[{"text": "\u2630 Menu"},
+                              {"text": "\U0001f39b Studio", "web_app": {"url": STUDIO_URL}}]],
+                "resize_keyboard": True, "is_persistent": True}
+
+    def _launcher(self, chat_id, text=None):
+        text = text or ("Two buttons under the message box: Menu for the bot, Studio for the web app "
+                        "(" + STUDIO_URL + ").")
+        self.tg.send(chat_id, text, reply=self.launcher())
 
     def _is_owner(self, chat_id):
         return self.owner is not None and chat_id == self.owner
@@ -1086,6 +1104,7 @@ class Bot:
                 self._save(self.owner_path, {"chat_id": chat_id})
                 self.pair_code = None
                 self.tg.send(chat_id, "Bound. This bot answers only you now.\n\n" + HELP)
+                self._launcher(chat_id, "Two buttons under the box now: Menu for the bot, Studio for the web app.")
             else:
                 self.tg.send(chat_id, "This is a private studio bot.")
             return
@@ -1122,6 +1141,16 @@ class Bot:
         if chat_id in self.builders and not text.startswith("/"):
             self._builder_text(chat_id, text)
             return
+        low = text.lower().strip()
+        if low in ("menu", "\u2630 menu", "\u2630") or low.startswith("menu ") or low == "\u0627\u0644\u0642\u0627\u0626\u0645\u0629":
+            self._menu(chat_id)
+            self._launcher(chat_id, "Menu is above. Studio is the button on the right.")
+            return
+        if low in ("studio", "\U0001f39b studio", "\U0001f39b") or low.startswith("studio "):
+            self.tg.send(chat_id, "Studio app: " + STUDIO_URL + "\nIt opens inside Telegram if your client supports it, "
+                                  "or in the browser from that link.")
+            self._launcher(chat_id)
+            return
         if not text.startswith("/"):
             # free text with no builder: treat it as an idea and draft the prompt
             self._track(chat_id, "")
@@ -1136,8 +1165,12 @@ class Bot:
         cmd = cmd.lower().split("@")[0]
         if cmd == "/start" or cmd == "/help":
             self.tg.send(chat_id, HELP, keyboard=[[{"text": "\u2630 Menu", "callback_data": "menu"}]])
+            self._launcher(chat_id)
         elif cmd == "/menu":
             self._menu(chat_id)
+        elif cmd == "/studio":
+            self.tg.send(chat_id, "Studio app: " + STUDIO_URL)
+            self._launcher(chat_id)
         elif cmd == "/cancel":
             self.builders.pop(chat_id, None)
             self.tg.send(chat_id, "Cancelled.")
