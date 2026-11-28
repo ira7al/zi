@@ -214,6 +214,10 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
+## Bot build 2026-11-28.36: Groq model fix
+
+Groq default is now `openai/gpt-oss-120b`; on 404 or another HTTP error the next model is tried (`qwen/qwen3.8-27b`), `ZI_GROQ_MODEL` still goes first. Then Gemini, then the grounded answers. Screenshots stay Gemini-only and say plainly when they cannot be read. Reload with the pinned cell below.
+
 ## Bot build 2026-11-28.35: Groq for the assistant
 
 Answer order: Groq (OpenAI-compatible, free plan), then Gemini, then the grounded rule-based answers. Key: Kaggle/Colab secret `GROQ_API_KEY` (or env `ZI_GROQ_KEY`). Model: `openai/gpt-oss-120b`, override with `ZI_GROQ_MODEL`. A 429 is retried with a short backoff, then it falls through. The key is only sent in the Authorization header and never printed. `/diag` shows whether each key is present. Reload with the pinned cell below.
@@ -256,9 +260,9 @@ What .25 changes for whoever is testing:
 - `/diag` prints which voice engines are on the box and whether screenshots have a key.
 
 ```python
-# pinned reload - build .35 (bot + options + assistant + voice + art)
+# pinned reload - build .36 (bot + options + assistant + voice + art)
 import os, sys, importlib.util, urllib.request
-SHA = "82fa6601ac6f24640041994fcd7ee397e3d77050"
+SHA = "e25dd5d28ea043987c5df768e0c46ae52f4877c1"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
