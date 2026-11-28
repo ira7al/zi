@@ -33,9 +33,9 @@ class MenuButtonTests(unittest.TestCase):
     def test_menu_posts_every_action_as_buttons(self):
         self.say("/menu")
         flat = [b.get("callback_data") for row in self.bot.tg.sent[-1]["keyboard"] for b in row]
-        for want in ("menu:track", "menu:own", "menu:ai", "menu:library", "menu:publish",
-                     "menu:social", "menu:assistant", "menu:dataset", "menu:status",
-                     "menu:routenote", "menu:diag", "menu:help"):
+        for want in ("menu:track", "menu:own", "menu:ai", "menu:library",
+                     "menu:social", "menu:dataset",
+                     "menu:routenote", "menu:more"):
             self.assertIn(want, flat)
 
     def test_it_also_works_typed_in_arabic(self):

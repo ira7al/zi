@@ -233,8 +233,8 @@ class BuilderTests(unittest.TestCase):
     def test_menu_lists_every_action(self):
         self.msg("/menu")
         data = buttons(self.bot.tg.sent[-1])
-        for want in ("menu:track", "menu:own", "menu:ai", "menu:library", "menu:publish",
-                     "menu:social", "menu:status", "menu:routenote", "menu:diag", "menu:help"):
+        for want in ("menu:track", "menu:own", "menu:ai", "menu:library",
+                     "menu:social", "menu:routenote", "menu:more"):
             self.assertIn(want, data)
 
     def test_menu_own_prompt_goes_straight_to_the_prompt_question(self):
