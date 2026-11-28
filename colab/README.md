@@ -214,6 +214,13 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
+## Bot build 2026-11-28.49: private user records
+
+- Everyone who opens the bot is recorded: Telegram id, username, name, language, first and last seen, role (admin or user) and plan (free by default, owner for Rahal; room for paid plans later, no payments built). The owner's library metadata (title, style, settings, starred) is recorded too. Only listed fields are written, so no token or file path can reach the records.
+- Records go to the PRIVATE repo `ira7al/zi-private-data` (`users/<id>.json`, `library/<owner id>.json`) on first login and then every 30 minutes when something changed. The bot needs a secret named `ZI_DATA_TOKEN` (a token that can write to that one repo). Without it the records stay on the device and `/diag` says so. `ZI_DATA_REPO` can override the repo name.
+- Rahal (id 7835590874) is the owner by default when no owner file exists, so a wiped device needs no pairing code. An existing owner file always wins. `ZI_OWNER_ID` overrides the default.
+- A one-line notice is in the pairing message and in the first reply to a stranger. The privacy page now says what is stored.
+
 ## Bot build 2026-11-28.48: English buttons
 
 - Every button label is English, short, with an emoji (New Track, Library, Prompt + Reference, AI Writes It, Social Links, Dorgham, RouteNote Form, More, Studio, Generate, Ask Me, Publish, Remix / Cover, Remaster, Tweak & Regenerate, Cover Art, Video, Mark as The One, Another Track). All bot messages stay Egyptian Arabic.
@@ -358,9 +365,9 @@ What .25 changes for whoever is testing:
 - `/diag` prints which voice engines are on the box and whether screenshots have a key.
 
 ```python
-# pinned reload - build .48 (bot + options + assistant + voice + art)
+# pinned reload - build .49 (bot + options + assistant + voice + art)
 import os, sys, importlib.util, urllib.request
-SHA = "a0bb4f567cdf432c4e8cb215a47a3a1d69c90106"
+SHA = "7ca01f6035ee68b8139a7ca2f48b2e7f568c9039"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
