@@ -59,11 +59,23 @@ def status_of(key):
 
 # ---------- prompt building ----------
 PROMPT_STYLES = {
-    "melodic techno": {"label": "melodic techno", "bpm": 122, "key": "A minor",
-        "mood": "bittersweet, late-night",
-        "sound": "tight punchy kick, deep sub bass, emotional minor chord progression on a soft pluck, "
-                 "lush atmospheric pads, hypnotic arpeggio, distant reverb vocal chops",
-        "mix": "spacious mix, clean low mids, open top end"},
+    "house style": {"label": "melodic house", "bpm": 124, "key": "F major",
+        "mood": "major key with a wistful edge, dreamy, driving, nostalgic",
+        "sound": "four-on-the-floor, punchy dry kick, rolling round sidechained sub bass with melodic movement, "
+                 "offbeat open hats, shuffled hats, shaker and hand percussion, plucky arpeggio motif, "
+                 "simple memorable synth hook, warm wide analog pads, airy vocal chops, patient DJ-style intro, "
+                 "gradual build, emotional breakdown, riser, euphoric drop",
+        "mix": "wide airy stereo, mono-solid deep warm low end, warm saturation, clean polished club master with headroom"},
+    "organic house": {"label": "organic house", "bpm": 120, "key": "D major",
+        "mood": "warm, breezy, sunset",
+        "sound": "soft kick, warm round bass, shakers, airy pads, gentle pluck melody, breathy vocal texture, "
+                 "slow evolving build",
+        "mix": "spacious warm natural mix"},
+    "melodic techno": {"label": "melodic techno", "bpm": 122, "key": "G minor",
+        "mood": "melancholic, cinematic, late-night",
+        "sound": "soft kick, deep rolling bass, evolving arps, emotive pads, long atmospheric intro, "
+                 "distant reverb vocal chops",
+        "mix": "spacious warm mix, clean low mids"},
     "melodic house": {"label": "melodic house", "bpm": 124, "key": "F# major",
         "mood": "uplifting, emotional",
         "sound": "soft round kick, warm rolling bass, airy plucked lead, warm supersaw pads, gentle percussion",
@@ -72,10 +84,11 @@ PROMPT_STYLES = {
         "mood": "patient, sunrise euphoria",
         "sound": "rolling bassline, crisp claps, slowly opening filter arpeggio, layered pads, festival riser",
         "mix": "wide stereo image, clean low mids, open top end"},
-    "indie dance": {"label": "indie dance", "bpm": 120, "key": "E major",
-        "mood": "playful, sun-soaked",
-        "sound": "live-feel bass guitar groove, four-on-the-floor kick, funky guitar chops, analog synth stabs, warm claps",
-        "mix": "warm analog mix, crisp high end"},
+    "indie dance": {"label": "indie dance", "bpm": 124, "key": "F minor",
+        "mood": "bittersweet, playful",
+        "sound": "gritty melodic analog bassline, four-on-the-floor kick, snappy claps, retro arpeggio, "
+                 "catchy synth hook, short filtered intro",
+        "mix": "tight punchy master, crisp high end"},
     "afro house": {"label": "deep afro house", "bpm": 122, "key": "G minor",
         "mood": "warm, hypnotic",
         "sound": "smooth deep kick, warm sub, layered djembe and shaker groove, soulful chord stabs, flute-like lead",
@@ -89,11 +102,17 @@ PROMPT_STYLES = {
         "sound": "hard punchy kick, driving offbeat bass, hypnotic acid sequence, sharp hats, white-noise risers",
         "mix": "loud club mix, tight low end, crisp high end"},
 }
-STYLE_LOOKUP = [(("indie",), "indie dance"), (("afro",), "afro house"),
+STYLE_LOOKUP = [(("indie",), "indie dance"), (("afro",), "afro house"), (("organic",), "organic house"),
                 (("downtempo", "ambient", "chill", "lofi", "lo-fi"), "downtempo"),
                 (("progressive",), "progressive"), (("peak", "acid", "hard techno"), "peak techno"),
                 (("melodic house",), "melodic house"), (("melodic techno", "techno"), "melodic techno"),
                 (("house",), "melodic house")]
+# production traits shared by every style: the feel he wants across the catalogue
+HOUSE_TRAITS = ("mono-solid low end, wide stereo top, warm polished master with headroom (not over-limited), "
+                "few elements each well placed, no muddy mids, background layers low and ducked")
+EASTERN_WORDS = ("eastern", "oriental", "arabic", "arab", "oud", "maqam", "organic", "egyptian")
+EASTERN_FLAVOR = ("eastern flavor, 123 bpm feel, darbuka and hand percussion, plucked oud-like motif, ney flute, "
+                  "soft Arabic-style vocal lines, hypnotic groove")
 MOOD_VARIANTS = ["cinematic and patient", "hypnotic and driving", "warm and spacious"]
 # a tap on "Another" should change the arrangement too, not only the adjectives
 FOCUS_VARIANTS = ("the arpeggio carries the hook", "the bassline carries the groove",
@@ -248,7 +267,7 @@ def pick_style(idea):
             key = (i, -len(w))
             if best_key is None or key < best_key:
                 best, best_key = name, key
-    return best or "melodic techno"
+    return best or "house style"
 
 
 VOCAL_LINE = ("Lead vocal: close-miked male baritone, clear diction, sits just behind the drop, "
@@ -283,17 +302,20 @@ def build_prompt(idea, seconds=330, variant=0, instrumental=True, style=None):
     mood = ("dark, " + prof["mood"]) if dark else prof["mood"]
     focus = None
     mix = prof["mix"]
+    sound = prof["sound"]
+    if any(w in low for w in EASTERN_WORDS) and style in ("house style", "melodic house", "afro house", "organic house"):
+        sound = sound + ", " + EASTERN_FLAVOR
     if variant:
         mood = MOOD_VARIANTS[variant % len(MOOD_VARIANTS)] + ", " + mood
         focus = FOCUS_VARIANTS[(variant // len(MOOD_VARIANTS)) % len(FOCUS_VARIANTS)]
         mix = MIX_VARIANTS[variant % len(MIX_VARIANTS)]
     theme = clean.strip().rstrip(".")
     voice = ("Instrumental, no vocals." if instrumental else VOCAL_LINE + ".")
-    prompt = (f"{bpm} BPM {prof['label']}, {mood}, {key}, {prof['sound']}"
+    prompt = (f"{bpm} BPM {prof['label']}, {mood}, {key}, {sound}"
               + (f", {focus}" if focus else "") + f". "
-              f"{voice} Structure in bars: {structure(seconds, bpm)}. {mix[0].upper() + mix[1:]}."
+              f"{voice} Structure in bars: {structure(seconds, bpm)}. {mix[0].upper() + mix[1:]}. {HOUSE_TRAITS[0].upper() + HOUSE_TRAITS[1:]}."
               + (f" Theme: {theme}." if theme else ""))
-    sounds = [x.strip() for x in prof["sound"].split(",") if x.strip()][:3]
+    sounds = [x.strip() for x in sound.split(",") if x.strip()][:3]
     summary = (f"{prof['label']}, {mood}, about {bpm} BPM ({bpm - 3}-{bpm + 3}), {key}, "
                f"{'instrumental' if instrumental else 'with vocals'}, "
                f"{', '.join(sounds)}")
