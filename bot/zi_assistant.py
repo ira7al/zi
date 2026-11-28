@@ -168,6 +168,66 @@ def answer(question, state):
             "حالة الشغل، تراكات التدريب، اللي حفظته، النشر، وموديل مستر درغام.")
 
 
+# ---------- optional: a free hosted model, when a key is present ----------
+SYSTEM = ("أنت مساعد جوّه بوت Zi Music Studio بتاع راهال. رد بالمصري، قصير - ٤ سطور كتير.\n"
+          "كل حقيقة في ردك لازم تكون من الحالة اللي تحت. لو الحاجة مش في الحالة قول إنك مش شايفها.\n"
+          "ما تخترعش أرقام ولا مميزات، وما تقولش إنك عملت حاجة. ماتكلمش عن أي مفاتيح أو أسرار.")
+
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+
+
+def build_request(question, state, model="gemini-2.0-flash"):
+    """The exact body sent to the free model: the state block, then the question."""
+    return {"system_instruction": {"parts": [{"text": SYSTEM}]},
+            "contents": [{"role": "user", "parts": [{"text":
+                          "الحالة الحقيقية للبوت:\n" + context_block(state) +
+                          "\n\nسؤاله: " + (question or "").strip()}]}],
+            "generationConfig": {"temperature": 0.4, "maxOutputTokens": 500}}
+
+
+def parse_response(data):
+    try:
+        parts = data["candidates"][0]["content"]["parts"]
+        text = "".join(p.get("text", "") for p in parts).strip()
+        return text or None
+    except Exception:
+        return None
+
+
+def ask_llm(question, state, key, model="gemini-2.0-flash", opener=None, timeout=20):
+    """One call to the free Gemini tier. None on any failure, so the caller falls back.
+
+    The key travels in a header, never in the URL, and is never printed: a 429, a
+    quota error or a network blip all come back as None and the grounded answers
+    take over.
+    """
+    if not key:
+        return None
+    import json as _json
+    import urllib.error as _uerr
+    import urllib.request as _req
+    body = _json.dumps(build_request(question, state, model)).encode()
+    req = _req.Request(GEMINI_URL.format(model=model), data=body, method="POST",
+                       headers={"Content-Type": "application/json", "x-goog-api-key": key})
+    try:
+        with (_opener(opener))(req, timeout=timeout) as r:
+            data = _json.loads(r.read())
+    except _uerr.HTTPError as e:
+        print("assistant llm HTTP", e.code)          # the code only, never the key
+        return None
+    except Exception as e:
+        print("assistant llm failed:", type(e).__name__)
+        return None
+    return parse_response(data)
+
+
+def _opener(opener):
+    if opener is not None:
+        return opener
+    import urllib.request as _req
+    return _req.urlopen
+
+
 def context_block(state):
     """The same facts as plain text, for a hosted model later."""
     return "\n".join([
