@@ -208,14 +208,20 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
-## Bot build 2026-11-28.24: reload and engine patch
+## Bot build 2026-11-28.25: reload and engine patch
 
-The bot now loads a second file (`bot/zi_options.py`), so a cell 5 that only fetches `zi_bot.py` fails. Use this cell instead; it pins the commit and fetches both.
+The bot loads three files (`bot/zi_bot.py`, `bot/zi_options.py`, `bot/zi_assistant.py`), so a cell that only fetches `zi_bot.py` fails. Use this cell instead; it pins the commit and fetches all three.
+
+What .25 changes for whoever is testing:
+
+- Typed text with nothing open goes to the assistant and gets an answer plus two or three next-step buttons. A spoken idea still starts a track; a spoken question goes to the assistant.
+- A one-line hint and an "اسألني" button sit on the track menu, the prompt preview, the options screen, the ready card and the message after delivery.
+- The bot asks Telegram for a native commands menu button at start. Telegram accepts it, but the bot's BotFather menu button still wins, so the corner button stays "Studio" until that BotFather setting is removed or edited.
 
 ```python
-# pinned reload - build .24 (bot + its shared option model + the assistant)
+# pinned reload - build .25 (bot + its shared option model + the assistant)
 import os, sys, importlib.util, urllib.request
-SHA = "812e3b75cecd04e325c95884ec8d602b2389244a"
+SHA = "3cd504be4555dd33b284deaf15832129b1567673"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
