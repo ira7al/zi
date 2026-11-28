@@ -99,21 +99,76 @@ MIX_VARIANTS = ("spacious mix, clean low mids, open top end",
                 "warm analog mix, soft top end, wide stereo image")
 BPM_RE = re.compile(r"\b(1[0-4]\d)\b")
 KEY_RE = re.compile(r"\b(?:in\s+|key\s+(?:of\s+)?)([A-G][#b]?)\s*(minor|major|maj|m)?\b", re.I)
-# a reference to a real act, label or song has no place in a prompt field
-BANNED_PATTERNS = [re.compile(p, re.I) for p in (
-    r"in the style of[^,.;]*", r"sounds? (?:a lot )?like[^,.;]*", r"similar to[^,.;]*",
-    r"inspired by[^,.;]*", r"cover(?:s)? of[^,.;]*", r"remix of[^,.;]*",
-    r"\bfeat\.?[^,.;]*", r"\bvs\.?\s[^,.;]*")]
+# A reference to a real act, label or song has no place in a prompt field. The old
+# version cut everything up to the next comma, so "inspired by driving four-on-the-floor
+# kick" lost a description that was never a name. Now a trigger phrase only removes a
+# name-like span - capitalised words that are not music vocabulary - and when there is
+# no name, the text is left exactly as he wrote it.
+MUSIC_WORDS = {
+    "melodic", "techno", "house", "dance", "indie", "afro", "downtempo", "ambient", "progressive",
+    "trance", "disco", "funk", "soul", "jazz", "pop", "rock", "club", "track", "song", "beat",
+    "drop", "kick", "bass", "bassline", "arpeggio", "arpeggios", "pad", "pads", "hat", "hats",
+    "hi-hats", "structure", "bpm", "key", "minor", "major", "mood", "vibe", "style", "sound",
+    "mix", "chorus", "verse", "intro", "outro", "build", "build-up", "breakdown", "groove",
+    "percussion", "synth", "piano", "guitar", "vocal", "vocals", "male", "female", "driving",
+    "punchy", "hypnotic", "emotional", "clean", "fresh", "dynamic", "crisp", "memorable",
+    "warm", "dark", "deep", "soft", "hard", "peak", "late", "night", "summer", "analog",
+    "four-on-the-floor", "rolling", "atmospheric", "cinematic", "uplifting", "energetic",
+    "techno,", "the", "a", "an", "and", "with", "into", "like",
+}
+
+TRIGGERS = (r"in the style of", r"style of", r"similar(?:ly)?\s+(?:vibe\s+)?to", r"vibe of",
+            r"sounds?\s+(?:a lot\s+)?like", r"inspired by", r"remix(?:ed)? of", r"cover(?:s)? of")
+
+NAME_RE = re.compile(
+    r"(?i:\b(?:" + "|".join(TRIGGERS) + r"))\s+"
+    r"(?P<name>(?:[A-Z][\w'&.\-]*\s+){0,3}[A-Z][\w'&.\-]*)"
+    r"(?P<tail>\s+(?:style|vibe|sound|type|kind|territory))?")
+SIMPLE_RE = re.compile(r"(?i:\b(?:feat\.?|vs\.?|ft\.?))\s+"
+                       r"(?P<name>(?:[A-Z][\w'&.\-]*\s+){0,3}[A-Z][\w'&.\-]*)")
+DANGLING_RE = re.compile(r"(?i:\b(?:similar(?:ly)?\s+(?:vibe\s+)?to|in the style of|style of|"
+                         r"vibe of|sounds?\s+like|inspired by|remix(?:ed)? of|cover(?:s)? of))"
+                         r"\s*(?:style|vibe|sound|type|kind)?\b")
+
+
+def name_from_span(span):
+    """The name inside a removed span: 'similar vibe to Goom Gum style' -> 'Goom Gum'."""
+    out = DANGLING_RE.sub(" ", span or "")
+    out = re.sub(r"(?i)^\s*(?:feat\.?|ft\.?|vs\.?)\s+", "", out)
+    out = re.sub(r"(?i)\b(style|vibe|sound|type|kind|territory)\b", " ", out)
+    return re.sub(r"\s{2,}", " ", out).strip(" ,.;:-")
+
+
+def looks_like_name(name):
+    """A capitalised span that still carries at least one word music vocabulary does not explain."""
+    words = [w for w in re.split(r"\s+", (name or "").strip()) if w]
+    if not words:
+        return False
+    kept = [w for w in words if w.lower().strip(".,;:") not in MUSIC_WORDS]
+    return bool(kept)
 
 
 def clean_idea(text):
-    """Drop anything that names a real act, label or song. Returns (text, removed)."""
-    removed, out = [], text or ""
-    for rx in BANNED_PATTERNS:
-        removed += [m.strip() for m in rx.findall(out)]
-        out = rx.sub(" ", out)
-    out = re.sub(r"\s{2,}", " ", out).strip(" ,.;-")
-    return out, removed
+    """Drop a reference to a real act, label or song. Returns (text, removed spans).
+
+    Only a name-like span goes, with its trigger phrase. A description after
+    "inspired by" or "similar to" stays, because it was never a name.
+    """
+    removed, out = [], (text or "")
+
+    def cut(m):
+        if not looks_like_name(m.group("name")):
+            return m.group(0)
+        removed.append(m.group(0).strip())
+        return " "
+
+    out = NAME_RE.sub(cut, out)
+    out = SIMPLE_RE.sub(cut, out)
+    out = re.sub(r"\s+([,.;:])", r"\1", out)          # no space left before punctuation
+    out = re.sub(r",\s*,+", ", ", out)                 # and no doubled commas
+    out = re.sub(r"\s{2,}", " ", out)
+    out = re.sub(r"^[,;:.\s]+|[,;:.\s]+$", "", out)
+    return out.strip(), removed
 
 
 ARABIC_RANGE = re.compile(r"[\u0600-\u06ff\u0750-\u077f\ufb50-\ufdff]")
@@ -178,11 +233,18 @@ def genre_to_style(genre):
 
 
 def pick_style(idea):
+    """The style he named first wins: 'melodic techno and indie dance' is melodic techno."""
     low = (idea or "").lower()
+    best, best_key = None, None
     for words, name in STYLE_LOOKUP:
-        if any(w in low for w in words):
-            return name
-    return "melodic techno"
+        for w in words:
+            i = low.find(w)
+            if i < 0:
+                continue
+            key = (i, -len(w))
+            if best_key is None or key < best_key:
+                best, best_key = name, key
+    return best or "melodic techno"
 
 
 VOCAL_LINE = ("Lead vocal: close-miked male baritone, clear diction, sits just behind the drop, "
