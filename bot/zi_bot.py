@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, subprocess, threading, time, traceback, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.11"
+VERSION = "2026-11-28.12"
 
 API = "https://api.telegram.org/bot{token}/{method}"
 FILE_API = "https://api.telegram.org/file/bot{token}/{path}"
@@ -54,6 +54,37 @@ HELP = """Zi Music Studio bot - make tracks from chat.
 /cancel - cancel the current builder step
 /help - this message
 Every track is AI-generated and delivered with that label."""
+
+
+class SpecDict(dict):
+    """Spec passed to the engine. A missing key returns a sensible default and is
+    recorded, so an engine build that reads an unexpected key neither crashes the
+    render nor hides what it wanted."""
+
+    def __init__(self, *a, **k):
+        super().__init__(*a, **k)
+        self.missing = []
+
+    def __missing__(self, key):
+        try:
+            self.missing.append(key)
+            print(f"engine asked for a spec key the bot did not send: {key!r}")
+        except Exception:
+            pass
+        k = str(key).lower()
+        if "dur" in k or "sec" in k:
+            return self.get("seconds", 330)
+        if k in ("bpm",):
+            return 122
+        if k in ("lang", "vocal_language"):
+            return self.get("lang", "en")
+        if "lyric" in k:
+            return ""
+        if "prompt" in k or "idea" in k or "style" in k:
+            return self.get("idea", "")
+        if "title" in k or "name" in k:
+            return self.get("name") or self.get("genre") or "track"
+        return None
 
 
 class TG:
@@ -248,6 +279,16 @@ class Bot:
                     print("bot poll error:", e)
                 time.sleep(5)
 
+    @staticmethod
+    def _is_engine_process(pid):
+        """True for the ACE-Step API server, which keeps the model on the GPU all the time."""
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as f:
+                cmd = f.read().replace(b"\x00", b" ").decode("utf-8", "ignore").lower()
+        except Exception:
+            return False
+        return ("acestep" in cmd) or ("ace-step" in cmd) or ("ace_step" in cmd)
+
     def _gpu_busy(self):
         """Why a render cannot start now, or None when the GPU looks free."""
         try:
@@ -270,7 +311,9 @@ class Bot:
                     mb = float(parts[1] or 0)
                 except ValueError:
                     mb = 0
-                if parts[0] != me and mb > GPU_PROC_MB:
+                if parts[0] == me or self._is_engine_process(parts[0]):
+                    continue
+                if mb > GPU_PROC_MB:
                     return "another process is rendering"
             util = subprocess.run(["nvidia-smi", "--query-gpu=utilization.gpu",
                                    "--format=csv,noheader,nounits"],
@@ -331,7 +374,17 @@ class Bot:
                 r = self.make_track(spec, "Rahal", "Rahal")
                 self._deliver(chat_id, r)
             except Exception as e:
-                self.tg.send(chat_id, f"That track failed: {str(e)[:300]}. It stays out of the queue; send it again if you want a retry.")
+                tb = traceback.format_exc()
+                print("render failed:\n" + tb)
+                try:
+                    with open(os.path.join(self.out_root, "render_errors.log"), "a") as fh:
+                        fh.write(f"\n=== {time.strftime('%Y-%m-%d %H:%M:%S')} {self.current}\n{tb}")
+                except Exception:
+                    pass
+                last = tb.strip().splitlines()[-1] if tb.strip() else ""
+                self.tg.send(chat_id, f"That track failed: {type(e).__name__}: {str(e)[:200]}\n"
+                                      f"Last line: {last[:200]}\n"
+                                      "Full traceback is in the notebook console and in render_errors.log.")
             finally:
                 self._mark_busy(False)
                 self.current = None
@@ -577,6 +630,8 @@ class Bot:
         spec["instrumental"] = bool(spec.get("instrumental", True))
         q = str(spec.get("quality") or "standard").lower()
         spec["quality"] = q if q in ("fast", "standard", "high") else "standard"
+        if not isinstance(spec, SpecDict):
+            spec = SpecDict(spec)
         return spec
 
     def _enqueue(self, chat_id, spec):
