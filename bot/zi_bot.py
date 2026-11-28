@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, subprocess, threading, time, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.5"
+VERSION = "2026-11-28.6"
 
 API = "https://api.telegram.org/bot{token}/{method}"
 FILE_API = "https://api.telegram.org/file/bot{token}/{path}"
@@ -55,6 +55,7 @@ class TG:
     def __init__(self, token):
         self.token = token
         self.thread_of = None      # callable(chat_id) -> message_thread_id or None
+        self.log = []              # last sends: (time, text, ok|error)
 
     def call(self, method, **fields):
         url = API.format(token=self.token, method=method)
@@ -66,6 +67,14 @@ class TG:
             raise RuntimeError(f"telegram {method} failed: {out.get('description')}")
         return out["result"]
 
+    def _note(self, what, ok, err=None):
+        try:
+            self.log.append((time.strftime("%H:%M:%S"), (what or "")[:60],
+                             "ok" if ok else ("ERR " + str(err)[:90])))
+            del self.log[:-20]
+        except Exception:
+            pass
+
     def _thread(self, chat_id):
         try:
             return self.thread_of(chat_id) if self.thread_of else None
@@ -76,7 +85,13 @@ class TG:
         fields = {"chat_id": chat_id, "text": text[:4000], "message_thread_id": self._thread(chat_id)}
         if keyboard:
             fields["reply_markup"] = json.dumps({"inline_keyboard": keyboard})
-        return self.call("sendMessage", **fields)
+        try:
+            r = self.call("sendMessage", **fields)
+            self._note(text, True)
+            return r
+        except Exception as e:
+            self._note(text, False, e)
+            raise
 
     def _upload(self, method, chat_id, field, path, caption=None):
         boundary = uuid.uuid4().hex
@@ -102,11 +117,16 @@ class TG:
         body = b"".join(parts)
         req = urllib.request.Request(API.format(token=self.token, method=method), data=body,
                                      headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
-        with urllib.request.urlopen(req, timeout=600) as r:
-            out = json.loads(r.read())
-        if not out.get("ok"):
-            raise RuntimeError(f"telegram {method} failed: {out.get('description')}")
-        return out["result"]
+        try:
+            with urllib.request.urlopen(req, timeout=600) as r:
+                out = json.loads(r.read())
+            if not out.get("ok"):
+                raise RuntimeError(f"telegram {method} failed: {out.get('description')}")
+            self._note(method + " " + name, True)
+            return out["result"]
+        except Exception as e:
+            self._note(method + " " + name, False, e)
+            raise
 
     def audio(self, chat_id, path, caption=None):
         return self._upload("sendAudio", chat_id, "audio", path, caption)
@@ -593,6 +613,11 @@ class Bot:
             pass
         lines.append(f"threads known: {len(self.threads)}")
         lines.append(f"outputs: {self.out_root}")
+        try:
+            for t, what, ok in self.tg.log[-4:]:
+                lines.append(f"send {t} {ok}: {what}")
+        except Exception:
+            pass
         self.tg.send(chat_id, "\n".join(lines))
 
     def _find_folder(self, needle):
