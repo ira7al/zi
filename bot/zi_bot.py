@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.24"
+VERSION = "2026-11-28.25"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -68,6 +68,7 @@ OPTIONS = opt.OPTIONS
 REQUIRED_SPEC_KEYS = ("name", "genre", "idea", "lang", "instrumental", "seconds", "quality")
 LENGTH_KEYS = ("seconds", "duration", "duration_sec", "target_sec")
 QUALITIES = [("high", "High (2 seeds, best pick)"), ("standard", "Standard"), ("fast", "Fast draft")]
+ASSIST_HINT = "\U0001f916 محتاج حاجة؟ اكتب سؤالك هنا في أي وقت، أو دوس اسألني."
 AI_LABEL = "AI-generated music (ACE-Step 1.5, MIT licence). Label it AI-generated wherever you release it."
 
 # ---------- publishing ----------
@@ -618,7 +619,10 @@ class Bot:
                 self.tg._upload("sendVideo", chat_id, "video", vid, caption=title)
         except Exception as e:
             print("video step failed:", repr(e))
-        self.tg.send(chat_id, "Saved in Drive: " + os.path.basename(folder) + " (WAV/FLAC/MP3, cover, lyrics, metadata, RouteNote form).")
+        self.tg.send(chat_id, "Saved in Drive: " + os.path.basename(folder)
+                              + " (WAV/FLAC/MP3, cover, lyrics, metadata, RouteNote form).\n" + ASSIST_HINT,
+                     keyboard=[[{"text": "\U0001f916 اسألني", "callback_data": "ask"},
+                                {"text": "\U0001f3b5 تراك تاني", "callback_data": "sug:track"}]])
         try:
             self._publish_menu(chat_id, folder, title)
         except Exception as e:
@@ -689,7 +693,25 @@ class Bot:
                 print("assistant: free model on (" + self.llm_model + ")")
         return bool(self.llm_key)
 
-    def _assistant(self, chat_id, question):
+    SUGGESTIONS = (("\u2753 إيه الناقص؟", "sug:missing"),
+                   ("\u27a1\ufe0f أعمل إيه بعد كده؟", "sug:next"),
+                   ("\U0001f4ca الحالة", "sug:status"),
+                   ("\U0001f3b5 اعمل تراك", "sug:track"))
+
+    def _suggestion_kb(self, state=None):
+        """Two or three next steps, never a wall of buttons."""
+        rows = [[{"text": t, "callback_data": c} for t, c in self.SUGGESTIONS[:2]],
+                [{"text": t, "callback_data": c} for t, c in self.SUGGESTIONS[2:]]]
+        return rows
+
+    @staticmethod
+    def _looks_like_idea(text):
+        low = (text or "").lower()
+        if re.search(r"\b\d{2,3}\s*bpm\b", low) or "instrumental" in low or "lyrics" in low:
+            return True
+        return any(w in low for words, _ in opt.STYLE_LOOKUP for w in words)
+
+    def _assistant(self, chat_id, question, suggest=False):
         try:
             state = self._snapshot()
         except Exception as e:
@@ -708,7 +730,7 @@ class Bot:
             except Exception as e:
                 print("assistant answer failed:", repr(e))
                 text = "حصلت مشكلة وأنا بجهز الرد. جرب تاني، أو /status."
-        self.tg.send(chat_id, text)
+        self.tg.send(chat_id, text, keyboard=self._suggestion_kb(state) if suggest else None)
 
     def _ask(self, chat_id, arg):
         q = (arg or "").strip()
@@ -1259,11 +1281,13 @@ class Bot:
         if doc and (doc.get("file_name") or "").endswith(".json"):
             self._batch_doc(chat_id, doc)
             return
+        from_voice = False
         voice = msg.get("voice") or msg.get("audio") or msg.get("video_note")
         if voice and not text:
             text = self._voice_prompt(chat_id, voice)
             if not text:
                 return
+            from_voice = True
         if not text:
             return
         if chat_id in self.ds_lyrics and not text.startswith("/"):
@@ -1290,14 +1314,19 @@ class Bot:
             self._launcher(chat_id)
             return
         if not text.startswith("/"):
-            # free text with no builder: treat it as an idea and draft the prompt
-            self._track(chat_id, "")
-            b = self.builders.get(chat_id)
-            if b:
-                b["idea_seed"] = text
-                b["variant"] = 0
-                b["built"] = build_prompt(text, b["spec"].get("seconds", 330), 0, instrumental=b["spec"].get("instrumental", True))
-                self._show_prompt(chat_id, b)
+            # a spoken music idea still starts a track; anything else is a question for the
+            # assistant, which offers the next steps as buttons
+            if from_voice and self._looks_like_idea(text):
+                self._track(chat_id, "")
+                b = self.builders.get(chat_id)
+                if b:
+                    b["idea_seed"] = text
+                    b["variant"] = 0
+                    b["built"] = build_prompt(text, b["spec"].get("seconds", 330), 0,
+                                              instrumental=b["spec"].get("instrumental", True))
+                    self._show_prompt(chat_id, b)
+                return
+            self._assistant(chat_id, text, suggest=True)
             return
         cmd, _, arg = text.partition(" ")
         cmd = cmd.lower().split("@")[0]
@@ -1385,6 +1414,17 @@ class Bot:
             return
         if data == "last":
             self._start_from_last(chat_id)
+            return
+        if data == "ask":
+            self._ask(chat_id, "")
+            return
+        if data.startswith("sug:"):
+            what = data[4:]
+            if what == "track":
+                self._track(chat_id, "")
+                return
+            q = {"missing": "إيه الناقص؟", "next": "أعمل إيه بعد كده؟", "status": "الحالة"}.get(what, "الحالة")
+            self._assistant(chat_id, q, suggest=True)
             return
         if data == "menu":
             self._menu(chat_id)
@@ -1509,10 +1549,12 @@ class Bot:
         b["step"] = "options"
         s = b["spec"]
         prompt = (s.get("idea") or "").strip()
+        kb = self._options_kb(s)
+        kb.append([{"text": "\U0001f916 اسألني", "callback_data": "ask"}])
         self.tg.send(chat_id,
                      "Options. Everything here is a button; tap Generate when it reads right.\n\n"
-                     f"Prompt: {prompt[:240]}{'...' if len(prompt) > 240 else ''}",
-                     keyboard=self._options_kb(s))
+                     f"Prompt: {prompt[:900]}{'...' if len(prompt) > 900 else ''}\n\n" + ASSIST_HINT,
+                     keyboard=kb)
 
     def _option_step(self, chat_id, b, code):
         spec = b["spec"]
@@ -1620,8 +1662,9 @@ class Bot:
                    {"text": "\u270f\ufe0f Edit", "callback_data": "p:edit"}])
         kb.append([{"text": "\U0001f504 Another", "callback_data": "p:again"},
                    {"text": "\U0001f50e New reference", "callback_data": "p:ref"}])
+        kb.append([{"text": "\U0001f916 اسألني", "callback_data": "ask"}])
         self.tg.send(chat_id, f"{note}Prompt ({built['bpm']} BPM, {built['key']}, {built['genre']}):\n\n"
-                              f"{built['prompt']}", keyboard=kb)
+                              f"{built['prompt']}\n\n{ASSIST_HINT}", keyboard=kb)
 
     PROMPT_STEPS = ("mode", "genre", "theme", "own_prompt", "edit_prompt", "ai_idea", "ref_wait")
 
@@ -1691,9 +1734,12 @@ class Bot:
         prompt = s.get("idea") or ""
         tail = f"\n\nPrompt: {prompt[:900]}{'...' if len(prompt) > 900 else ''}" if prompt else ""
         self.tg.send(chat_id,
-            f"Ready: {s.get('genre')} | {s.get('seconds')}s | {'instrumental' if s.get('instrumental') else 'lyrics'} | {s.get('quality', 'standard')}"
-            + (f" | title: {s['title']}" if s.get("title") else "") + tail,
-            keyboard=[[{"text": "Generate", "callback_data": "go"}, {"text": "Cancel", "callback_data": "no"}]])
+            f"Ready: {s.get('genre')} | {s.get('seconds')}s | "
+            f"{'instrumental' if s.get('instrumental') else 'lyrics'} | {s.get('quality', 'standard')}"
+            + (f" | title: {s['title']}" if s.get("title") else "") + tail
+            + "\n\n" + ASSIST_HINT,
+            keyboard=[[{"text": "Generate", "callback_data": "go"}, {"text": "Cancel", "callback_data": "no"}],
+                      [{"text": "\U0001f916 اسألني", "callback_data": "ask"}]])
 
     def _track(self, chat_id, arg):
         if arg and arg.strip().lower() in ("again", "last", "same"):
@@ -1715,7 +1761,7 @@ class Bot:
             kb.append([{"text": self._last_label(last), "callback_data": "last"}])
         kb += [[{"text": g, "callback_data": g}] for g in genres]
         self.tg.send(chat_id, "New track. Pick a style, write the prompt yourself, "
-                              "or let me write it from a short idea.", keyboard=kb)
+                              "or let me write it from a short idea.\n" + ASSIST_HINT, keyboard=kb)
 
     def _parse_spec(self, arg):
         # "melodic techno, night drive, 330s, instrumental, high, key Am, bpm 122, title X"
@@ -2165,6 +2211,20 @@ class Bot:
                 [{"command": c, "description": d} for c, d in COMMANDS]))
         except Exception as e:
             print("setMyCommands failed:", repr(e))
+        # the corner button is the native Menu (the command list), not the Studio web app;
+        # Studio stays inside the menu and on the keyboard, so one corner button serves both
+        try:
+            self.tg.call("setChatMenuButton", menu_button=json.dumps({"type": "commands"}))
+        except Exception as e:
+            print("setChatMenuButton failed:", repr(e))
+        # a BotFather menu button can keep winning over the default, so set it for the
+        # owner's own chat too: a per-chat button always applies
+        if self.owner:
+            try:
+                self.tg.call("setChatMenuButton", chat_id=self.owner,
+                             menu_button=json.dumps({"type": "commands"}))
+            except Exception as e:
+                print("setChatMenuButton (owner chat) failed:", repr(e))
 
     def _publish_menu(self, chat_id, folder, title=None):
         key = self._lib_key(os.path.basename(folder))
