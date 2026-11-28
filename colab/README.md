@@ -214,6 +214,18 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
+## Bot build 2026-11-28.54: XL turbo default and fallback
+
+- Notebook setup cell now starts the server with XL turbo (`ACE_MODEL`, default `acestep-v15-xl-turbo`, override with env `ZI_ACE_MODEL`) and `ACESTEP_NO_INIT=false`, so a kernel restart brings XL back. The model list drops the stale `acestep-v15-xl` name and always contains the loaded model. `MODEL_MAP["xl"]` and `pick_model` use it. Re-run the setup and engine cells from the notebook to get this.
+- Fallback patch cell (paste after the engine cell and the .52 patch cell): if an XL generation fails, it retries XL once in a light mode (batch 1, language model off), then the small turbo model if the server lists it.
+
+```python
+exec(urllib.request.urlopen("https://raw.githubusercontent.com/ira7al/zi/5fe4f67b941d234f00f3033c48a2e84204277556/colab/engine_patch_54.py").read().decode())
+```
+
+- The track caption now says which model made it, and says so when a fallback happened.
+- House style tuned from the reference measurements: more sub weight, a focused stereo image, a softer top end. The master chain follows: low shelf +1.5 dB at 100 Hz (was -1.5 at 110), high shelf -2 dB at 6.5 kHz (was +1.2 dB presence at 7.5 kHz), stereo width 0.7 (was 1.08). Loudness gate unchanged at -14 LUFS, TP -1.
+
 ## Bot build 2026-11-28.53: house style
 
 - New default style "house style" (melodic house, 124 BPM, F major) built from the 11-track brief: punchy dry kick, rolling round sidechained sub bass, offbeat and shuffled hats, hand percussion, plucky arpeggio, simple hook, warm wide pads, airy vocal chops, patient build, clean warm master with headroom. No artist names.
@@ -400,9 +412,9 @@ What .25 changes for whoever is testing:
 - `/diag` prints which voice engines are on the box and whether screenshots have a key.
 
 ```python
-# pinned reload - build .53 (bot + options + assistant + voice + art)
+# pinned reload - build .54 (bot + options + assistant + voice + art)
 import os, sys, importlib.util, urllib.request
-SHA = "91d0f3522b97c134b34fd5c461d7b1092bc3e47a"
+SHA = "5fe4f67b941d234f00f3033c48a2e84204277556"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
