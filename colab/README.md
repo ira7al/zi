@@ -216,17 +216,22 @@ Nothing in this feature generates music or touches the GPU.
 
 ## Bot build 2026-11-28.46: remix/cover and remaster in the library
 
-Beside "📣 انشر" under each library track: "♻️ ريميكس/كفر" and "🎚 ريماستر". Each button appears only when the engine cell defines it (\ and \), so until the patch below runs, nothing new shows.
+Beside "📣 انشر" under each library track: "♻️ ريميكس/كفر" and "🎚 ريماستر". Each button appears only when the engine cell defines it (`COVER_TASKS` and `remaster_release`), so until the patch below runs, nothing new shows.
 
 **Engine patch (run once, in a new cell after the engine cell, same kernel):**
 
-\
-What the patch does:
-- Cover: when a spec has \, the generation request gets \, \ (the saved FLAC) and \ (0.8 close, 0.65 default, 0.4 far). The rest of the render path is unchanged. The result is a new release titled "<title> (Remix)".
-- Remaster: \ runs \ and sets \ only when the output is at or below -0.9 dBTP and within 1 LU of -14 LUFS. \ writes a new release "<title> (Remaster)" (FLAC, MP3 320, preview, cover, lyrics, metadata with \). The original folder is never changed. The bot tells him if the measurement is off target.
-- The same edit is already in \ for fresh runs.
+```python
+import urllib.request
+exec(urllib.request.urlopen("https://raw.githubusercontent.com/ira7al/zi/d5c60c10d1c49589b90592eed43ec067af2d9d5d/colab/engine_patch_46.py").read().decode())
+print("cover:", COVER_TASKS, "| remaster:", callable(remaster_release))
+```
 
-Not verified without a live render: the cover request against the real server, and cover at 10 minutes.
+What the patch does:
+- Cover: when a spec has `task_type: "cover"`, the generation request gets `task_type="cover"`, `src_audio_path` (the saved FLAC) and `audio_cover_strength` (0.8 close, 0.65 default, 0.4 far). The rest of the render path is unchanged. The result is a new release titled "<title> (Remix)".
+- Remaster: `master_file(path)` runs `master_audio` and sets `verified` only when the output is at or below -0.9 dBTP and within 1 LU of -14 LUFS. `remaster_release(folder)` writes a new release "<title> (Remaster)" (FLAC, MP3 320, preview, cover, lyrics, metadata with `remaster_of`). The original folder is never changed. The bot tells him if the measurement is off target.
+- The same edit is already in `colab/Zi_Music_Studio.ipynb` for fresh runs.
+
+Not verified without a live render: the cover request against the real server, and cover at 10 minutes. The remaster function was run for real on a synthetic FLAC (output -14.05 LUFS, a new folder, the original untouched).
 
 Reload with the pinned cell below.
 
