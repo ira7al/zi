@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.51"
+VERSION = "2026-11-28.52"
 OWNER_ID_DEFAULT = 7835590874      # Rahal's Telegram id, used only when no owner file exists
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
@@ -315,6 +315,13 @@ class TG:
         elif reply:
             fields["reply_markup"] = json.dumps(reply)
         try:
+            tr = getattr(self, "trace", None)
+            if tr:
+                btns = [b.get("text") for row in (keyboard or []) for b in row if isinstance(b, dict)]
+                tr("reply", chat=chat_id, text=(text or "")[:200], buttons=btns[:8])
+        except Exception:
+            pass
+        try:
             r = self.call("sendMessage", **fields)
             self._note(text, True)
             return r
@@ -381,6 +388,7 @@ class Bot:
     def __init__(self, token, out_root, work, make_track=None, run_queue=None):
         self.tg = TG(token)
         self.tg.thread_of = lambda cid: self.threads.get(cid)
+        self.tg.trace = lambda ev, **kw: self.trace(ev, **kw)
         self.out_root = out_root
         self.work = work
         self.make_track = make_track
@@ -428,6 +436,7 @@ class Bot:
         self.stats = {"message": 0, "callback": 0, "last": "nothing yet"}
         self.ds_lyrics = {}   # chat_id -> sha of the file whose lyrics we are waiting for
         self.ask_mode = set()  # chats talking to the assistant
+        self.redo_n = {}      # chat_id -> how many redos in a row, picks the variation
         self._launcher_sent = False
         self._llm_ready = None
         self.llm_key = ""
@@ -483,6 +492,41 @@ class Bot:
         threading.Thread(target=self._worker, daemon=True).start()
         threading.Thread(target=self._poll, daemon=True).start()
         threading.Thread(target=self._sync_loop, daemon=True).start()
+
+    # ---------- trace log (what he said, which route ran, what the bot answered; no tokens, no audio) ----------
+    TRACE_MAX = 1_000_000
+
+    @staticmethod
+    def _scrub(text):
+        t = str(text or "")
+        t = re.sub(r"\d{6,}:[A-Za-z0-9_\-]{30,}", "<redacted>", t)
+        t = re.sub(r"(?i)\b(token|key|secret|password|authorization|bearer)\b\s*[:=]?\s*\S+", r"\1 <redacted>", t)
+        t = re.sub(r"[A-Za-z0-9_\-]{32,}", "<redacted>", t)
+        return t[:400]
+
+    def trace(self, event, **kw):
+        try:
+            path = os.path.join(self.out_root, "zi_bot_trace.jsonl")
+            try:
+                if os.path.getsize(path) > self.TRACE_MAX:
+                    os.replace(path, path + ".1")
+            except OSError:
+                pass
+            row = {"t": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()) + "Z", "ev": event}
+            for k, v in kw.items():
+                row[k] = self._scrub(v) if isinstance(v, str) else v
+            with open(path, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+        except Exception:
+            pass
+
+    def _trace_tail(self, n=25):
+        try:
+            with open(os.path.join(self.out_root, "zi_bot_trace.jsonl"), encoding="utf-8") as fh:
+                lines = fh.read().splitlines()[-n:]
+            return "\n".join(lines)
+        except Exception:
+            return ""
 
     # ---------- private user records ----------
     SYNC_EVERY = 1800
@@ -787,6 +831,13 @@ class Bot:
         if "err" in box:
             raise box["err"]
         r = box.get("r")
+        try:
+            glob = getattr(self.make_track, "__globals__", {}) or {}
+            self.trace("engine_used", used=glob.get("ENGINE_USED") or {}, spec_model=spec.get("model"),
+                       idea=(spec.get("idea") or "")[:300], genre=spec.get("genre"), seconds=spec.get("seconds"),
+                       bpm=spec.get("bpm"), key=spec.get("key"), quality=spec.get("quality"))
+        except Exception:
+            pass
         if not isinstance(r, dict) or not r.get("folder"):
             raise RuntimeError("the engine finished but returned no track folder")
         return r
@@ -1140,6 +1191,10 @@ class Bot:
         if len(text) < 3:
             self.tg.send(chat_id, VISION_HINT)
             return
+        if opt.is_visual_text(text):
+            self.trace("visual_reference_refused", chat=chat_id, text=text[:120])
+            self.tg.send(chat_id, "الصورة دي شكلها غلاف أو تصميم مش مرجع موسيقى. ابعت اسم التراك أو قولي الستايل بكلمات.")
+            return
         self.tg.send(chat_id, "\u0642\u0631\u064a\u062a \u0645\u0646 \u0627\u0644\u0635\u0648\u0631\u0629: " + text[:160])
         self._reference_text(chat_id, text[:200])
 
@@ -1176,7 +1231,7 @@ class Bot:
             self.tg.send(chat_id, "معرفتش أطلّع ستايل من ده. ابعت النوع والتمبو بالكلام - "
                                   "مثلاً 'melodic techno, 122 bpm, dark' - أو /cancel.")
             return
-        theme = clean if clean and not opt.has_non_latin(clean) else ""
+        theme = clean if clean and not opt.has_non_latin(clean) and not opt.is_visual_text(clean) else ""
         if b.get("step") == "own_prompt":
             # his own prompt is coming: keep the style, never show a prompt of ours
             b["own_ref"] = {"style": style, "theme": theme}
@@ -1670,6 +1725,11 @@ class Bot:
         answers him in Egyptian either way.
         """
         t = ziassist.strip_prompt_label(text)
+        if opt.is_visual_text(t):
+            self.trace("visual_text_refused", chat=chat_id, text=t[:120])
+            self.tg.send(chat_id, "ده شكله وصف صورة أو غلاف مش وصف موسيقى. قولي النوع والجو والتمبو، "
+                                  "مثلاً: \"melodic techno, dark, 124 bpm\".")
+            return None
         if ziassist.is_probably_english(t):
             return t, t != (text or "").strip()
         if self.groq_key and self._llm():
@@ -1956,6 +2016,13 @@ class Bot:
                 self._hold(chat_id, "link", link.group(1))
                 return
             self._remember_say(chat_id, text)
+        self.trace("in", chat=chat_id, kind="voice" if from_voice else "text", text=text[:300],
+                   step=(self.builders.get(chat_id) or {}).get("step") or "-", ask=chat_id in self.ask_mode)
+        if (not text.startswith("/") and opt.is_redo_words(text) and chat_id not in self.ask_mode
+                and chat_id not in self.remix
+                and (self.builders.get(chat_id) or {}).get("step") in (None, "options", "confirm")):
+            if self._redo(chat_id, text):
+                return
         if chat_id in self.remix and not text.startswith("/") and self.remix[chat_id].get("idea") is None:
             self._remix_text(chat_id, text)
             return
@@ -2000,6 +2067,9 @@ class Bot:
         if cmd == "/start" or cmd == "/help":
             self.tg.send(chat_id, HELP, keyboard=[[{"text": "\u2630 \u0627\u0644\u0642\u0627\u0626\u0645\u0629", "callback_data": "menu"}]])
             self._launcher(chat_id)
+        elif cmd == "/trace":
+            tail = self._trace_tail(20)
+            self.tg.send(chat_id, ("آخر الأحداث:\n" + tail[-3500:]) if tail else "لسه مفيش سجل.")
         elif cmd == "/menu":
             self._menu(chat_id)
         elif cmd == "/ask":
@@ -2251,12 +2321,34 @@ class Bot:
                      "ولو تمام دوس ولّد.\n\n" + ASSIST_HINT,
                      keyboard=kb)
 
+    def _redo(self, chat_id, text):
+        """'This is bad, make another': the last settings, adjusted, shown for one tap. False when there is no last track."""
+        b = self.builders.get(chat_id)
+        base = (b or {}).get("spec") if (b or {}).get("step") == "options" else None
+        base = base or self.last_enq.get(chat_id) or self._last_spec()
+        if not base:
+            return False
+        n = self.redo_n.get(chat_id, 0)
+        self.redo_n[chat_id] = n + 1
+        spec, notes = opt.redo_adjust(text, base, n)
+        spec.setdefault("lang", "en")
+        spec.setdefault("quality", "high")
+        spec.setdefault("instrumental", True)
+        spec.setdefault("seconds", 330)
+        self.builders[chat_id] = {"step": "options", "spec": spec}
+        self.trace("redo", chat=chat_id, text=text[:120], notes=notes)
+        self.tg.send(chat_id, "فهمت إن التراك مش عاجبك. جهزت نسخة مختلفة: " + "، ".join(notes) + ".")
+        self._show_options(chat_id, self.builders[chat_id])
+        return True
+
     def _options_text(self, chat_id, b, text):
         """His words on the summary screen: change what he named, show the line again."""
         raw = self.heard_raw.get(chat_id)
         said = text
         if raw and time.time() - raw[1] < 10:
             said = raw[0] + " " + text
+        if opt.is_redo_words(text) and self._redo(chat_id, text):
+            return
         if opt.is_go_word(said):
             self._callback(chat_id, "go")
             return
@@ -2293,7 +2385,11 @@ class Bot:
             self.tg.send(chat_id, f"{key.replace('_', ' ').title()} now {cur} (0-100):",
                          keyboard=[[{"text": str(v), "callback_data": f"ov:{key}:{v}"} for v in vals]])
         elif code == "model":
-            order = ["turbo", "turbo-shift3"]
+            have = self._models_available()
+            order = [m for m in ("turbo", "turbo-shift3", "xl") if m in have]
+            if len(order) < 2:
+                self.tg.send(chat_id, "الجهاز ده عليه موديل واحد بس دلوقتي (turbo).")
+                return
             cur = spec.get("model") or "turbo"
             spec["model"] = order[(order.index(cur) + 1) % len(order)] if cur in order else "turbo"
             self._show_options(chat_id, b)
@@ -2635,13 +2731,39 @@ class Bot:
         # lyrics and seed into their payload fields
         try:
             merged = opt.normalize(spec)
+            with_controls = merged.get("idea")
             merged.update({k: v for k, v in spec.items() if v not in (None, "")})
+            if with_controls:
+                merged["idea"] = with_controls      # tags, avoid, maqam and weirdness reach the prompt
             spec = merged
         except Exception as e:
             print("options normalize skipped:", repr(e))
+        mdl = spec.get("model")
+        if mdl and mdl not in self._models_available():
+            spec.pop("model", None)             # a model the box does not have is never requested
+        if opt.is_visual_text(spec.get("idea")):
+            clean = build_prompt(spec.get("genre") or "melodic techno", spec.get("seconds", 330), 0,
+                                 instrumental=spec.get("instrumental", True))
+            self.trace("visual_idea_replaced", was=(spec.get("idea") or "")[:120])
+            spec["idea"] = clean["prompt"]
         if not isinstance(spec, SpecDict):
             spec = SpecDict(spec)
         return spec
+
+    def _models_available(self):
+        """Short names of the models the engine server reports (turbo always counts)."""
+        names = {"turbo"}
+        try:
+            glob = getattr(self.make_track, "__globals__", {}) or {}
+            for m in (glob.get("MODELS") or []):
+                m = str(m)
+                if m.endswith("turbo-shift3") and "xl" not in m:
+                    names.add("turbo-shift3")
+                if "xl" in m:
+                    names.add("xl")
+        except Exception:
+            pass
+        return names
 
     def _enqueue(self, chat_id, spec):
         if not self.make_track:

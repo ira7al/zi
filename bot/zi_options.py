@@ -308,6 +308,9 @@ def apply_controls(prompt, spec):
     tags = (spec.get("style_tags") or "").strip()
     if tags:
         out += f". Style tags: {tags}"
+    mq = (spec.get("maqam") or "").strip()
+    if mq and mq.lower() not in out.lower():
+        out += f". {mq}"
     excl = (spec.get("exclude") or "").strip()
     if excl:
         out += f". Avoid: {excl}"
@@ -449,7 +452,7 @@ def parse_spec_edits(text, spec=None):
 
     Only things he clearly said are changed. Anything else is left alone.
     """
-    t = (text or "").translate(_AR_DIGITS)
+    t = speech_numbers((text or "").translate(_AR_DIGITS))
     low = t.lower()
     ch, notes = {}, []
     if re.search(r"\[(intro|verse|chorus|bridge|outro|pre-chorus)[^\]]*\]", low):
@@ -462,7 +465,8 @@ def parse_spec_edits(text, spec=None):
     elif re.search(r"بكلام|بكلمات|بغنا|بصوت|مع (كلام|كلمات|غنا|صوت)|with lyrics|vocals?\b|lyrics", low):
         ch["instrumental"] = False
         notes.append("بكلمات")
-    m = re.search(r"(?:bpm|بي بي ام|بي بي إم)\s*(?:على|=|:)?\s*(\d{2,3})|(\d{2,3})\s*(?:bpm|بي بي ام|بي بي إم|ضربة)", low)
+    m = re.search(r"(?:b\.?p\.?m|بي بي ام|بي بي إم|بي بي اي|بى بى ام|تمبو|tempo|ايقاع|إيقاع)\s*(?:على|=|:|هو)?\s*(\d{2,3})|"
+                  r"(\d{2,3})\s*(?:b\.?p\.?m|بي بي ام|بي بي إم|بي بي اي|بى بى ام|ضربة|ضربات|بيت)", low)
     if m:
         v = int(m.group(1) or m.group(2))
         if 60 <= v <= 180:
@@ -472,6 +476,13 @@ def parse_spec_edits(text, spec=None):
     if m:
         ch["key"] = m.group(1).upper() + " " + ("minor" if m.group(2).startswith("min") else "major")
         notes.append("مقام " + ch["key"])
+    elif parse_solfege_key(t):
+        ch["key"] = parse_solfege_key(t)
+        notes.append("مقام " + ch["key"])
+    mq = parse_maqam(t)
+    if mq:
+        ch["maqam"] = mq[1]
+        notes.append("مقام " + mq[0])
     secs = None
     if re.search(r"دقيقتين|دقيقتان", low):
         secs = 120
@@ -775,3 +786,150 @@ def accept_contact(users, frm, contact, now):
         return False, "unknown user"
     rec.update(phone=phone, phone_verified=True, phone_verified_at=now, last_seen=now)
     return True, phone
+
+
+# ---------- build .52: music-vs-image guard, speech numbers, maqam, redo ----------
+_VISUAL_WORDS = ("3d", "render", "abstract visual", "visual composition", "composition", "background", "lighting",
+                 "camera", "photo", "illustration", "logo", "no text", "typography", "wallpaper", "octane",
+                 "depth of field", "bokeh", "matte", "glossy", "reflection", "metallic", "minimalist", "4k", "8k",
+                 "ultra detailed", "cover art", "poster", "album cover", "tubes", "rings", "geometry")
+_MUSIC_WORDS = ("bpm", "techno", "house", "bass", "kick", "synth", "drum", "beat", "melod", "piano", "pad", "ambient",
+                "chord", "groove", "tempo", "vocal", "rhythm", "music", "track", "arp", "pluck", "reverb", "oud", "ney")
+
+
+def is_visual_text(text):
+    """True when text reads like an image prompt (rendering words outweigh music words)."""
+    low = (text or "").lower()
+    v = sum(1 for w in _VISUAL_WORDS if w in low)
+    m = sum(1 for w in _MUSIC_WORDS if w in low)
+    return v >= 3 and v > m
+
+
+_NUMW = {"صفر": 0, "واحد": 1, "اتنين": 2, "اثنين": 2, "تلاتة": 3, "ثلاثة": 3, "تلات": 3, "اربعة": 4, "أربعة": 4,
+         "اربع": 4, "خمسة": 5, "خمس": 5, "ستة": 6, "سبعة": 7, "سبع": 7, "تمانية": 8, "ثمانية": 8, "تمن": 8,
+         "تسعة": 9, "تسع": 9, "عشرة": 10, "عشر": 10, "حداشر": 11, "اتناشر": 12, "تلتاشر": 13, "اربعتاشر": 14,
+         "خمستاشر": 15, "ستاشر": 16, "سبعتاشر": 17, "تمنتاشر": 18, "تسعتاشر": 19,
+         "عشرين": 20, "تلاتين": 30, "ثلاثين": 30, "اربعين": 40, "أربعين": 40, "خمسين": 50, "ستين": 60,
+         "سبعين": 70, "تمانين": 80, "ثمانين": 80, "تسعين": 90, "مية": 100, "مائة": 100, "ميه": 100,
+         "ميتين": 200, "مئتين": 200}
+_NUM_BEFORE = ("bpm", "بي بي ام", "بي بي إم", "بي بي اي", "تمبو", "tempo", "ايقاع", "إيقاع")
+_NUM_AFTER = ("دقيقة", "دقايق", "دقيقه", "دقائق", "bpm", "بي", "ضربة", "ضربات", "بيت", "ثانية", "ثانيه", "ثواني",
+              "min", "minutes", "sec")
+
+
+def speech_numbers(text):
+    """Spoken Egyptian numbers to digits, only when a tempo or time word sits beside them, so a word like
+    'ست' (a woman) is never turned into 6. 'خمسة وعشرين' -> 25, 'مية وخمسة وعشرين' -> 125."""
+    toks = (text or "").split()
+    out, i = [], 0
+
+    def num(tok):
+        t = tok.strip("،,.؟!")
+        if t in _NUMW:
+            return _NUMW[t]
+        if t.startswith("و") and t[1:] in _NUMW:
+            return _NUMW[t[1:]]
+        return None
+
+    while i < len(toks):
+        j, vals = i, []
+        while j < len(toks) and (num(toks[j]) is not None or (toks[j] == "و" and vals)):
+            if toks[j] != "و":
+                vals.append(num(toks[j]))
+            j += 1
+        if vals:
+            prev = " ".join(toks[max(0, i - 3):i]).lower()
+            nxt = toks[j].lower() if j < len(toks) else ""
+            if any(prev.endswith(w) for w in _NUM_BEFORE) or any(nxt.startswith(w) for w in _NUM_AFTER):
+                total = 0
+                for v in vals:
+                    total = total + v if (total == 0 or (total >= 100 and v < 100 and total % 100 == 0) or
+                                          (v < 10 and total % 10 == 0) or (v >= 10 and v < 100 and total % 100 == 0)) else total + v
+                out.append(str(total))
+                i = j
+                continue
+        out.append(toks[i])
+        i += 1
+    return " ".join(out)
+
+
+MAQAM = (
+    (("saba", "صبا", "صبى", "سابا", "سبا"), "Saba", "Arabic maqam Saba, quarter-tone microtonal scale, melancholic oud and ney phrasing"),
+    (("rast", "راست"), "Rast", "Arabic maqam Rast, quarter-tone neutral third, warm oud and ney phrasing"),
+    (("bayati", "بياتي", "بيات"), "Bayati", "Arabic maqam Bayati, quarter-tone second, soulful oud and ney phrasing"),
+    (("hijaz", "hejaz", "حجاز"), "Hijaz", "Arabic maqam Hijaz, augmented second, dramatic oud and qanun phrasing"),
+    (("nahawand", "نهاوند"), "Nahawand", "Arabic maqam Nahawand, natural minor colour, lyrical strings and oud"),
+    (("ajam", "عجم"), "Ajam", "Arabic maqam Ajam, bright major colour, festive percussion and strings"),
+    (("kurd", "كرد"), "Kurd", "Arabic maqam Kurd, phrygian colour, dark oud and ney phrasing"),
+    (("sikah", "سيكا", "سيجاه"), "Sikah", "Arabic maqam Sikah, quarter-tone, floating ney and oud phrasing"),
+)
+
+
+def parse_maqam(text):
+    """(name, english phrase) for a maqam he named, else None."""
+    low = (text or "").lower()
+    for names, name, phrase in MAQAM:
+        for n in names:
+            if re.search(r"(?<![\w\u0600-\u06ff])" + re.escape(n) + r"(?![\w\u0600-\u06ff])", low):
+                return name, phrase
+    return None
+
+
+_SOLFEGE = {"دو": "C", "ري": "D", "مي": "E", "فا": "F", "صول": "G", "لا": "A", "سي": "B"}
+
+
+def parse_solfege_key(text):
+    m = re.search(r"(?<![\u0600-\u06ff])(دو|ري|مي|فا|صول|لا|سي)\s*(مينور|ماجور|صغير|كبير)", text or "")
+    if m:
+        return _SOLFEGE[m.group(1)] + " " + ("minor" if m.group(2) in ("مينور", "صغير") else "major")
+    return None
+
+
+_REDO_RE = re.compile(
+    r"وحش|مش حلو|مش كويس|مش عاجب|مش عجب|زفت|سيء|مش تمام|bad|terrible|awful|not good|don.?t like|try again|another one|"
+    r"make (?:it |another |a new |one )?(?:again|another|new|different)|غيره|غيّره|غير(?:ها|ه)|تاني|مختلف|جرب تاني|"
+    r"من جديد|ابدأ من جديد|هات واحد", re.I)
+
+
+def is_redo_words(text):
+    """'this is bad, make another': short, complains or asks for another, names no new style."""
+    t = (text or "").strip()
+    if not t or len(t) > 90 or not _REDO_RE.search(t):
+        return False
+    low = t.lower()
+    return not any(w in low for words, _ in STYLE_LOOKUP for w in words)
+
+
+_REDO_VARIANTS = ("different melody and arrangement, fresh chord progression",
+                  "new groove and bassline, different lead sound",
+                  "more distinctive hook, richer layered texture",
+                  "cleaner mix, clearer kick and bass, memorable motif")
+
+
+def redo_adjust(text, spec, step=0):
+    """The last spec adjusted for a redo: new seed, a different variation, and whatever settings he named."""
+    s = dict(spec or {})
+    notes = ["نسخة مختلفة بسيد جديد"]
+    s.pop("seed", None)
+    s.pop("title", None)
+    ch, n2 = parse_spec_edits(text, s)
+    for k, v in ch.items():
+        if v is None:
+            s.pop(k, None)
+        else:
+            s[k] = v
+    notes += n2
+    low = (text or "").lower()
+    if re.search(r"ممل|boring|flat|plain", low) and "weirdness" not in ch:
+        s["weirdness"] = min(100, int(s.get("weirdness") or 50) + 20)
+        notes.append("أغرب شوية")
+    if s.get("bpm") and "bpm" not in ch:
+        if re.search(r"بطيء|slow|ثقيل|dragging", low):
+            s["bpm"] = min(180, int(s["bpm"]) + 6)
+            notes.append(f"{s['bpm']} BPM")
+        elif re.search(r"سريع|fast|زحمة|busy|rushed", low):
+            s["bpm"] = max(60, int(s["bpm"]) - 6)
+            notes.append(f"{s['bpm']} BPM")
+    idea = re.sub(r"\s*Redo variation:[^.]*\.?", "", s.get("idea") or "").strip()
+    s["idea"] = (idea.rstrip(". ") + ". Redo variation: " + _REDO_VARIANTS[step % len(_REDO_VARIANTS)] + ".") if idea else idea
+    return s, notes

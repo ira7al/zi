@@ -519,7 +519,7 @@ def ask_groq(question, state, key, model=None, opener=None, timeout=25, sleep=No
 
 GROQ_STT_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
 GROQ_STT_MODELS = ("whisper-large-v3-turbo", "whisper-large-v3")
-STT_HINT = "كلام مصري عن الموسيقى والتراكات والبرومبت والزراير."
+STT_HINT = "Music request: BPM, minutes, maqam Saba, Rast, Bayati, Hijaz, Nahawand, techno, house, bass, oud, ney, A minor."
 
 
 def transcribe_groq(path, key, model=None, opener=None, timeout=60, sleep=None, tries=2):
@@ -551,7 +551,7 @@ def transcribe_groq(path, key, model=None, opener=None, timeout=60, sleep=None, 
     for m in ([model] if model else list(GROQ_STT_MODELS)):
         boundary = "zi" + _uuid.uuid4().hex
         parts = []
-        for k, v in (("model", m), ("response_format", "json"), ("temperature", "0")):
+        for k, v in (("model", m), ("response_format", "json"), ("temperature", "0"), ("prompt", STT_HINT)):
             parts.append(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + k + "\"\r\n\r\n" + v + "\r\n").encode("utf-8"))
         parts.append(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"" + name +
                       "\"\r\nContent-Type: application/octet-stream\r\n\r\n").encode("utf-8"))
