@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, subprocess, threading, time, traceback, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.13"
+VERSION = "2026-11-28.14"
 
 API = "https://api.telegram.org/bot{token}/{method}"
 FILE_API = "https://api.telegram.org/file/bot{token}/{path}"
@@ -32,6 +32,24 @@ GENRE_PRESETS = {
  "Downtempo": "100-105 bpm downtempo indie electronic, soft round kick, warm electric bass, dreamy washed guitars, mellow keys, vinyl texture, hazy nostalgic calm",
 }
 DURATIONS = [60, 120, 180, 240, 300, 330, 420, 600]
+
+# ---------- shared option model ----------
+# zi_options.py holds the option definitions, the prompt builder and the mapping onto
+# real engine parameters. The desktop app and the web app read the same definitions, so
+# the bot is not a separate implementation.
+try:
+    import zi_options as opt
+except Exception:  # loaded by path from the notebook: add this file's folder
+    import importlib.util as _ilu
+    _opt_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "zi_options.py")
+    _opt_spec = _ilu.spec_from_file_location("zi_options", _opt_path)
+    opt = _ilu.module_from_spec(_opt_spec)
+    _opt_spec.loader.exec_module(opt)
+
+build_prompt = opt.build_prompt
+clean_idea = opt.clean_idea
+_structure = opt.structure
+OPTIONS = opt.OPTIONS
 
 # Keys the notebook's make_track reads. Different engine builds have used different
 # names for the length, so the bot fills all of them with the same value.
@@ -72,7 +90,7 @@ COMMANDS = [("track", "make a track (guided builder)"),
             ("help", "all commands")]
 
 HELP = """Zi Music Studio bot - make tracks from chat.
-/track - guided track builder (style, theme, length, vocals, quality)
+/track - guided builder: pick a style, write your own prompt, or let it write one from your idea
 /track <spec> - one-shot, e.g.: /track melodic techno, night drive, 330s, instrumental, high
 /batch - send several tracks as JSON (list of specs), or paste after the command
 /queue - what's rendering and what's waiting
@@ -554,15 +572,38 @@ class Bot:
             self.tg.send(chat_id, "Unknown command. /help lists them.")
 
     def _callback(self, chat_id, data):
+        b = self.builders.get(chat_id)
         if data == "social":
             self._social(chat_id)
+            return
+        if data.startswith("ov:"):
+            if not b:
+                self.tg.send(chat_id, "That builder expired. /track starts a new one.")
+                return
+            _, key, val = data.split(":")
+            try:
+                b["spec"][key] = int(val)
+            except Exception:
+                pass
+            self._show_options(chat_id, b)
+            return
+        if data.startswith("o:"):
+            if not b:
+                self.tg.send(chat_id, "That builder expired. /track starts a new one.")
+                return
+            self._option_step(chat_id, b, data[2:])
+            return
+        if data.startswith("p:"):
+            if not b:
+                self.tg.send(chat_id, "That builder expired. /track starts a new one.")
+                return
+            self._prompt_step(chat_id, b, data[2:])
             return
         if data.startswith("pub:"):
             # a publish tap is an approval for that one post, so it must never
             # depend on a builder still being alive
             self._publish_cb(chat_id, data)
             return
-        b = self.builders.get(chat_id)
         if data.startswith("lib:"):
             folder = self._lib_folder(data[4:])
             if not folder:
@@ -587,6 +628,15 @@ class Bot:
             self.tg.send(chat_id, f"{data}. Theme or mood? (free text)")
         elif step == "seconds" and data.isdigit():
             b["spec"]["seconds"] = int(data)
+            if b.pop("skip_vocals", False):
+                b["step"] = "quality"
+                self.tg.send(chat_id, "Quality?", keyboard=[[{"text": label, "callback_data": "q:" + q}] for q, label in QUALITIES])
+                return
+            if b.get("built") and b["spec"].get("idea") == b["built"].get("prompt"):
+                # the generated prompt carries a structure map, so rebuild it for the
+                # length he just picked instead of rendering 7 minutes off a 5:30 map
+                b["built"] = build_prompt(b["idea_seed"], int(data), b.get("variant", 0))
+                b["spec"]["idea"] = b["built"]["prompt"]
             b["step"] = "instrumental"
             self.tg.send(chat_id, "Vocals?", keyboard=[[{"text": "Instrumental", "callback_data": "v:1"}, {"text": "With lyrics", "callback_data": "v:0"}]])
         elif step == "instrumental" and data.startswith("v:"):
@@ -595,6 +645,8 @@ class Bot:
             self.tg.send(chat_id, "Quality?", keyboard=[[{"text": label, "callback_data": "q:" + q}] for q, label in QUALITIES])
         elif step == "quality" and data.startswith("q:"):
             b["spec"]["quality"] = data[2:]
+            self._confirm(chat_id, b)
+        elif step == "options" and data == "go":
             self._confirm(chat_id, b)
         elif step == "confirm":
             spec = b["spec"]
@@ -605,24 +657,180 @@ class Bot:
                 self.tg.send(chat_id, "Cancelled.")
         else:
             hint = {"theme": "Type the theme or mood as a message, or tap a style to start over.",
+                    "mode": "Tap a style, My own prompt, or AI writes it - or /cancel.",
+                    "own_prompt": "Send the prompt as one message, or /cancel.",
+                    "edit_prompt": "Send your version of the prompt, or /cancel.",
+                    "ai_idea": "Send a short idea: genre, mood, vibe. No artist names.",
+                    "options": "Tap a button above, or Generate when it reads right.",
                     "seconds": "Pick a length from the buttons above.",
                     "instrumental": "Pick Instrumental or With lyrics above.",
                     "quality": "Pick a quality from the buttons above."}.get(step, "/track starts a new one.")
             self.tg.send(chat_id, hint)
+
+    def _options_kb(self, spec):
+        seed = spec.get("seed")
+        seed_txt = "random" if seed in (None, "") else str(seed)
+        return [
+            [{"text": ("Instrumental: on" if spec.get("instrumental") else "Instrumental: off"), "callback_data": "o:instr"},
+             {"text": ("Lyrics" + (" (set)" if (spec.get("lyrics") or "").strip() else "")), "callback_data": "o:lyrics"}],
+            [{"text": "Style tags", "callback_data": "o:tags"}, {"text": "Exclude styles", "callback_data": "o:excl"}],
+            [{"text": f"Weirdness {spec.get('weirdness', 50)}", "callback_data": "o:weird"},
+             {"text": f"Style influence {spec.get('style_influence', 50)}", "callback_data": "o:infl"}],
+            [{"text": f"BPM {spec.get('bpm') or '-'}", "callback_data": "o:bpm"},
+             {"text": f"Key {spec.get('key') or '-'}", "callback_data": "o:key"}],
+            [{"text": f"Title {spec.get('title') or '-'}", "callback_data": "o:title"},
+             {"text": f"Steps {spec.get('steps') or 'auto'}", "callback_data": "o:steps"}],
+            [{"text": f"Seed {seed_txt}", "callback_data": "o:seed"},
+             {"text": f"Model {spec.get('model') or 'turbo'}", "callback_data": "o:model"}],
+            [{"text": "Reference audio (coming)", "callback_data": "o:coming:reference_audio"},
+             {"text": "LoRA (coming)", "callback_data": "o:coming:lora"}],
+            [{"text": "Cover / repaint (coming)", "callback_data": "o:coming:cover"}],
+            [{"text": f"Length {spec.get('seconds', 330)}s", "callback_data": "o:sec"},
+             {"text": "\u25b6\ufe0f Generate", "callback_data": "go"}],
+        ]
+
+    def _show_options(self, chat_id, b):
+        b["step"] = "options"
+        s = b["spec"]
+        prompt = (s.get("idea") or "").strip()
+        self.tg.send(chat_id,
+                     "Options. Everything here is a button; tap Generate when it reads right.\n\n"
+                     f"Prompt: {prompt[:240]}{'...' if len(prompt) > 240 else ''}",
+                     keyboard=self._options_kb(s))
+
+    def _option_step(self, chat_id, b, code):
+        spec = b["spec"]
+        if code.startswith("coming:"):
+            key = code.split(":", 1)[1]
+            note = next((o.get("note", "") for o in OPTIONS if o["key"] == key), "")
+            self.tg.send(chat_id, f"That one is not wired yet: {note}")
+            return
+        if code == "instr":
+            spec["instrumental"] = not spec.get("instrumental", True)
+            if spec["instrumental"]:
+                spec.pop("lyrics", None)
+            self._show_options(chat_id, b)
+        elif code in ("weird", "infl"):
+            key = "weirdness" if code == "weird" else "style_influence"
+            cur = spec.get(key, 50)
+            vals = [0, 30, 50, 70, 100]
+            self.tg.send(chat_id, f"{key.replace('_', ' ').title()} now {cur} (0-100):",
+                         keyboard=[[{"text": str(v), "callback_data": f"ov:{key}:{v}"} for v in vals]])
+        elif code == "model":
+            order = ["turbo", "turbo-shift3"]
+            cur = spec.get("model") or "turbo"
+            spec["model"] = order[(order.index(cur) + 1) % len(order)] if cur in order else "turbo"
+            self._show_options(chat_id, b)
+        elif code == "sec":
+            b["step"] = "seconds"
+            b["skip_vocals"] = True   # instrumental/lyrics are already set on this screen
+            self.tg.send(chat_id, "Length?", keyboard=self._length_kb())
+        else:
+            asks = {"lyrics": "Send the lyrics, with [Intro]/[Verse]/[Chorus] tags. One message.",
+                    "tags": "Send short style tags, e.g. 'analog, tape hiss, 90s'.",
+                    "excl": "What should it avoid? Written into the prompt as avoid phrasing.",
+                    "title": "Send the title.",
+                    "key": "Send the key, e.g. F# minor.",
+                    "bpm": "Send the BPM (60-180).",
+                    "steps": "Send the diffusion steps (4-60).",
+                    "seed": "Send a seed number, or 0 for random."}
+            if code in asks:
+                b["step"] = "opt:" + code
+                self.tg.send(chat_id, asks[code])
+            else:
+                self._show_options(chat_id, b)
+
+    def _length_kb(self):
+        return [[{"text": f"{d//60}:{d%60:02d}", "callback_data": str(d)} for d in DURATIONS[:4]],
+                [{"text": f"{d//60}:{d%60:02d}", "callback_data": str(d)} for d in DURATIONS[4:]]]
+
+    def _prompt_step(self, chat_id, b, code):
+        if code == "own":
+            b["step"] = "own_prompt"
+            self.tg.send(chat_id, "Send the prompt as one message. Anything the engine needs goes in it: "
+                                  "BPM, key, sound, structure. A reference to a real artist or track gets removed.")
+        elif code == "ai":
+            b["step"] = "ai_idea"
+            self.tg.send(chat_id, "Give me the idea in a few words: genre, mood, anything it should feel like. "
+                                  "No artist or track names - I build the full prompt from the library rules.")
+        elif code == "again" and b.get("idea_seed") is not None:
+            b["variant"] = b.get("variant", 0) + 1
+            b["built"] = build_prompt(b["idea_seed"], b["spec"].get("seconds", 330), b["variant"])
+            self._show_prompt(chat_id, b)
+        elif code == "edit":
+            b["step"] = "edit_prompt"
+            self.tg.send(chat_id, "Send your version of the prompt as one message.")
+        elif code == "use" and b.get("built"):
+            built = b["built"]
+            spec = b["spec"]
+            spec["idea"] = built["prompt"]
+            spec["bpm"] = built["bpm"]
+            spec["key"] = built["key"]
+            spec["genre"] = built["genre"]
+            spec["name"] = built["genre"]
+            self._show_options(chat_id, b)
+        else:
+            self.tg.send(chat_id, "Tap My own prompt or AI writes it, or /cancel.")
+
+    def _show_prompt(self, chat_id, b):
+        built = b["built"]
+        b["step"] = "ai_review"
+        note = ""
+        if built.get("removed"):
+            note = "\n\nRemoved a reference to a real artist or track: " + "; ".join(built["removed"][:3])
+        self.tg.send(chat_id, f"Prompt ({built['bpm']} BPM, {built['key']}, {built['genre']}):\n\n"
+                              f"{built['prompt']}{note}",
+                     keyboard=[[{"text": "\u2705 Use it", "callback_data": "p:use"},
+                                {"text": "\u270f\ufe0f Edit", "callback_data": "p:edit"}],
+                               [{"text": "\U0001f504 Another", "callback_data": "p:again"}]])
 
     def _builder_text(self, chat_id, text):
         b = self.builders[chat_id]
         if b["step"] == "theme":
             b["spec"]["idea"] = b["spec"]["idea"] + text
             b["step"] = "seconds"
-            self.tg.send(chat_id, "Length?", keyboard=[[{"text": f"{d//60}:{d%60:02d}", "callback_data": str(d)} for d in DURATIONS[:4]], [{"text": f"{d//60}:{d%60:02d}", "callback_data": str(d)} for d in DURATIONS[4:]]])
+            self.tg.send(chat_id, "Length?", keyboard=self._length_kb())
+        elif b["step"] in ("own_prompt", "edit_prompt"):
+            clean, removed = clean_idea(text)
+            if len(clean) < 8:
+                self.tg.send(chat_id, "That is too short to render from. Send the full prompt again, or /cancel.")
+                return
+            spec = b["spec"]
+            spec["idea"] = clean
+            meta = build_prompt(clean, spec.get("seconds", 330))
+            spec["bpm"], spec["key"] = meta["bpm"], meta["key"]
+            spec.setdefault("genre", meta["genre"])
+            spec.setdefault("name", meta["genre"])
+            if removed:
+                self.tg.send(chat_id, "Removed a reference to a real artist or track: " + "; ".join(removed[:3]))
+            self._show_options(chat_id, b)
+        elif b["step"].startswith("opt:"):
+            key = b["step"].split(":", 1)[1]
+            key = {"excl": "exclude", "tags": "style_tags"}.get(key, key)
+            spec = b["spec"]
+            raw = (text or "").strip()
+            if key in ("bpm", "steps", "seed"):
+                if not raw.isdigit():
+                    self.tg.send(chat_id, "Send a number, or /cancel.")
+                    return
+                spec[key] = int(raw) if not (key == "seed" and raw == "0") else None
+            else:
+                spec[key] = raw
+            self._show_options(chat_id, b)
+        elif b["step"] == "ai_idea":
+            b["idea_seed"] = text
+            b["variant"] = 0
+            b["built"] = build_prompt(text, b["spec"].get("seconds", 330), 0)
+            self._show_prompt(chat_id, b)
 
     def _confirm(self, chat_id, b):
         b["step"] = "confirm"
         s = b["spec"]
+        prompt = s.get("idea") or ""
+        tail = f"\n\nPrompt: {prompt[:300]}{'...' if len(prompt) > 300 else ''}" if prompt else ""
         self.tg.send(chat_id,
             f"Ready: {s.get('genre')} | {s.get('seconds')}s | {'instrumental' if s.get('instrumental') else 'lyrics'} | {s.get('quality', 'standard')}"
-            + (f" | title: {s['title']}" if s.get("title") else ""),
+            + (f" | title: {s['title']}" if s.get("title") else "") + tail,
             keyboard=[[{"text": "Generate", "callback_data": "go"}, {"text": "Cancel", "callback_data": "no"}]])
 
     def _track(self, chat_id, arg):
@@ -631,8 +839,14 @@ class Bot:
             if spec:
                 self._enqueue(chat_id, spec)
                 return
-        self.builders[chat_id] = {"step": "genre", "spec": {"lang": "en", "quality": "high", "instrumental": True, "seconds": 330}}
-        self.tg.send(chat_id, "Style?", keyboard=[[{"text": g, "callback_data": g}] for g in GENRE_PRESETS])
+        self.builders[chat_id] = {"step": "mode", "spec": {"lang": "en", "quality": "high",
+                                                           "instrumental": True, "seconds": 330}}
+        genres = list(GENRE_PRESETS)
+        kb = [[{"text": "\u270d\ufe0f My own prompt", "callback_data": "p:own"},
+               {"text": "\u2728 AI writes it", "callback_data": "p:ai"}]]
+        kb += [[{"text": g, "callback_data": g}] for g in genres]
+        self.tg.send(chat_id, "New track. Pick a style, write the prompt yourself, "
+                              "or let me write it from a short idea.", keyboard=kb)
 
     def _parse_spec(self, arg):
         # "melodic techno, night drive, 330s, instrumental, high, key Am, bpm 122, title X"
@@ -686,6 +900,15 @@ class Bot:
         spec["instrumental"] = bool(spec.get("instrumental", True))
         q = str(spec.get("quality") or "standard").lower()
         spec["quality"] = q if q in ("fast", "standard", "high") else "standard"
+        # the shared option model turns the choices into what the engine reads: the
+        # text-level controls go into the prompt, style influence into guidance_scale,
+        # lyrics and seed into their payload fields
+        try:
+            merged = opt.normalize(spec)
+            merged.update({k: v for k, v in spec.items() if v not in (None, "")})
+            spec = merged
+        except Exception as e:
+            print("options normalize skipped:", repr(e))
         if not isinstance(spec, SpecDict):
             spec = SpecDict(spec)
         return spec
