@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.49"
+VERSION = "2026-11-28.50"
 OWNER_ID_DEFAULT = 7835590874      # Rahal's Telegram id, used only when no owner file exists
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
@@ -509,6 +509,24 @@ class Bot:
         except Exception as e:
             print("user record failed:", type(e).__name__)
             return False
+
+    PHONE_KB = {"keyboard": [[{"text": "\U0001f4f1 Share My Number", "request_contact": True}]],
+                "resize_keyboard": True, "one_time_keyboard": True}
+
+    def _contact_shared(self, chat_id, msg):
+        now = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
+        with self.sync_lock:
+            ok, why = opt.accept_contact(self.users, msg.get("from"), msg.get("contact"), now)
+            if ok:
+                self.sync_dirty = True
+                self._save(self.users_path, self.users)
+        if ok:
+            self.sync_wake.set()
+            self.tg.send(chat_id, "تمام، رقمك اتأكد من تيليجرام وتسجّل.", reply=self.REMOVE_KB)
+        elif why == "not own number":
+            self.tg.send(chat_id, "ده مش رقمك إنت. دوس الزرار عشان تشارك رقمك أنت.", reply=self.PHONE_KB)
+        else:
+            self.tg.send(chat_id, "ما وصلنيش كويس، ممكن تعيدها؟")
 
     def _sync_files(self):
         files = {}
@@ -1838,6 +1856,9 @@ class Bot:
         text = (msg.get("text") or "").strip()
         doc = msg.get("document")
         first_time = self._track_user(msg.get("from"))
+        if msg.get("contact"):
+            self._contact_shared(chat_id, msg)
+            return
         if not self._is_owner(chat_id):
             if text.startswith("/start") and self.pair_code and text.endswith(self.pair_code):
                 self.owner = chat_id
@@ -1847,7 +1868,11 @@ class Bot:
                 self.tg.send(chat_id, "تمام. البوت ده بيرد عليك إنت بس دلوقتي.\n" + opt.USERS_NOTICE + "\n\n" + HELP)
                 self._launcher(chat_id)
             else:
-                self.tg.send(chat_id, "ده بوت استوديو خاص." + ("\n" + opt.USERS_NOTICE if first_time else ""))
+                if first_time:
+                    self.tg.send(chat_id, "ده بوت استوديو خاص.\n" + opt.USERS_NOTICE +
+                                 "\nلو عايز نتأكد إنك شخص حقيقي، شارك رقمك بالزرار تحت (اختياري).", reply=self.PHONE_KB)
+                else:
+                    self.tg.send(chat_id, "ده بوت استوديو خاص.")
             return
         if not self._launcher_sent:
             # after a restart or a cleared chat the buttons are gone until the bot
