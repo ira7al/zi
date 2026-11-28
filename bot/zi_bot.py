@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.18"
+VERSION = "2026-11-28.19"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -103,7 +103,8 @@ COMMANDS = [("menu", "every action, as buttons"),
 
 HELP = """Zi Music Studio bot - make tracks from chat.
 /menu - every action as one button (start here)
-/track - guided builder: pick a style, write your own prompt, or let it write one from your idea
+/track - guided builder: pick a style, write your own prompt, let it write one from your idea,
+         or send a reference (a name, a link, a screenshot, a voice note) to work out the style
 /track <spec> - one-shot, e.g.: /track melodic techno, night drive, 330s, instrumental, high
 /batch - send several tracks as JSON (list of specs), or paste after the command
 /queue - what's rendering and what's waiting
@@ -587,6 +588,143 @@ class Bot:
         except Exception as e:
             print("publish menu failed:", repr(e))
 
+    # ---------- style reference ----------
+    REF_HINT = ("Send the reference: a track or artist name, a screenshot, a link, or a voice note. "
+                "I use it only to work out the style - the name never goes into the prompt, "
+                "no audio is downloaded, and nothing is copied from the song itself.")
+
+    def _http_text(self, url, limit=200000, timeout=8):
+        req = urllib.request.Request(url, headers={"User-Agent": "zi-studio-bot/1.0 (+music studio)"})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.read(limit).decode("utf-8", "ignore")
+
+    def _itunes(self, query):
+        """Free iTunes lookup: the genre label and the name, nothing else."""
+        q = (query or "").strip()[:120]
+        if not q:
+            return None
+        for entity in ("song", "musicArtist"):
+            try:
+                url = "https://itunes.apple.com/search?" + urllib.parse.urlencode(
+                    {"term": q, "entity": entity, "limit": 3})
+                data = json.loads(self._http_text(url))
+            except Exception as e:
+                print("itunes lookup failed:", repr(e))
+                continue
+            for r in data.get("results") or []:
+                genre = r.get("primaryGenreName")
+                if genre:
+                    return {"genre": genre, "artist": r.get("artistName"),
+                            "track": r.get("trackName") or r.get("artistName")}
+        return None
+
+    def _reference_link(self, chat_id, url):
+        if not re.match(r"^https?://", url, re.I):
+            url = "https://" + url
+        try:
+            page = self._http_text(url)
+        except Exception as e:
+            self.tg.send(chat_id, f"I could not open that link: {str(e)[:120]}\n"
+                                  "Send the track name as text instead.")
+            return
+        # only the page's own title and description are used - never the audio
+        title = ""
+        m = re.search(r"<title[^>]*>(.*?)</title>", page, re.S | re.I)
+        if m:
+            title = re.sub(r"\s+", " ", m.group(1)).strip()
+        desc = ""
+        for pat in (r'<meta[^>]+property=["\']og:description["\'][^>]+content=["\']([^"\']+)',
+                    r'<meta[^>]+name=["\']description["\'][^>]+content=["\']([^"\']+)'):
+            m = re.search(pat, page, re.I)
+            if m:
+                desc = m.group(1).strip()
+                break
+        text = " ".join(x for x in (title, desc) if x)
+        if not text.strip():
+            self.tg.send(chat_id, "That page gave me no title or description to work from. "
+                                  "Send the track name as text instead.")
+            return
+        self.tg.send(chat_id, "From the link I read: " + title[:120])
+        # the title identifies it; only the page's own description becomes prompt words
+        q = title.split("|")[0].strip()
+        q = re.sub(r"\s*-\s*(YouTube|Spotify|SoundCloud|Apple\s*Music|Deezer|Tidal|Bandcamp)\s*$", "",
+                   q, flags=re.I).strip()
+        self._reference_from(chat_id, query=q, words=desc[:400])
+
+    def _reference_photo(self, chat_id, photo):
+        try:
+            data = self._download_file(photo["file_id"])
+        except Exception as e:
+            self.tg.send(chat_id, f"I could not fetch that screenshot: {str(e)[:120]}")
+            return
+        path = os.path.join(self.work, "reference.jpg")
+        try:
+            with open(path, "wb") as fh:
+                fh.write(data)
+        except Exception as e:
+            self.tg.send(chat_id, f"I could not save that screenshot: {str(e)[:120]}")
+            return
+        text = ""
+        try:
+            import pytesseract                      # noqa: PLC0415 - optional on this box
+            from PIL import Image
+            text = pytesseract.image_to_string(Image.open(path)) or ""
+        except Exception as e:
+            print("ocr unavailable:", repr(e))
+        text = re.sub(r"\s+", " ", text).strip()
+        if len(text) < 3:
+            self.tg.send(chat_id, "I cannot read screenshots on this box (no OCR installed). "
+                                  "Type the track or artist name, or send it as a voice note.")
+            return
+        self.tg.send(chat_id, "From the screenshot I read: " + text[:120])
+        self._reference_text(chat_id, text[:200])
+
+    def _reference_text(self, chat_id, text):
+        """A name, or words about the style: identify it if we can, then describe it."""
+        raw = (text or "").strip()
+        if len(raw) < 3:
+            b = self.builders.get(chat_id)
+            self.tg.send(chat_id, self.REF_HINT if b else "That builder expired. /track starts a new one.")
+            return
+        self._reference_from(chat_id, query=raw, words=raw)
+
+    def _reference_from(self, chat_id, query, words=""):
+        b = self.builders.get(chat_id)
+        if not b:
+            self.tg.send(chat_id, "That builder expired. /track starts a new one.")
+            return
+        clean, removed = clean_idea(words or "")
+        found = self._itunes(query) if query else None
+        if found:
+            # the name was only there to find the style; it has no place in the prompt
+            for name in (found.get("artist"), found.get("track")):
+                if name and len(str(name)) > 1:
+                    clean = re.sub(re.escape(str(name)), " ", clean, flags=re.I)
+            clean = re.sub(r"[\s\-|,;]+", " ", clean).strip(" ,.;-|")
+        hay = (clean + " " + (query or "")).lower()
+        # words he typed that name a style beat a genre label from the lookup
+        word_style = None
+        if any(w in hay for words_, _ in opt.STYLE_LOOKUP for w in words_):
+            word_style = opt.pick_style(clean or query)
+        style = word_style or (opt.genre_to_style(found["genre"]) if found else None)
+        if not style:
+            self.tg.send(chat_id, "I could not work out a style from that. Send the genre and the tempo in words - "
+                                  "for example 'melodic techno, 122 bpm, dark' - or /cancel.")
+            return
+        theme = clean if clean and not opt.has_non_latin(clean) else ""
+        built = build_prompt(theme, b["spec"].get("seconds", 330), 0,
+                             instrumental=b["spec"].get("instrumental", True), style=style)
+        heard = []
+        if found:
+            heard.append(f"{found.get('track') or ''} - {found.get('artist') or ''}".strip(" -"))
+            heard.append(found.get("genre") or "")
+        b["built"] = built
+        b["ref_note"] = ("From your reference I understood: " + built["summary"]
+                         + (f"\n(Read from: {' / '.join(x for x in heard if x)})" if heard else ""))
+        if removed:
+            b["ref_note"] += "\nLeft the name out of the prompt: " + "; ".join(removed[:3])
+        self._show_prompt(chat_id, b)
+
     # ---------- last settings ----------
     def _last_path(self):
         return os.path.join(self.out_root, "zi_bot_last.json")
@@ -954,6 +1092,10 @@ class Bot:
         if self._is_dataset_upload(msg):
             self._ds_intake(chat_id, msg)
             return
+        photo = msg.get("photo")
+        if photo and chat_id in self.builders and self.builders[chat_id].get("step") == "ref_wait":
+            self._reference_photo(chat_id, photo[-1])
+            return
         if doc and (doc.get("file_name") or "").lower().endswith(".txt") and chat_id in self.ds_lyrics:
             try:
                 data = self._download_file(doc["file_id"])
@@ -1229,7 +1371,10 @@ class Bot:
                 [{"text": f"{d//60}:{d%60:02d}", "callback_data": str(d)} for d in DURATIONS[4:]]]
 
     def _prompt_step(self, chat_id, b, code):
-        if code == "own":
+        if code == "ref":
+            b["step"] = "ref_wait"
+            self.tg.send(chat_id, self.REF_HINT)
+        elif code == "own":
             b["step"] = "own_prompt"
             self.tg.send(chat_id, "Send the prompt as one message. Anything the engine needs goes in it: "
                                   "BPM, key, sound, structure. A reference to a real artist or track gets removed.")
@@ -1260,16 +1405,26 @@ class Bot:
         built = b["built"]
         b["step"] = "ai_review"
         note = ""
+        if b.get("ref_note"):
+            note = b["ref_note"] + "\n\n"
         if built.get("removed"):
-            note = "\n\nRemoved a reference to a real artist or track: " + "; ".join(built["removed"][:3])
-        self.tg.send(chat_id, f"Prompt ({built['bpm']} BPM, {built['key']}, {built['genre']}):\n\n"
-                              f"{built['prompt']}{note}",
+            note += "Removed a reference to a real artist or track: " + "; ".join(built["removed"][:3]) + "\n\n"
+        self.tg.send(chat_id, f"{note}Prompt ({built['bpm']} BPM, {built['key']}, {built['genre']}):\n\n"
+                              f"{built['prompt']}",
                      keyboard=[[{"text": "\u2705 Use it", "callback_data": "p:use"},
                                 {"text": "\u270f\ufe0f Edit", "callback_data": "p:edit"}],
-                               [{"text": "\U0001f504 Another", "callback_data": "p:again"}]])
+                               [{"text": "\U0001f504 Another", "callback_data": "p:again"},
+                                {"text": "\U0001f50e New reference", "callback_data": "p:ref"}]])
 
     def _builder_text(self, chat_id, text):
         b = self.builders[chat_id]
+        if b["step"] == "ref_wait":
+            m = re.search(r"(https?://\S+|www\.\S+)", text)
+            if m:
+                self._reference_link(chat_id, m.group(1))
+            else:
+                self._reference_text(chat_id, text)
+            return
         if has_non_latin(text) and b["step"] in ("theme", "own_prompt", "edit_prompt", "ai_idea"):
             # the engine reads an English prompt, so the theme has to be English too
             self.tg.send(chat_id, "The engine reads English, so write that in English: a few words are enough, "
@@ -1335,7 +1490,8 @@ class Bot:
                                                            "instrumental": True, "seconds": 330}}
         genres = list(GENRE_PRESETS)
         kb = [[{"text": "\u270d\ufe0f My own prompt", "callback_data": "p:own"},
-               {"text": "\u2728 AI writes it", "callback_data": "p:ai"}]]
+               {"text": "\u2728 AI writes it", "callback_data": "p:ai"}],
+              [{"text": "\U0001f50e Reference", "callback_data": "p:ref"}]]
         last = self._last_spec()
         if last:
             kb.append([{"text": self._last_label(last), "callback_data": "last"}])
