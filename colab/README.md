@@ -117,14 +117,33 @@ It comes from a Google Cloud project with the YouTube Data API enabled, an OAuth
 
 The 9:16 video is used for the channel, reels and shorts; the YouTube button renders a 1280x720 version from the same cover on demand so the full track reads properly on YouTube.
 
-## Bot build 2026-11-28.14: reload and engine patch
+## Training set for the Mr Dorgham model
+
+The bot now collects the training data. Send a track to the bot (audio file or voice note) and it is saved on the machine running the notebook:
+
+- `dataset/mr-dorgham/` next to the notebook, original filename kept, `dataset/mr-dorgham/manifest.json` with the sha256 of every file.
+- A file already in the set (same bytes) is refused, so re-sending does not duplicate. A repeat name becomes `name (2).mp3` - nothing is ever overwritten.
+- After each save the bot asks **Vocal** or **Instrumental**. Vocal then offers optional lyrics: send them as a message, or as a `.txt` file; it is stored beside the track as `track.lyrics.txt`. Instrumental needs nothing more.
+- Telegram caps bot downloads at 20 MB. A bigger file is refused with the size and what to do: send the MP3 instead, or upload the folder to Drive.
+- `/dataset` (or Menu > Dataset) shows the running count, the vocal/instrumental split, and which files still need a label.
+
+Labels and lyrics go into the same manifest, so the training step can read one file:
+
+```json
+{"files": {"<sha256>": {"name": "track.mp3", "size": 4833112, "added": "2026-11-28 11:20:00",
+                        "kind": "vocal", "lyrics": "track.lyrics.txt"}}}
+```
+
+Nothing in this feature generates music or touches the GPU.
+
+## Bot build 2026-11-28.15: reload and engine patch
 
 The bot now loads a second file (`bot/zi_options.py`), so a cell 5 that only fetches `zi_bot.py` fails. Use this cell instead; it pins the commit and fetches both.
 
 ```python
-# pinned reload - build .14 (bot + its shared option model)
+# pinned reload - build .15 (bot + its shared option model)
 import os, sys, importlib.util, urllib.request
-SHA = "d2427c0dd007abb8ad4365f4f4fb828f4b9c2700"
+SHA = "35e0b27a972a5374f09a9581ba2de788380f8343"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
