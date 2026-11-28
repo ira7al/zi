@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.26"
+VERSION = "2026-11-28.27"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -57,6 +57,15 @@ except Exception:  # loaded by path from the notebook
     ziassist = _ilu2.module_from_spec(_as_spec)
     _as_spec.loader.exec_module(ziassist)
 
+try:
+    import zi_voice as voice
+except Exception:  # loaded by path from the notebook
+    import importlib.util as _ilu3
+    _vo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "zi_voice.py")
+    _vo_spec = _ilu3.spec_from_file_location("zi_voice", _vo_path)
+    voice = _ilu3.module_from_spec(_vo_spec)
+    _vo_spec.loader.exec_module(voice)
+
 build_prompt = opt.build_prompt
 clean_idea = opt.clean_idea
 has_non_latin = opt.has_non_latin
@@ -69,6 +78,8 @@ REQUIRED_SPEC_KEYS = ("name", "genre", "idea", "lang", "instrumental", "seconds"
 LENGTH_KEYS = ("seconds", "duration", "duration_sec", "target_sec")
 QUALITIES = [("high", "High (2 seeds, best pick)"), ("standard", "Standard"), ("fast", "Fast draft")]
 ASSIST_HINT = "\U0001f916 محتاج حاجة؟ اكتب سؤالك هنا في أي وقت، أو دوس اسألني."
+VISION_HINT = ("مش قادر أقرا الصورة دلوقتي (الحد اليومي للموديل المجاني خلص). "
+               "ابعت اسم التراك أو المغني بالكلام، أو فويس نوت، وأنا أطلع الستايل من غير ما أستخدم الاسم.")
 AI_LABEL = "AI-generated music (ACE-Step 1.5, MIT licence). Label it AI-generated wherever you release it."
 
 # ---------- publishing ----------
@@ -130,6 +141,8 @@ Studio opens the web app. Telegram's own corner button only opens the short comm
 /diag - build version and update counts (for debugging)
 /cancel - cancel the current builder step
 /help - this message
+Voice: send a voice note and the assistant answers out loud; a spoken music idea starts a track.
+Screenshots: send a screenshot of a track and the style is read off it - the name never enters the prompt.
 Every track is AI-generated and delivered with that label."""
 
 
@@ -288,6 +301,9 @@ class TG:
 
     def photo(self, chat_id, path, caption=None):
         return self._upload("sendPhoto", chat_id, "photo", path, caption)
+
+    def voice(self, chat_id, path, caption=None):
+        return self._upload("sendVoice", chat_id, "voice", path, caption)
 
 
 class Bot:
@@ -687,6 +703,24 @@ class Bot:
                 print("assistant: free model on (" + self.llm_model + ")")
         return bool(self.llm_key)
 
+    def _vision_text(self, path, mime="image/jpeg"):
+        """Read a screenshot with the free model. None when there is no key or it refuses."""
+        if not self._llm() or not hasattr(ziassist, "read_image"):
+            return None
+        try:
+            with open(path, "rb") as fh:
+                data = fh.read()
+        except Exception as e:
+            print("vision read failed:", type(e).__name__)
+            return None
+        if len(data) > 6 * 1024 * 1024:
+            return None
+        try:
+            return ziassist.read_image(data, self.llm_key, mime=mime)
+        except Exception as e:
+            print("vision call failed:", type(e).__name__)
+            return None
+
     SUGGESTIONS = (("\u2753 إيه الناقص؟", "sug:missing"),
                    ("\u27a1\ufe0f أعمل إيه بعد كده؟", "sug:next"),
                    ("\U0001f4ca الحالة", "sug:status"),
@@ -705,7 +739,27 @@ class Bot:
             return True
         return any(w in low for words, _ in opt.STYLE_LOOKUP for w in words)
 
-    def _assistant(self, chat_id, question, suggest=False):
+    def _speak(self, chat_id, text):
+        """Send the answer as a voice note too. False when there is no free TTS on the box."""
+        try:
+            made = voice.speak(text, self.work)
+        except Exception as e:
+            print("tts failed:", type(e).__name__)
+            return False
+        if not made:
+            return False
+        caption = re.sub(r"[*_`#]+", "", text).strip()[:200]
+        try:
+            if made.get("voice_note"):
+                self.tg.voice(chat_id, made["path"], caption=caption)
+            else:
+                self.tg.audio(chat_id, made["path"], caption=caption)
+            return True
+        except Exception as e:
+            print("voice send failed:", type(e).__name__)
+            return False
+
+    def _assistant(self, chat_id, question, suggest=False, spoken=False):
         try:
             state = self._snapshot()
         except Exception as e:
@@ -725,6 +779,8 @@ class Bot:
                 print("assistant answer failed:", repr(e))
                 text = "حصلت مشكلة وأنا بجهز الرد. جرب تاني، أو /status."
         self.tg.send(chat_id, text, keyboard=self._suggestion_kb(state) if suggest else None)
+        if spoken:
+            self._speak(chat_id, text)
 
     def _ask(self, chat_id, arg):
         q = (arg or "").strip()
@@ -832,10 +888,12 @@ class Bot:
             print("ocr unavailable:", repr(e))
         text = re.sub(r"\s+", " ", text).strip()
         if len(text) < 3:
-            self.tg.send(chat_id, "I cannot read screenshots on this box (no OCR installed). "
-                                  "Type the track or artist name, or send it as a voice note.")
-            return
-        self.tg.send(chat_id, "From the screenshot I read: " + text[:120])
+            # no OCR on the box: read the screenshot with the free vision model instead
+            text = self._vision_text(path) or ""
+            if len(text) < 3:
+                self.tg.send(chat_id, VISION_HINT)
+                return
+        self.tg.send(chat_id, "From the screenshot I read: " + text[:160])
         self._reference_text(chat_id, text[:200])
 
     def _reference_text(self, chat_id, text):
@@ -1182,9 +1240,8 @@ class Bot:
                 note = f"\n(no English for: {', '.join(leftover[:5])})" if leftover else ""
                 self.tg.send(chat_id, "In English: " + english + note)
                 return english
-            self.tg.send(chat_id, "I heard Arabic but could not map any of it to music words. "
-                                  "Try naming a style, a mood, or a place, or type it.")
-            return None
+            # no music words in it: it is a question, so the assistant answers it
+            return text
         return text
 
     # ---------- update handling ----------
@@ -1259,9 +1316,21 @@ class Bot:
             self._ds_intake(chat_id, msg)
             return
         photo = msg.get("photo")
-        if photo and chat_id in self.builders and self.builders[chat_id].get("step") in self.PROMPT_STEPS:
-            self._reference_photo(chat_id, photo[-1])
-            return
+        if not photo and doc and str(doc.get("mime_type") or "").startswith("image/"):
+            photo = [doc]                       # a screenshot sent as a file, not as a photo
+        if photo:
+            step = (self.builders.get(chat_id) or {}).get("step")
+            if step in self.PROMPT_STEPS:
+                self._reference_photo(chat_id, photo[-1])
+                return
+            if not step:
+                # a screenshot out of the blue is a reference: open a builder for it
+                self.builders[chat_id] = {"step": "ref_wait",
+                                          "spec": {"lang": "en", "quality": "high",
+                                                   "instrumental": True, "seconds": 330}}
+                self.tg.send(chat_id, "بعت الصورة كمرجع. بقراها وأطلع منها الستايل بس.")
+                self._reference_photo(chat_id, photo[-1])
+                return
         if doc and (doc.get("file_name") or "").lower().endswith(".txt") and chat_id in self.ds_lyrics:
             try:
                 data = self._download_file(doc["file_id"])
@@ -1292,7 +1361,7 @@ class Bot:
                 self.ask_mode.discard(chat_id)
                 self.tg.send(chat_id, "قفلت المحادثة مع المساعد. /ask لو رجعت.")
                 return
-            self._assistant(chat_id, text)
+            self._assistant(chat_id, text, spoken=from_voice)
             return
         if chat_id in self.builders and not text.startswith("/"):
             self._builder_text(chat_id, text)
@@ -1318,7 +1387,7 @@ class Bot:
                                               instrumental=b["spec"].get("instrumental", True))
                     self._show_prompt(chat_id, b)
                 return
-            self._assistant(chat_id, text, suggest=True)
+            self._assistant(chat_id, text, suggest=True, spoken=from_voice)
             return
         cmd, _, arg = text.partition(" ")
         cmd = cmd.lower().split("@")[0]
@@ -1933,6 +2002,13 @@ class Bot:
             pass
         lines.append(f"threads known: {len(self.threads)}")
         lines.append(f"outputs: {self.out_root}")
+        try:
+            e = voice.engines()
+            on = ", ".join(k for k, v in e.items() if v)
+            lines.append("voice out: " + (on or "none - text only"))
+        except Exception:
+            pass
+        lines.append("screenshots: " + ("vision" if (self.llm_key or self._llm()) else "no key"))
         try:
             raw = self.stats.get("last_cb_raw")
             if raw:

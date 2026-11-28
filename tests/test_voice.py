@@ -82,10 +82,13 @@ class VoiceTests(unittest.TestCase):
         self.assertIn("faster-whisper", out)
         self.assertIn("pip install", out)
 
-    def test_arabic_without_music_words_asks_for_another_try(self):
+    def test_arabic_without_music_words_is_a_question_for_the_assistant(self):
+        # he talks to it like he talks to a person: no music words means a question,
+        # and the assistant answers instead of telling him to try again
         self.heard = "السلام عليكم ازيك عامل ايه"
         self.voice()
-        self.assertIn("could not map any of it", self.texts())
+        self.assertNotIn(5, self.bot.builders)
+        self.assertIn("جاهز", self.texts())
 
     def test_lexicon_keeps_unknown_words_out_of_the_prompt(self):
         en, leftover = opt.to_english("عايز حاجة زي موسيقى الافلام")

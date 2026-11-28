@@ -9,6 +9,7 @@ The wording is Egyptian Arabic because that is how he talks to it.
 hosted model later if a key is ever added - the wording is the only thing that
 would change, never the facts.
 """
+import os
 
 # ---------- what the bot knows ----------
 REQUIRED_DATASET = 50          # roughly how many of his own tracks the LoRA wants
@@ -219,6 +220,53 @@ def ask_llm(question, state, key, model="gemini-2.0-flash", opener=None, timeout
         print("assistant llm failed:", type(e).__name__)
         return None
     return parse_response(data)
+
+
+# ---------- optional: reading a screenshot with the same free key ----------
+VISION_PROMPT = ("Read this screenshot and answer with one short line, no preamble: "
+                 "what track is playing, who it is by, and any style, mood or tempo words on screen. "
+                 "If it is not music, answer with the main words you can read. "
+                 "If nothing is readable, answer exactly: nothing")
+
+VISION_MODEL = os.environ.get("ZI_VISION_MODEL", "gemini-2.0-flash").strip() or "gemini-2.0-flash"
+
+
+def build_vision_request(image_bytes, mime="image/jpeg", prompt=None):
+    """The exact body sent for a screenshot: the image inline, base64, and a short ask."""
+    import base64 as _b64
+    return {"contents": [{"role": "user", "parts": [
+                {"text": prompt or VISION_PROMPT},
+                {"inlineData": {"mimeType": mime or "image/jpeg",
+                                "data": _b64.b64encode(image_bytes).decode()}}]}],
+            "generationConfig": {"temperature": 0.1, "maxOutputTokens": 120}}
+
+
+def read_image(image_bytes, key, model=None, mime="image/jpeg", opener=None, timeout=30):
+    """One vision call. None on any failure, so the bot can say so in plain words.
+
+    The key goes in a header, never the URL, and never gets printed.
+    """
+    if not key or not image_bytes:
+        return None
+    import json as _json
+    import urllib.error as _uerr
+    import urllib.request as _req
+    body = _json.dumps(build_vision_request(image_bytes, mime)).encode()
+    req = _req.Request(GEMINI_URL.format(model=(model or VISION_MODEL)), data=body, method="POST",
+                       headers={"Content-Type": "application/json", "x-goog-api-key": key})
+    try:
+        with (_opener(opener))(req, timeout=timeout) as r:
+            data = _json.loads(r.read())
+    except _uerr.HTTPError as e:
+        print("vision HTTP", e.code)              # the code only, never the key
+        return None
+    except Exception as e:
+        print("vision failed:", type(e).__name__)
+        return None
+    text = parse_response(data)
+    if not text or text.strip().lower().strip(" .!") in ("nothing", "لا شيء"):
+        return None
+    return text.strip().replace("\n", " ")[:300]
 
 
 def _opener(opener):
