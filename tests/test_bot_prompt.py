@@ -18,7 +18,7 @@ class FakeTG:
         self.calls = []
         self.thread_of = None
 
-    def send(self, chat_id, text, keyboard=None):
+    def send(self, chat_id, text, keyboard=None, reply=None):
         self.sent.append({"chat_id": chat_id, "text": text, "keyboard": keyboard})
         return {"ok": True}
 
@@ -247,7 +247,9 @@ class BuilderTests(unittest.TestCase):
 
     def test_start_offers_the_menu_button(self):
         self.msg("/start")
-        self.assertIn("menu", buttons(self.bot.tg.sent[-1]))
+        found = [m for m in self.bot.tg.sent if m.get("keyboard")]
+        self.assertTrue(found)
+        self.assertIn("menu", buttons(found[0]))
 
     def test_prompt_tap_without_a_builder_does_not_crash(self):
         self.tap("p:own")

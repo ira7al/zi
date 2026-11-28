@@ -18,7 +18,7 @@ class FakeTG:
         self.calls = []
         self.thread_of = None
 
-    def send(self, chat_id, text, keyboard=None):
+    def send(self, chat_id, text, keyboard=None, reply=None):
         self.sent.append({"chat_id": chat_id, "text": text, "keyboard": keyboard})
         return {"ok": True}
 
@@ -213,8 +213,9 @@ class PublishTests(unittest.TestCase):
         self.bot.owner = self.chat  # /start is owner-only
         self.bot._handle({"message": {"chat": {"id": self.chat, "type": "private"},
                                       "from": {"id": self.chat}, "text": "/start"}})
-        kb = self.bot.tg.sent[-1]["keyboard"]
-        self.assertEqual(kb[0][0]["callback_data"], "menu")
+        boards = [m for m in self.bot.tg.sent if m.get("keyboard")]
+        self.assertTrue(boards)
+        self.assertEqual(boards[0]["keyboard"][0][0]["callback_data"], "menu")
 
     def test_commands_are_registered_on_start(self):
         self.bot._register_commands()
