@@ -39,7 +39,7 @@ class AlwaysOnTests(unittest.TestCase):
         self.say("إيه الناقص؟")
         self.bot._callback(9, "sug:track")
         self.assertIn(9, self.bot.builders)
-        self.assertIn("New track", self.last()["text"])
+        self.assertIn("تراك جديد", self.last()["text"])
 
     def test_a_spoken_music_idea_still_starts_a_track(self):
         self.bot._download_voice = lambda v: os.path.join(self.tmp, "v.ogg")

@@ -96,7 +96,7 @@ class PublishTests(unittest.TestCase):
         kinds = [u[0] for u in self.bot.tg.uploads]
         self.assertEqual(kinds, ["sendPhoto", "sendAudio", "sendVideo"])
         self.assertTrue(self.bot.tg.uploads[2][2].endswith("_reel_9x16.mp4"))
-        self.assertIn("Publish Night Drive?", self.bot.tg.sent[-1]["text"])
+        self.assertIn("عايز تنشر Night Drive؟", self.bot.tg.sent[-1]["text"])
         self.assertTrue(self.bot.tg.sent[-1]["keyboard"])
 
     def test_delivery_survives_ffmpeg_being_unavailable(self):
@@ -109,7 +109,7 @@ class PublishTests(unittest.TestCase):
                                       "folder": folder, "title": "Night Drive"})
         kinds = [u[0] for u in self.bot.tg.uploads]
         self.assertEqual(kinds, ["sendPhoto", "sendAudio"])
-        self.assertIn("Publish Night Drive?", self.bot.tg.sent[-1]["text"])
+        self.assertIn("عايز تنشر Night Drive؟", self.bot.tg.sent[-1]["text"])
 
     # ---- the video render ----
     def test_video_render_is_vertical_and_reuses_an_existing_file(self):
@@ -136,7 +136,7 @@ class PublishTests(unittest.TestCase):
         self.assertEqual([u[0] for u in self.bot.tg.uploads], ["sendPhoto", "sendAudio"])
         self.assertTrue(all(u[1] == zb.CHANNEL for u in self.bot.tg.uploads))
         self.assertIn(zb.PUBLISH_AI, self.bot.tg.uploads[-1][3])
-        self.assertIn("posted", self.bot.tg.sent[-1]["text"])
+        self.assertIn("اتنشر", self.bot.tg.sent[-1]["text"])
         self.assertFalse([f for f in os.listdir(folder) if f.startswith("publish_request_")])
 
     def test_channel_tap_prefers_the_video(self):
@@ -154,7 +154,7 @@ class PublishTests(unittest.TestCase):
         self.assertIn(zb.PUBLISH_AI, req["caption"])
         self.assertEqual(req["approved_by"], "owner tap in Telegram")
         self.assertTrue(req["files"])
-        self.assertIn("no posting API", self.bot.tg.sent[-1]["text"])
+        self.assertIn("مفيش طريقة نشر تلقائية", self.bot.tg.sent[-1]["text"])
 
     def test_youtube_tap_without_the_oauth_client_packages_and_says_why(self):
         folder = make_release(self.tmp)
@@ -162,7 +162,7 @@ class PublishTests(unittest.TestCase):
         self.assertEqual(self.bot.tg.uploads, [])
         self.assertTrue(os.path.exists(os.path.join(folder, "publish_request_yt.json")))
         text = self.bot.tg.sent[-1]["text"]
-        self.assertIn("not uploaded yet", text)
+        self.assertIn("لسه مترفعش", text)
         self.assertIn("youtube_token.json", text)
 
     def test_youtube_tap_uploads_when_the_client_exists(self):
@@ -177,7 +177,7 @@ class PublishTests(unittest.TestCase):
         self.bot._publish_cb(self.chat, "pub:fb:" + self._key(folder))
         self.assertEqual(self.bot.tg.uploads, [])
         text = self.bot.tg.sent[-1]["text"]
-        self.assertIn("Facebook caption:", text)
+        self.assertIn("كابشن فيسبوك:", text)
         self.assertIn(zb.PUBLISH_AI, text)
         self.assertFalse([f for f in os.listdir(folder) if f.startswith("publish_request_")])
 
@@ -189,7 +189,7 @@ class PublishTests(unittest.TestCase):
         self.assertTrue("https://youtu.be/TESTID" in self.bot.tg.sent[-1]["text"])
         for p in ("ig", "tt"):
             self.assertTrue(os.path.exists(os.path.join(folder, "publish_request_%s.json" % p)), p)
-        self.assertIn("Facebook caption:", self.bot.tg.sent[-1]["text"])
+        self.assertIn("كابشن فيسبوك:", self.bot.tg.sent[-1]["text"])
 
     # ---- social links ----
     def test_social_buttons_are_the_verified_profiles(self):
@@ -209,7 +209,7 @@ class PublishTests(unittest.TestCase):
 
     def test_social_button_works_without_a_builder(self):
         self.bot._callback(self.chat, "social")
-        self.assertIn("Rahal everywhere", self.bot.tg.sent[-1]["text"])
+        self.assertIn("راهال في كل مكان", self.bot.tg.sent[-1]["text"])
         self.assertTrue(self.bot.tg.sent[-1]["keyboard"])
 
     def test_start_offers_the_menu_button(self):

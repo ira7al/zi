@@ -40,11 +40,14 @@ OPTIONS = [
     {"key": "model", "label": "Model", "kind": "choice", "status": "live",
      "choices": ["turbo", "turbo-shift3"], "note": "XL appears once it is on the box."},
     {"key": "reference_audio", "label": "Reference audio", "kind": "file", "status": "coming",
-     "note": "The server only takes a reference for continuation, not style."},
+     "note": "The server only takes a reference for continuation, not style.",
+     "note_ar": "السيرفر بياخد مرجع للاستكمال بس، مش للستايل."},
     {"key": "lora", "label": "LoRA", "kind": "choice", "status": "coming",
-     "note": "Mr Dorgham adapter is not trained yet."},
+     "note": "Mr Dorgham adapter is not trained yet.",
+     "note_ar": "موديل Mr Dorgham لسه متدرّبش."},
     {"key": "cover", "label": "Cover / repaint", "kind": "action", "status": "coming",
-     "note": "No repaint endpoint in this build; continuation already runs automatically on short renders."},
+     "note": "No repaint endpoint in this build; continuation already runs automatically on short renders.",
+     "note_ar": "مفيش إعادة رسم في النسخة دي؛ الاستكمال بيشتغل لوحده على التراكات القصيرة."},
 ]
 OPTION_BY_KEY = {o["key"]: o for o in OPTIONS}
 

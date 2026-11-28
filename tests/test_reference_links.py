@@ -42,8 +42,8 @@ class LinkAndPhotoTests(unittest.TestCase):
         self.builder("own_prompt")
         self.send(text="https://open.spotify.com/track/abc123")
         shown = self.joined()
-        self.assertIn("From the link I read: Some Track - song by Some Artist", shown)
-        self.assertIn("From your reference I understood", shown)
+        self.assertIn("قريت من اللينك: Some Track - song by Some Artist", shown)
+        self.assertIn("فهمت من المرجع", shown)
         built = self.bot.builders[9]["built"]
         self.assertIn("melodic techno", built["prompt"])
         self.assertNotIn("Some Artist", built["prompt"])
@@ -51,7 +51,7 @@ class LinkAndPhotoTests(unittest.TestCase):
     def test_a_link_at_the_ai_idea_step_becomes_a_reference(self):
         self.builder("ai_idea")
         self.send(text="https://soundcloud.com/someone/some-track")
-        self.assertIn("From your reference I understood", self.joined())
+        self.assertIn("فهمت من المرجع", self.joined())
         self.assertEqual(self.bot.builders[9]["step"], "ai_review")
 
     def test_a_youtube_link_uses_its_own_title(self):
@@ -79,7 +79,7 @@ class LinkAndPhotoTests(unittest.TestCase):
             self.send(photo=[{"file_id": "big"}])
         shown = self.joined()
         self.assertIn("قريت من الصورة", shown)
-        self.assertIn("From your reference I understood", shown)
+        self.assertIn("فهمت من المرجع", shown)
 
     def test_a_reference_derived_prompt_says_nothing_was_stripped(self):
         self.builder("own_prompt")
@@ -92,7 +92,7 @@ class LinkAndPhotoTests(unittest.TestCase):
         self.builder("own_prompt")
         self.send(text="melodic techno, punchy kick, 122 bpm, dark pads")
         self.assertNotIn("From the link", self.joined())
-        self.assertIn("Options.", self.joined())      # it went to the options screen, not a reference
+        self.assertIn("الخيارات.", self.joined())      # it went to the options screen, not a reference
 
 
 if __name__ == "__main__":

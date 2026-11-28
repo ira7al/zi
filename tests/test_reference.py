@@ -41,7 +41,7 @@ class ReferenceTests(unittest.TestCase):
 
     def enter_ref(self):
         self.bot._callback(9, "p:ref")
-        self.assertIn("Send the reference", self.text())
+        self.assertIn("ابعت المرجع", self.text())
         self.assertEqual(self.bot.builders[9]["step"], "ref_wait")
 
     def test_reference_button_sits_in_the_prompt_step(self):
@@ -54,7 +54,7 @@ class ReferenceTests(unittest.TestCase):
         self.bot._handle({"message": {"chat": {"id": 9, "type": "private"}, "from": {"id": 9},
                                       "text": "Nils Frahm, sad piano"}})
         shown = self.text()
-        self.assertIn("From your reference I understood:", shown)
+        self.assertIn("فهمت من المرجع:", shown)
         self.assertIn("Says - Nils Frahm", shown)          # he can check what was read
         built = self.bot.builders[9]["built"]
         self.assertNotIn("Nils Frahm", built["prompt"])
@@ -75,14 +75,14 @@ class ReferenceTests(unittest.TestCase):
         self.enter_ref()
         self.bot._handle({"message": {"chat": {"id": 9, "type": "private"}, "from": {"id": 9},
                                       "text": "zzz qqq"}})
-        self.assertIn("could not work out a style", self.text())
+        self.assertIn("معرفتش أطلّع ستايل", self.text())
         self.assertEqual(self.bot.builders[9]["step"], "ref_wait")
 
     def test_his_own_style_words_are_enough_without_a_lookup(self):
         self.enter_ref()
         self.bot._handle({"message": {"chat": {"id": 9, "type": "private"}, "from": {"id": 9},
                                       "text": "afro house, 118 bpm, warm percussion"}})
-        self.assertIn("From your reference I understood:", self.text())
+        self.assertIn("فهمت من المرجع:", self.text())
         self.assertIn("afro house", self.bot.builders[9]["built"]["prompt"])
 
     def test_a_link_uses_the_page_title_only(self):
@@ -93,7 +93,7 @@ class ReferenceTests(unittest.TestCase):
         self.enter_ref()
         self.bot._handle({"message": {"chat": {"id": 9, "type": "private"}, "from": {"id": 9},
                                       "text": "https://open.example.com/track/123"}})
-        self.assertIn("From the link I read: Some Track - Some Artist", self.bot.tg.sent[-2]["text"])
+        self.assertIn("قريت من اللينك: Some Track - Some Artist", self.bot.tg.sent[-2]["text"])
         built = self.bot.builders[9]["built"]
         self.assertNotIn("Some Artist", built["prompt"])
 
@@ -111,7 +111,7 @@ class ReferenceTests(unittest.TestCase):
         self.bot._handle({"message": {"chat": {"id": 9, "type": "private"}, "from": {"id": 9},
                                       "text": "https://www.youtube.com/watch?v=abc"}})
         self.assertEqual(asked["q"], "Some Track - Some Artist")
-        self.assertIn("From your reference I understood:", self.text())
+        self.assertIn("فهمت من المرجع:", self.text())
 
     def test_his_words_beat_the_genre_label(self):
         self.bot._itunes = lambda q: {"genre": "Dance", "artist": "A", "track": "B"}
@@ -127,7 +127,7 @@ class ReferenceTests(unittest.TestCase):
         self.enter_ref()
         self.bot._handle({"message": {"chat": {"id": 9, "type": "private"}, "from": {"id": 9},
                                       "text": "https://open.example.com/track/123"}})
-        self.assertIn("could not open that link", self.text())
+        self.assertIn("معرفتش أفتح اللينك", self.text())
 
     def test_a_screenshot_without_ocr_or_vision_asks_for_text(self):
         self.bot._download_file = lambda fid: b"jpegbytes"
@@ -150,7 +150,7 @@ class ReferenceTests(unittest.TestCase):
             self.bot._handle({"message": {"chat": {"id": 9, "type": "private"}, "from": {"id": 9},
                                           "photo": [{"file_id": "big"}]}})
         self.assertIn("قريت من الصورة: Nils Frahm Says", self.bot.tg.sent[-2]["text"])
-        self.assertIn("From your reference I understood:", self.text())
+        self.assertIn("فهمت من المرجع:", self.text())
 
     def test_a_voice_note_reference_uses_the_transcript(self):
         self.bot._itunes = lambda q: None
@@ -159,7 +159,7 @@ class ReferenceTests(unittest.TestCase):
         self.enter_ref()
         self.bot._handle({"message": {"chat": {"id": 9, "type": "private"}, "from": {"id": 9},
                                       "voice": {"file_id": "v1"}}})
-        self.assertIn("From your reference I understood:", self.text())
+        self.assertIn("فهمت من المرجع:", self.text())
 
     def test_an_artist_name_never_survives_into_the_prompt(self):
         self.bot._itunes = lambda q: None
@@ -168,7 +168,7 @@ class ReferenceTests(unittest.TestCase):
                                       "text": "melodic techno in the style of Daft Punk, dark"}})
         built = self.bot.builders[9]["built"]
         self.assertNotIn("Daft Punk", built["prompt"])
-        self.assertIn("Left the name out of the prompt", self.text())
+        self.assertIn("شلت الاسم من البرومبت", self.text())
 
 
 if __name__ == "__main__":

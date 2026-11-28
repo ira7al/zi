@@ -72,7 +72,7 @@ class MarkerTests(unittest.TestCase):
 
     def test_the_options_screen_shows_the_cleaned_prompt(self):
         self.send_prompt(HIS_PROMPT)
-        shown = [m for m in self.tg.sent if "Prompt:" in m["text"]][-1]["text"]
+        shown = [m for m in self.tg.sent if "البرومبت:" in m["text"]][-1]["text"]
         self.assertIn("inspired by driving four-on-the-floor kick", shown)
         self.assertNotIn("Goom", shown)
 
@@ -86,7 +86,7 @@ class MarkerTests(unittest.TestCase):
         self.send_prompt(HIS_PROMPT)
         self.bot._callback(9, "p:refname")
         shown = self.joined()
-        self.assertIn("From your reference I understood", shown)
+        self.assertIn("فهمت من المرجع", shown)
         self.assertIn("melodic house", self.bot.builders[9]["built"]["prompt"])
         self.assertNotIn("Goom", self.bot.builders[9]["built"]["prompt"])
 
