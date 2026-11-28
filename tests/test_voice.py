@@ -53,8 +53,8 @@ class VoiceTests(unittest.TestCase):
         self.heard = "عايز تكنو غامق وحزين بالليل على البحر"
         self.voice()
         out = self.texts()
-        self.assertIn("سمعتك: عايز تكنو", out)
-        self.assertIn("بالإنجليزي: techno dark melancholic late-night sea", out)
+        self.assertNotIn("سمعتك", out)           # no echo of the transcript
+        self.assertNotIn("بسمع", out)
         self.assertIn("Prompt (", out)          # the draft for approval
         self.assertIn("122 BPM melodic techno", out)
         self.assertIn("Theme: techno dark melancholic late-night sea", out)
@@ -63,7 +63,7 @@ class VoiceTests(unittest.TestCase):
         self.heard = "afro house, warm sunset, 121 bpm"
         self.voice()
         out = self.texts()
-        self.assertIn("سمعتك: afro house", out)
+        self.assertNotIn("سمعتك", out)
         self.assertNotIn("In English:", out)
         self.assertIn("121 BPM deep afro house", out)
 
