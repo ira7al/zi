@@ -5,7 +5,7 @@ import csv, datetime, json, os, random, re, shutil, subprocess, sys, threading, 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, quote, unquote
 
-ROOT = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(os.path.abspath(sys.executable if getattr(sys, "frozen", False) else __file__))
 DATA = os.environ.get("ZI_DATA", os.path.join(ROOT, "zi_data"))
 JOBS, LIB, EXP = (os.path.join(DATA, d) for d in ("jobs", "library", "exports"))
 for d in (JOBS, LIB, EXP):
