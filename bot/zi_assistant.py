@@ -596,7 +596,7 @@ def build_groq_vision_request(image_bytes, mime="image/jpeg", prompt=None, model
 
 
 def read_image_groq(image_bytes, key, model=None, mime="image/jpeg", opener=None, timeout=30,
-                    sleep=None, tries=3):
+                    sleep=None, tries=3, prompt=None):
     """One screenshot through Groq vision. Returns (text or None, problem).
 
     429 backs off (Retry-After, capped at 6 s). A normal User-Agent is sent, because the default
@@ -609,7 +609,7 @@ def read_image_groq(image_bytes, key, model=None, mime="image/jpeg", opener=None
     import urllib.error as _uerr
     import urllib.request as _req
     sleep = sleep or _t.sleep
-    body = _json.dumps(build_groq_vision_request(image_bytes, mime, model=model)).encode()
+    body = _json.dumps(build_groq_vision_request(image_bytes, mime, prompt=prompt, model=model)).encode()
     problem = "empty"
     for attempt in range(tries):
         req = _req.Request(GROQ_URL, data=body, method="POST",
@@ -634,7 +634,7 @@ def read_image_groq(image_bytes, key, model=None, mime="image/jpeg", opener=None
             return None, "groq: " + type(e).__name__
         if not text or text.strip().lower().strip(" .!") in ("nothing", "لا شيء"):
             return None, "groq: empty"
-        return text.replace("\n", " ").strip()[:300], ""
+        return text.replace("\n", " ").strip()[:(700 if prompt else 300)], ""
     return None, problem
 
 
@@ -703,3 +703,27 @@ def user_block(state):
 def context_block(state):
     """Kept for the older callers and for tests: the same user-facing facts."""
     return user_block(state)
+
+
+REF_WORDS = ("مرجع", "ريفرنس", "reference", "ستايل", "style", "زي ده", "زى ده", "شبه", "نفس الجو", "على غراره")
+
+
+def is_reference_words(text):
+    """Does what he said ask for the image or link to be used as a style reference?"""
+    low = (text or "").lower()
+    return any(w in low for w in REF_WORDS)
+
+
+def strip_links(text):
+    import re as _re
+    return _re.sub(r"(https?://\S+|www\.\S+)", " ", text or "").strip()
+
+
+DESCRIBE_PROMPT = ("Describe this image in two or three short English sentences: what it shows, and read any "
+                   "visible text or button labels exactly. No guesses about people's names.")
+
+
+def combine_question(instruction, what, kind="image"):
+    """One question for the assistant: his words plus what the image or link holds."""
+    tag = "وصف الصورة اللي بعتها مع الرسالة" if kind == "image" else "عنوان اللينك اللي بعته مع الرسالة"
+    return (instruction.strip() + "\n\n(" + tag + "، مش من كلامه: " + what.strip()[:600] + ")")

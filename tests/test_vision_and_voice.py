@@ -31,6 +31,7 @@ class VisionTests(unittest.TestCase):
     def send_photo(self):
         self.bot._handle({"message": {"chat": {"id": 9, "type": "private"}, "from": {"id": 9},
                                       "photo": [{"file_id": "big"}]}})
+        self.bot._callback(9, "img:ref")      # a lone image waits; the button makes it a reference
 
     def test_the_vision_model_reads_the_screenshot_when_ocr_is_missing(self):
         with mock.patch.object(zb.ziassist, "read_image", lambda *a, **k: "Desire - Goom Gum | Dance"):
@@ -65,6 +66,7 @@ class VisionTests(unittest.TestCase):
                 self.bot._handle({"message": {"chat": {"id": 9, "type": "private"}, "from": {"id": 9},
                                               "document": {"file_id": "d1", "file_name": "shot.jpg",
                                                            "mime_type": "image/jpeg"}}})
+                self.bot._callback(9, "img:ref")
         self.assertIn("قريت من الصورة", self.text())
 
     def test_a_screenshot_with_nothing_open_opens_a_reference(self):
