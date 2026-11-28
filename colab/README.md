@@ -214,6 +214,15 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
+## Bot build 2026-11-28.39: own prompt plus reference, feedback, Groq whisper
+
+- New-track menu: "برومبت من عندي" now takes an optional reference (link or screenshot, before or after the prompt) and uses both together, style only, no names. The separate "مرجع" button and the "Last" row are gone.
+- Change requests ("خلي الزرار...") are saved to `feedback_notes.jsonl` in the output folder and answered with "وصّلتها للمطوّر". Read them with `cat <out_root>/feedback_notes.jsonl`.
+- Unclear or garbled input gets "ما وصلنيش كويس، ممكن تعيدها؟" and the menu, never a blunt line.
+- Voice notes: Groq `whisper-large-v3-turbo` first (then `whisper-large-v3`), then the local model with beam 5. Every transcript is logged to `transcripts.log` in the output folder and the console. The "سمعتك:" echo stays.
+
+Reload with the pinned cell below.
+
 ## Bot build 2026-11-28.38: vision through Groq
 
 Screenshots: Groq `qwen/qwen3.8-27b` first (same Groq key as chat; override with `ZI_GROQ_VISION_MODEL`), then Gemini, then a plain Arabic message that the picture could not be read. Sent as an OpenAI-style `image_url` data URL with `max_completion_tokens` and a normal User-Agent. 429 backs off twice. The vision prompt names nobody. Groq limits (per org): 30 requests/min, 1000/day. Reload with the pinned cell below.
@@ -268,9 +277,9 @@ What .25 changes for whoever is testing:
 - `/diag` prints which voice engines are on the box and whether screenshots have a key.
 
 ```python
-# pinned reload - build .38 (bot + options + assistant + voice + art)
+# pinned reload - build .39 (bot + options + assistant + voice + art)
 import os, sys, importlib.util, urllib.request
-SHA = "6a7bc54623119809be9b819105bdf382bfe4f000"
+SHA = "93c459dbe154a0eac31abe967bd7906a9be0d0cf"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
