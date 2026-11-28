@@ -51,7 +51,7 @@ try:
     print("Stopped the previous bot instance.")
 except Exception:
     pass
-for _rel in ("bot/zi_bot.py", "bot/zi_options.py", "bot/zi_assistant.py"):
+for _rel in ("bot/zi_bot.py", "bot/zi_options.py", "bot/zi_assistant.py", "bot/zi_voice.py"):
     _src = f"https://api.github.com/repos/ira7al/zi/contents/{_rel}?ref={SHA}"
     _raw = f"https://raw.githubusercontent.com/ira7al/zi/{SHA}/{_rel}"
     try:
@@ -210,7 +210,7 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
-## Bot build 2026-11-28.26: reload and engine patch
+## Bot build 2026-11-28.27: reload and engine patch
 
 The bot loads three files (`bot/zi_bot.py`, `bot/zi_options.py`, `bot/zi_assistant.py`), so a cell that only fetches `zi_bot.py` fails. Use this cell instead; it pins the commit and fetches all three.
 
@@ -220,17 +220,21 @@ What .25 changes for whoever is testing:
 - A one-line hint and an "اسألني" button sit on the track menu, the prompt preview, the options screen, the ready card and the message after delivery.
 - The Menu button under the message box is the real menu: one tap puts every action in the chat as inline buttons. Telegram's own corner button can only open the command list (Bot API allows a commands button, a web app, or nothing; it cannot send /menu), so that list is now six commands and starts with /menu. The full list is in /help and in the inline menu.
 - The corner button reads "Menu" now that the BotFather web app button is gone; the bot re-asserts the commands type at start, globally and for the owner chat.
+- A screenshot (as a photo or as an image file) is read by the free vision model with the key already in `ZI_LLM_KEY` when OCR is missing. Only the style reaches the prompt; the artist and track name are stripped and the removed words are shown. If the model refuses or the daily limit is gone, he gets a plain Arabic line asking for the name or a voice note.
+- A voice note is answered out loud: edge-tts with the Egyptian voice `ar-EG-ShakirNeural`, then gTTS `ar`/`co.eg`, and ffmpeg turns the mp3 into a real voice note. With none of them the answer is text only. A spoken question goes to the assistant; a spoken music idea still starts a track.
+- Installs needed on the box (both free, small, no key): `pip install -q edge-tts gTTS`. ffmpeg is already on Colab and Kaggle; without it the reply arrives as an audio file instead of a voice note. The setup cell in the notebook now installs both.
+- `/diag` prints which voice engines are on the box and whether screenshots have a key.
 
 ```python
-# pinned reload - build .26 (bot + its shared option model + the assistant)
+# pinned reload - build .27 (bot + its shared option model + the assistant + voice)
 import os, sys, importlib.util, urllib.request
-SHA = "ea7199a6e01afdc5f7d2ea70ba85d32e41a3e080"
+SHA = "e8b6a46e4c5484640eada3d9e1f7561f59d937b6"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
 except Exception:
     pass
-for _rel in ("bot/zi_bot.py", "bot/zi_options.py", "bot/zi_assistant.py"):
+for _rel in ("bot/zi_bot.py", "bot/zi_options.py", "bot/zi_assistant.py", "bot/zi_voice.py"):
     _api = f"https://api.github.com/repos/ira7al/zi/contents/{_rel}?ref={SHA}"
     _raw = f"https://raw.githubusercontent.com/ira7al/zi/{SHA}/{_rel}"
     try:
