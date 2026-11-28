@@ -209,12 +209,12 @@ class PublishTests(unittest.TestCase):
         self.assertIn("Rahal everywhere", self.bot.tg.sent[-1]["text"])
         self.assertTrue(self.bot.tg.sent[-1]["keyboard"])
 
-    def test_start_offers_the_social_button(self):
+    def test_start_offers_the_menu_button(self):
         self.bot.owner = self.chat  # /start is owner-only
         self.bot._handle({"message": {"chat": {"id": self.chat, "type": "private"},
                                       "from": {"id": self.chat}, "text": "/start"}})
         kb = self.bot.tg.sent[-1]["keyboard"]
-        self.assertEqual(kb[0][0]["callback_data"], "social")
+        self.assertEqual(kb[0][0]["callback_data"], "menu")
 
     def test_commands_are_registered_on_start(self):
         self.bot._register_commands()
@@ -234,7 +234,8 @@ class PublishTests(unittest.TestCase):
         newest = make_release(self.tmp, name="20261128-120000_New")
         self.bot._publish_cmd(self.chat, "")
         kb = self.bot.tg.sent[-1]["keyboard"]
-        keys = {b["callback_data"].split(":")[2] for row in kb for b in row}
+        keys = {b["callback_data"].split(":")[2] for row in kb for b in row
+                if b["callback_data"].startswith("pub:")}
         self.assertEqual(keys, {self._key(newest)})
 
 
