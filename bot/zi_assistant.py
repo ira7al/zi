@@ -525,7 +525,7 @@ STT_HINT = "كلام مصري عن الموسيقى والتراكات والب�
 def transcribe_groq(path, key, model=None, opener=None, timeout=60, sleep=None, tries=2):
     """Speech to text through Groq's whisper. Returns (text or None, problem).
 
-    Multipart upload, Egyptian Arabic hinted, temperature 0. The key goes in the Authorization
+    Multipart upload, language auto-detected (none is forced), temperature 0. The key goes in the Authorization
     header and is never printed. Telegram voice notes are .oga; Groq wants .ogg, so only the
     uploaded filename changes.
     """
@@ -551,8 +551,7 @@ def transcribe_groq(path, key, model=None, opener=None, timeout=60, sleep=None, 
     for m in ([model] if model else list(GROQ_STT_MODELS)):
         boundary = "zi" + _uuid.uuid4().hex
         parts = []
-        for k, v in (("model", m), ("language", "ar"), ("response_format", "json"),
-                     ("temperature", "0"), ("prompt", STT_HINT)):
+        for k, v in (("model", m), ("response_format", "json"), ("temperature", "0")):
             parts.append(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + k + "\"\r\n\r\n" + v + "\r\n").encode("utf-8"))
         parts.append(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"" + name +
                       "\"\r\nContent-Type: application/octet-stream\r\n\r\n").encode("utf-8"))
@@ -766,4 +765,91 @@ def reaction_for(text, kind="text"):
         return "\U0001f44d"
     if any(w in t.split() or w in t for w in _WIN) and len(t) < 60:
         return "\U0001f525"
+    return None
+
+
+# ---------- any language in, a clean English music prompt out ----------
+_EN_COMMON = set("""a an the and or of in on at to for with without from by into over under is are be it this that
+these those my your his her our their i you we they as but not no yes very more less some any all each
+like make made track song music beat sound sounds feel feeling vibe mood style tempo bpm bass kick drum drums
+synth pad pads lead pluck piano guitar strings vocal vocals voice chords chord melody arp arpeggio reverb
+techno house trance ambient deep dark warm soft hard fast slow calm energy energetic dreamy night day late
+long short intro outro build drop breakdown loop minor major key cinematic lofi lo-fi hip hop jazz funk soul
+rock pop electronic acoustic organic analog digital texture textures rhythm groove punchy tight wide clean
+visual composition abstract background rings tubes light lighting metallic glossy reflections edges rendering
+text logos set against toward creating sense depth rotation""".split())
+
+
+def has_foreign_letters(text):
+    return any(ord(ch) > 127 and ch.isalpha() for ch in (text or ""))
+
+
+def is_probably_english(text):
+    """Cheap check so English prompts never wait on a model: most words are common English or music words."""
+    import re as _re
+    words = _re.findall(r"[A-Za-z][A-Za-z'\-]*", text or "")
+    if not words or has_foreign_letters(text):
+        return False
+    if len(words) <= 2:
+        return True
+    hit = sum(1 for w in words if w.lower().strip("'-") in _EN_COMMON)
+    return hit / len(words) >= 0.3
+
+
+def strip_prompt_label(text):
+    """Remove a pasted 'البرومبت:' or 'Prompt (122 BPM, ...):' label from the start of a message."""
+    import re as _re
+    t = (text or "").strip()
+    t = _re.sub(r"^\s*(?:البرومبت|برومبت|بروموبت|prompt)\s*(?:\([^)]*\))?\s*[:\uff1a]\s*", "", t, flags=_re.I)
+    return t.strip()
+
+
+TRANSLATE_SYSTEM = (
+    "You turn a user's description of a music track, written in ANY language, into one clean English "
+    "music-generation prompt. Rules: keep the meaning, mood, genre, instruments, tempo, key and structure; "
+    "never include real artist, band, label or song names (describe their style in plain words instead); "
+    "do not add facts that were not said; if the text is already English, return it unchanged. "
+    "Reply with JSON only: {\"lang\": \"<language name in English>\", \"english\": \"<the prompt>\"}.")
+
+
+def to_english_prompt(text, key, model=None, opener=None, timeout=30, sleep=None, tries=2):
+    """Detect the language and translate. Returns {"lang","english"} or None on any failure."""
+    if not key or not (text or "").strip():
+        return None
+    import json as _json
+    import re as _re
+    import time as _t
+    import urllib.error as _uerr
+    import urllib.request as _req
+    sleep = sleep or _t.sleep
+    for name in groq_models(model):
+        body = {"model": name, "temperature": 0.2, "max_tokens": 1500,
+                "messages": [{"role": "system", "content": TRANSLATE_SYSTEM},
+                             {"role": "user", "content": text.strip()[:4000]}]}
+        if "gpt-oss" in name:
+            body["reasoning_effort"] = "low"
+        data = _json.dumps(body).encode()
+        for attempt in range(tries):
+            req = _req.Request(GROQ_URL, data=data, method="POST",
+                               headers={"Content-Type": "application/json", "Authorization": "Bearer " + key,
+                                        "User-Agent": "zi-studio-bot/1.0"})
+            try:
+                with (_opener(opener))(req, timeout=timeout) as r:
+                    out = parse_groq(_json.loads(r.read()))
+                m = _re.search(r"\{.*\}", out or "", _re.S)
+                if m:
+                    d = _json.loads(m.group(0))
+                    eng = str(d.get("english") or "").strip()
+                    if eng and not has_foreign_letters(eng):
+                        return {"lang": str(d.get("lang") or "").strip(), "english": eng}
+                break
+            except _uerr.HTTPError as e:
+                print("groq translate HTTP", e.code, name)
+                if e.code == 429 and attempt + 1 < tries:
+                    sleep(2 * (attempt + 1))
+                    continue
+                break
+            except Exception as e:
+                print("groq translate failed:", type(e).__name__)
+                break
     return None
