@@ -109,3 +109,38 @@ class OrderTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PromptTests(unittest.TestCase):
+    def test_general_knowledge_allowed_and_project_facts_only_on_ask(self):
+        self.assertIn("معلومات عامة", za.SYSTEM)
+        self.assertIn("بس لو سأل عن المشروع", za.SYSTEM)
+        body = za.build_groq_request("يعني إيه LoRA؟", {"dataset": {"count": 0}})
+        self.assertEqual(body["messages"][0]["content"], za.SYSTEM)
+        self.assertIn("لو سأل عن المشروع", body["messages"][1]["content"])
+        gem = za.build_request("يعني إيه LoRA؟", {})
+        self.assertIn("لو سأل عن المشروع", gem["contents"][0]["parts"][0]["text"])
+
+    def test_still_never_claims_features_or_leaks_jargon(self):
+        self.assertIn("ماتكلمش عن أي مفاتيح", za.SYSTEM)
+        self.assertIn("مساعدك الشخصي", za.SYSTEM)
+
+
+class JargonTests(unittest.TestCase):
+    def test_plain_words_containing_api_pass(self):
+        self.assertFalse(za.has_jargon("LoRA بتخلي التدريب rapid وخفيف، زي capital صغير"))
+        self.assertTrue(za.has_jargon("الـ API مش شغال"))
+        self.assertTrue(za.has_jargon("ffmpeg ناقص"))
+
+
+class ToneTests(unittest.TestCase):
+    def test_street_egyptian_with_examples_and_bans(self):
+        self.assertIn("من الشارع", za.SYSTEM)
+        self.assertIn("الفصحى", za.SYSTEM)
+        self.assertGreaterEqual(za.SYSTEM.count("سأل:"), 4)
+        body = za.build_groq_request("ازيك", {})
+        self.assertIn("عامية", body["messages"][0]["content"])
+
+    def test_examples_do_not_trip_the_jargon_filter(self):
+        ex = za.TONE.split("أمثلة على الشكل المطلوب:")[1]
+        self.assertFalse(za.has_jargon(ex.replace("BPM", "")))
