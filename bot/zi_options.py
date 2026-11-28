@@ -221,3 +221,62 @@ def normalize(spec):
     s.setdefault("name", s["genre"])
     s.update(engine_payload_fields(s))
     return s
+
+# ---------- Arabic (Egyptian) idea -> English prompt ----------
+# He speaks Egyptian Arabic. The engine wants English prompt text, so a voice idea is
+# translated with this lexicon: music vocabulary first, then the leftover Arabic is
+# dropped from the prompt and reported back instead of being sent to the model.
+AR_LEXICON = [
+    ("ميلوديك تكنو", "melodic techno"), ("تكنو", "techno"), ("هاوس", "house"),
+    ("بروجريسيف", "progressive"), ("افرو هاوس", "afro house"), ("أفرو", "afro"),
+    ("اندي دانس", "indie dance"), ("إندي", "indie"), ("داون تيمبو", "downtempo"),
+    ("هدوء", "calm"), ("هادي", "calm"), ("هادية", "calm"), ("غامق", "dark"),
+    ("مظلم", "dark"), ("حزين", "melancholic"), ("حزينة", "melancholic"),
+    ("مبسوط", "uplifting"), ("فرحان", "uplifting"), ("متفائل", "hopeful"),
+    ("مشمس", "sunny"), ("دافي", "warm"), ("دافئ", "warm"), ("بارد", "cold"),
+    ("ليلي", "late-night"), ("بالليل", "late-night"), ("الفجر", "sunrise"),
+    ("الشروق", "sunrise"), ("الغروب", "sunset"), ("بحر", "sea"), ("البحر", "sea"),
+    ("صحرا", "desert"), ("الصحرا", "desert"), ("جبل", "mountain"), ("سفر", "travel"),
+    ("طريق", "drive"), ("سواقة", "drive"), ("عربية", "car"), ("رقص", "dance"),
+    ("نادي", "club"), ("كلوب", "club"), ("حفلة", "party"), ("مهرجان", "festival"),
+    ("سريع", "fast"), ("بطيء", "slow"), ("بطيئة", "slow"), ("قوي", "hard-hitting"),
+    ("ناعم", "soft"), ("عميق", "deep"), ("واسع", "wide"), ("دافئ الصوت", "warm tone"),
+    ("بيانو", "piano"), ("جيتار", "guitar"), ("كمان", "violin"), ("ناي", "flute"),
+    ("طبول", "drums"), ("ايقاع", "percussion"), ("باص", "bass"), ("أرابيسك", "arabic scale"),
+    ("شرقي", "middle-eastern"), ("مصري", "egyptian"), ("عود", "oud"),
+    ("صوت ست", "female vocal"), ("صوت راجل", "male vocal"), ("كورال", "choir"),
+    ("من غير غنا", "instrumental"), ("انسترومنتال", "instrumental"),
+    ("حنين", "nostalgic"), ("ذكريات", "nostalgic"), ("وحدة", "lonely"),
+    ("امل", "hope"), ("طاقة", "energy"), ("هدوء الليل", "quiet night"),
+]
+
+
+def has_arabic(text):
+    return any("\u0600" <= ch <= "\u06ff" for ch in (text or ""))
+
+
+AR_STOPWORDS = {"عايز", "عاوز", "عايزة", "و", "على", "ال", "في", "من", "مع", "يكون",
+                "حاجة", "زي", "كده", "شوية", "كمان", "أوي", "جدا", "يعني", "بس", "او",
+                "أو", "دا", "ده", "دي", "عشان", "مثل", "كدا"}
+
+
+def to_english(text):
+    """Egyptian Arabic idea -> English words, plus what could not be translated."""
+    out, used = text or "", []
+    for ar, en in AR_LEXICON:
+        if " " in ar:                      # a phrase: plain substring is safe
+            if ar in out:
+                out = out.replace(ar, " " + en + " ")
+                used.append(en)
+        else:                              # a single word must stand alone, so that
+            # "عامل" (doing) never matches "امل" (hope)
+            # allow the Arabic prefixes that glue onto words: و (and), ال (the), ب, ل, ف, ك
+            pat = (r"(?<![\u0600-\u06ff])[والفبك]{0,2}" + re.escape(ar)
+                   + r"(?![\u0600-\u06ff])")
+            if re.search(pat, out):
+                out = re.sub(pat, " " + en + " ", out)
+                used.append(en)
+    leftover = [w for w in re.findall(r"[\u0600-\u06ff]+", out) if w not in AR_STOPWORDS]
+    out = re.sub(r"[\u0600-\u06ff]+", " ", out)
+    out = re.sub(r"\s{2,}", " ", out).strip(" ,.;-")
+    return out, leftover
