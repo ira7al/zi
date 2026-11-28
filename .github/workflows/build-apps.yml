@@ -52,6 +52,7 @@ jobs:
       - name: Upload to release
         if: startsWith(github.ref, 'refs/tags/')
         shell: bash
-        run: gh release create "${GITHUB_REF_NAME}" out/* --title "Zi Music Studio ${GITHUB_REF_NAME}" --generate-notes --latest
+        run: |
+          gh release create "${GITHUB_REF_NAME}" out/* --title "Zi Music Studio ${GITHUB_REF_NAME}" --generate-notes --latest || gh release upload "${GITHUB_REF_NAME}" out/* --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
