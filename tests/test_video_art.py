@@ -24,7 +24,7 @@ class VideoArtTests(unittest.TestCase):
         for row in m["keyboard"]:
             self.assertLessEqual(len(row), 2)
         self.assertNotIn("Menu.", m["text"])
-        self.assertTrue(any("RouteNote" in b["text"] for r in m["keyboard"] for b in r))
+        self.assertFalse(any("RouteNote" in b["text"] for r in m["keyboard"] for b in r))
 
     def test_metadata_filled_no_names(self):
         head, desc, tags = self.bot._yt_metadata(self.folder, "Test Track", "x")

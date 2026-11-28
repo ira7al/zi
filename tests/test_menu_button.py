@@ -34,9 +34,10 @@ class MenuButtonTests(unittest.TestCase):
         self.say("/menu")
         flat = [b.get("callback_data") for row in self.bot.tg.sent[-1]["keyboard"] for b in row]
         for want in ("menu:track", "menu:own", "menu:ai", "menu:library",
-                     "menu:social", "menu:dataset",
-                     "menu:routenote", "menu:more"):
+                     "menu:social", "menu:more"):
             self.assertIn(want, flat)
+        self.assertNotIn("menu:dataset", flat)      # Dorgham and RouteNote sit under More since .51
+        self.assertNotIn("menu:routenote", flat)
 
     def test_it_also_works_typed_in_arabic(self):
         for text in ("Menu", "\u2630 Menu", "القائمة"):
