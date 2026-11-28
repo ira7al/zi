@@ -91,6 +91,12 @@ STYLE_LOOKUP = [(("indie",), "indie dance"), (("afro",), "afro house"),
                 (("melodic house",), "melodic house"), (("melodic techno", "techno"), "melodic techno"),
                 (("house",), "melodic house")]
 MOOD_VARIANTS = ["cinematic and patient", "hypnotic and driving", "warm and spacious"]
+# a tap on "Another" should change the arrangement too, not only the adjectives
+FOCUS_VARIANTS = ("the arpeggio carries the hook", "the bassline carries the groove",
+                  "the pads carry the emotion", "the percussion carries the drive")
+MIX_VARIANTS = ("spacious mix, clean low mids, open top end",
+                "tight punchy mix, firm low end, airy top end",
+                "warm analog mix, soft top end, wide stereo image")
 BPM_RE = re.compile(r"\b(1[0-4]\d)\b")
 KEY_RE = re.compile(r"\b(?:in\s+|key\s+(?:of\s+)?)([A-G][#b]?)\s*(minor|major|maj|m)?\b", re.I)
 # a reference to a real act, label or song has no place in a prompt field
@@ -187,12 +193,17 @@ def build_prompt(idea, seconds=330, variant=0, instrumental=True):
         key = prof["key"]
     dark = any(w in low for w in ("dark", "melancholy", "melancholic", "moody", "night", "sad", "deep"))
     mood = ("dark, " + prof["mood"]) if dark else prof["mood"]
+    focus = None
+    mix = prof["mix"]
     if variant:
         mood = MOOD_VARIANTS[variant % len(MOOD_VARIANTS)] + ", " + mood
+        focus = FOCUS_VARIANTS[(variant // len(MOOD_VARIANTS)) % len(FOCUS_VARIANTS)]
+        mix = MIX_VARIANTS[variant % len(MIX_VARIANTS)]
     theme = clean.strip().rstrip(".")
     voice = ("Instrumental, no vocals." if instrumental else VOCAL_LINE + ".")
-    prompt = (f"{bpm} BPM {prof['label']}, {mood}, {key}, {prof['sound']}. "
-              f"{voice} Structure in bars: {structure(seconds, bpm)}. {prof['mix'][0].upper() + prof['mix'][1:]}."
+    prompt = (f"{bpm} BPM {prof['label']}, {mood}, {key}, {prof['sound']}"
+              + (f", {focus}" if focus else "") + f". "
+              f"{voice} Structure in bars: {structure(seconds, bpm)}. {mix[0].upper() + mix[1:]}."
               + (f" Theme: {theme}." if theme else ""))
     return {"prompt": prompt, "bpm": bpm, "key": key, "genre": prof["label"],
             "removed": removed, "style": style}

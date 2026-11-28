@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.17"
+VERSION = "2026-11-28.18"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -587,6 +587,37 @@ class Bot:
         except Exception as e:
             print("publish menu failed:", repr(e))
 
+    # ---------- last settings ----------
+    def _last_path(self):
+        return os.path.join(self.out_root, "zi_bot_last.json")
+
+    def _last_spec(self):
+        d = self._load(self._last_path(), {})
+        return d if isinstance(d, dict) and d.get("genre") else None
+
+    def _remember(self, spec):
+        keep = ("genre", "name", "idea", "seconds", "quality", "instrumental", "bpm", "key",
+                "style_influence", "style_tags", "exclude", "weirdness", "steps", "lang")
+        try:
+            d = {k: spec.get(k) for k in keep if spec.get(k) not in (None, "")}
+            self._save(self._last_path(), d)
+        except Exception as e:
+            print("could not remember the last settings:", repr(e))
+
+    def _last_label(self, d):
+        secs = int(d.get("seconds") or 330)
+        kind = "instrumental" if d.get("instrumental", True) else "with lyrics"
+        return f"\u267b\ufe0f Last: {d.get('genre')}, {secs // 60}:{secs % 60:02d}, {kind}"
+
+    def _start_from_last(self, chat_id):
+        d = self._last_spec()
+        if not d:
+            self.tg.send(chat_id, "No saved settings yet. /track makes one.")
+            return
+        spec = dict(d)
+        self.builders[chat_id] = {"step": "confirm", "spec": spec}
+        self._confirm(chat_id, self.builders[chat_id])
+
     # ---------- liked tracks ----------
     def _liked_path(self):
         return os.path.join(self.out_root, "zi_bot_liked.json")
@@ -1031,6 +1062,9 @@ class Bot:
             elif act == "s":
                 self.tg.send(chat_id, "Skipped.")
             return
+        if data == "last":
+            self._start_from_last(chat_id)
+            return
         if data == "menu":
             self._menu(chat_id)
             return
@@ -1289,6 +1323,9 @@ class Bot:
             keyboard=[[{"text": "Generate", "callback_data": "go"}, {"text": "Cancel", "callback_data": "no"}]])
 
     def _track(self, chat_id, arg):
+        if arg and arg.strip().lower() in ("again", "last", "same"):
+            self._start_from_last(chat_id)
+            return
         if arg:
             spec = self._parse_spec(arg)
             if spec:
@@ -1299,6 +1336,9 @@ class Bot:
         genres = list(GENRE_PRESETS)
         kb = [[{"text": "\u270d\ufe0f My own prompt", "callback_data": "p:own"},
                {"text": "\u2728 AI writes it", "callback_data": "p:ai"}]]
+        last = self._last_spec()
+        if last:
+            kb.append([{"text": self._last_label(last), "callback_data": "last"}])
         kb += [[{"text": g, "callback_data": g}] for g in genres]
         self.tg.send(chat_id, "New track. Pick a style, write the prompt yourself, "
                               "or let me write it from a short idea.", keyboard=kb)
@@ -1373,6 +1413,7 @@ class Bot:
             self.tg.send(chat_id, "No engine in this session. Run the notebook's engine cell first.")
             return
         spec = self._normalize_spec(spec)
+        self._remember(spec)
         spec["_thread"] = self.threads.get(chat_id)
         self.jobs.put((chat_id, spec))
         self.queued.append(spec.get("title") or spec.get("name") or spec.get("genre") or "track")
