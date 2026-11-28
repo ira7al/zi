@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.39"
+VERSION = "2026-11-28.40"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -1631,6 +1631,17 @@ class Bot:
                 self.tg.send(chat_id, "التراك ده مش في فولدر الجلسة تاني. /library بيعرض الحاليين.")
                 return
             self._get(chat_id, folder, audio=True)
+            self.tg.send(chat_id, "عايز تنشره؟", keyboard=[[
+                {"text": "\U0001f4e3 \u0627\u0646\u0634\u0631", "callback_data": "pubmenu:" + data[4:]},
+                {"text": "\u2630 \u0627\u0644\u0642\u0627\u0626\u0645\u0629", "callback_data": "menu"}]])
+            return
+        if data.startswith("pubmenu:"):
+            name = self._lib_folder(data[8:])
+            folder = os.path.join(self.out_root, name) if name else None
+            if not folder or not os.path.isdir(folder):
+                self.tg.send(chat_id, "التراك ده مش في فولدر الجلسة تاني. دوس المكتبة تاني.")
+                return
+            self._publish_menu(chat_id, folder)
             return
         if data in GENRE_PRESETS:
             # Tapping a style always starts (or restarts) the builder, whatever step it was
@@ -2159,12 +2170,27 @@ class Bot:
         return None
 
     def _library(self, chat_id):
-        folders = self._release_folders()[:8]
+        folders = self._release_folders()[:60]
+        working = []
+        if self.current:
+            working.append("شغال دلوقتي: " + str(self.current)[:60])
+        if self.jobs.qsize():
+            working.append(f"مستني في الطابور: {self.jobs.qsize()}")
         if not folders:
-            self.tg.send(chat_id, "مفيش تراكات لسه في الجلسة دي. /track بيعمل واحد؛ /status بيوريك بيتحفظوا فين.")
+            self.tg.send(chat_id, "المكتبة فاضية لسه. " + ("\n".join(working) + "\n" if working else "")
+                         + "دوس تراك جديد وهتلاقي كل حاجة هنا.")
             return
-        kb = [[{"text": re.sub(r"^\d{8}-\d{6}_", "", f).replace("_", " ")[:60], "callback_data": "lib:" + self._lib_key(f)}] for f in folders]
-        self.tg.send(chat_id, "آخر التراكات (دوس تجيبه):", keyboard=kb)
+        tracks = self._liked().get("tracks", {})
+        kb = []
+        for f in folders:
+            key = self._lib_key(f)
+            star = "\u2b50 " if (tracks.get(key) or {}).get("kept") else ""
+            name = re.sub(r"^\d{8}-\d{6}_", "", f).replace("_", " ")
+            kb.append([{"text": (star + name)[:60], "callback_data": "lib:" + key}])
+        head = "المكتبة: كل تراكاتك هنا (\u2b50 = اللي اخترته). دوس على تراك يتفتح وتنشره من جواه."
+        if working:
+            head += "\n" + "\n".join(working)
+        self.tg.send(chat_id, head, keyboard=kb)
 
     def _get(self, chat_id, needle, audio=True):
         folder = self._find_folder(needle)
@@ -2580,10 +2606,8 @@ class Bot:
             return {"text": t, "callback_data": d}
         kb = [[B("\U0001f3b5 \u062a\u0631\u0627\u0643 \u062c\u062f\u064a\u062f", "menu:track"), B("\U0001f4da \u0627\u0644\u0645\u0643\u062a\u0628\u0629", "menu:library")],
               [B("\u270d\ufe0f \u0628\u0631\u0648\u0645\u0628\u062a \u0645\u0646 \u0639\u0646\u062f\u064a", "menu:own"), B("\u2728 \u0627\u0644\u0630\u0643\u0627\u0621 \u064a\u0643\u062a\u0628\u0647", "menu:ai")],
-              [B("\u25b6\ufe0f \u0627\u0646\u0634\u0631 \u0622\u062e\u0631 \u062a\u0631\u0627\u0643", "menu:publish"), B("\U0001f310 \u0644\u064a\u0646\u0643\u0627\u062a \u0627\u0644\u0633\u0648\u0634\u064a\u0627\u0644", "menu:social")],
-              [B("\U0001f916 \u0627\u0644\u0645\u0633\u0627\u0639\u062f", "menu:assistant"), B("\U0001f4be \u0627\u0644\u062f\u0627\u062a\u0627 \u0633\u064a\u062a", "menu:dataset")],
-              [B("\U0001f4ca \u0627\u0644\u062d\u0627\u0644\u0629", "menu:status"), B("\U0001f9fe \u0641\u0648\u0631\u0645 RouteNote", "menu:routenote")],
-              [B("\U0001f6e0 \u062a\u0634\u062e\u064a\u0635", "menu:diag"), B("\u2753 \u0645\u0633\u0627\u0639\u062f\u0629", "menu:help")],
+              [B("\U0001f310 \u0644\u064a\u0646\u0643\u0627\u062a \u0627\u0644\u0633\u0648\u0634\u064a\u0627\u0644", "menu:social"), B("\U0001f9ec \u0627\u0644\u062f\u0631\u063a\u0627\u0645", "menu:dataset")],
+              [B("\U0001f9fe \u0641\u0648\u0631\u0645 RouteNote", "menu:routenote"), B("\u2699\ufe0f \u062d\u0627\u062c\u0627\u062a \u062a\u0627\u0646\u064a\u0629", "menu:more")],
               [{"text": "\U0001f39b \u0627\u0644\u0633\u062a\u0648\u062f\u064a\u0648 (\u0627\u0644\u0648\u064a\u0628)", "url": STUDIO_URL}]]
         self.tg.send(chat_id, "\u0627\u0644\u0642\u0627\u0626\u0645\u0629. \u0643\u0644 \u062d\u0627\u062c\u0629 \u0627\u0644\u0628\u0648\u062a \u0628\u064a\u0639\u0645\u0644\u0647\u0627 \u0628\u0636\u063a\u0637\u0629 \u0645\u0646 \u0647\u0646\u0627.", keyboard=kb)
 
@@ -2598,6 +2622,13 @@ class Bot:
             self._prompt_step(chat_id, self.builders[chat_id], "ai")
         elif what == "library":
             self._library(chat_id)
+        elif what == "more":
+            self.tg.send(chat_id, "حاجات تانية:", keyboard=[
+                [{"text": "\U0001f4ca \u0627\u0644\u062d\u0627\u0644\u0629", "callback_data": "menu:status"},
+                 {"text": "\U0001f6e0 \u062a\u0634\u062e\u064a\u0635", "callback_data": "menu:diag"}],
+                [{"text": "\U0001f916 \u0627\u0644\u0645\u0633\u0627\u0639\u062f", "callback_data": "menu:assistant"},
+                 {"text": "\u2753 \u0645\u0633\u0627\u0639\u062f\u0629", "callback_data": "menu:help"}],
+                [{"text": "\u2630 \u0627\u0644\u0642\u0627\u0626\u0645\u0629", "callback_data": "menu"}]])
         elif what == "publish":
             self._publish_cmd(chat_id, "")
         elif what == "social":
