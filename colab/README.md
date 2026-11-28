@@ -214,6 +214,22 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
+## Bot build 2026-11-28.46: remix/cover and remaster in the library
+
+Beside "📣 انشر" under each library track: "♻️ ريميكس/كفر" and "🎚 ريماستر". Each button appears only when the engine cell defines it (\ and \), so until the patch below runs, nothing new shows.
+
+**Engine patch (run once, in a new cell after the engine cell, same kernel):**
+
+\
+What the patch does:
+- Cover: when a spec has \, the generation request gets \, \ (the saved FLAC) and \ (0.8 close, 0.65 default, 0.4 far). The rest of the render path is unchanged. The result is a new release titled "<title> (Remix)".
+- Remaster: \ runs \ and sets \ only when the output is at or below -0.9 dBTP and within 1 LU of -14 LUFS. \ writes a new release "<title> (Remaster)" (FLAC, MP3 320, preview, cover, lyrics, metadata with \). The original folder is never changed. The bot tells him if the measurement is off target.
+- The same edit is already in \ for fresh runs.
+
+Not verified without a live render: the cover request against the real server, and cover at 10 minutes.
+
+Reload with the pinned cell below.
+
 ## Bot build 2026-11-28.45: audio reference and the Dorgham toggle
 
 - New-track menu: "🎧 ارفع تراك/MP3 كمرجع" sits beside "برومبت من عندي". He sends a track (up to 20 MB), the bot measures tempo, key and brightness with ffmpeg and numpy, picks the nearest style, and uses it with his own prompt. Style only: tags, file names and lyrics are never read, and the file is deleted right after. It is a rough hint, not genre recognition. The button shows only when ffmpeg and numpy exist.
@@ -325,9 +341,9 @@ What .25 changes for whoever is testing:
 - `/diag` prints which voice engines are on the box and whether screenshots have a key.
 
 ```python
-# pinned reload - build .45 (bot + options + assistant + voice + art)
+# pinned reload - build .46 (bot + options + assistant + voice + art)
 import os, sys, importlib.util, urllib.request
-SHA = "f49c314f7fce6a8c716225572568261501d13acd"
+SHA = "d5c60c10d1c49589b90592eed43ec067af2d9d5d"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
