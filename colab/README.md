@@ -211,6 +211,15 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
+## Bot build 2026-11-28.32: video, artwork, auto-filled YouTube
+
+Reload with the pinned cell below (it now also fetches `bot/zi_art.py`). Nothing new to install: numpy and Pillow come with Colab and Kaggle, and ffmpeg needs `showwaves` and `showfreqs` (standard builds have them).
+
+- After "This is the one", two buttons: Artwork (four procedural looks matched to the track's mood, pick one, "more" for another set; it replaces the cover) and YouTube video (audio-reactive, same length as the track, cover as the centrepiece).
+- Rendering takes roughly the track length. Telegram only receives videos under its size limit; a bigger one is saved in the release folder.
+- Upload to YouTube sits behind its own confirm button and shows the auto-filled title, description, tags, credits, links and the AI wording. Nothing to type; no artist or track names reach the text.
+- Menus use two buttons per row in Egyptian Arabic; Social links adds SoundCloud (profile only). The Facebook Page link is not in the repo yet.
+
 ## Bot build 2026-11-28.31: reload and engine patch
 
 The bot loads three files (`bot/zi_bot.py`, `bot/zi_options.py`, `bot/zi_assistant.py`), so a cell that only fetches `zi_bot.py` fails. Use this cell instead; it pins the commit and fetches all three.
@@ -230,9 +239,9 @@ What .25 changes for whoever is testing:
 - `/diag` prints which voice engines are on the box and whether screenshots have a key.
 
 ```python
-# pinned reload - build .31 (bot + its shared option model + the assistant + voice)
+# pinned reload - build .32 (bot + options + assistant + voice + art)
 import os, sys, importlib.util, urllib.request
-SHA = "329b1a739b71d567968c9fec1b54dd8547d1f48e"
+SHA = "25383da3903ca539f9fad1eccf318ab02bc256a3"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
