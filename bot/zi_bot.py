@@ -560,23 +560,22 @@ class Bot:
         self.tg.send(chat_id, f"Imported {len(found)} app job(s) into the queue.")
 
 
-_BOT = None
-
-
 def start_engine_bot(token, make_track, run_queue, out_root, work):
     """Start the bot inside the studio notebook (engine cells already run)."""
-    global _BOT
-    if _BOT is not None:
-        # Re-running this cell must not leave a second poller on getUpdates
-        # (Telegram answers only one consumer, the other gets 409 conflicts).
+    # The previous instance is parked on builtins so it survives importlib.reload
+    # (cell 5 reloads this module). Re-running the cell must not leave a second
+    # poller on getUpdates: Telegram answers one consumer, the other gets 409s.
+    import builtins
+    prev = getattr(builtins, "_zi_bot_instance", None)
+    if prev is not None:
         try:
-            _BOT.stop.set()
+            prev.stop.set()
             print("Previous bot instance stopped; starting a fresh one.")
             time.sleep(2)
         except Exception:
             pass
     bot = Bot(token, out_root=out_root, work=work, make_track=make_track, run_queue=run_queue)
     bot.start()
-    _BOT = bot
+    builtins._zi_bot_instance = bot
     print("Zi Telegram bot running. Chat with the bot in Telegram; /help lists commands.")
     return bot
