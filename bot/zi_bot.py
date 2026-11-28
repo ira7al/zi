@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.25"
+VERSION = "2026-11-28.26"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -96,27 +96,19 @@ SOCIAL = [("\u25b6\ufe0f YouTube", "https://www.youtube.com/@rahalofficialmusic"
           ("\U0001f3b5 TikTok", "https://www.tiktok.com/@rahalofficialmusic"),
           ("\U0001f4e3 Telegram channel", "https://t.me/rahal_music")]
 
+# Telegram's corner button can only open this list (a commands button), open a web app,
+# or do nothing. It cannot send /menu, so the list stays short: the menu itself is the
+# persistent "Menu" button under the message box, which sends the inline buttons.
 COMMANDS = [("menu", "every action, as buttons"),
-            ("track", "make a track (guided builder)"),
-            ("queue", "what is rendering and what is waiting"),
-            ("status", "engine and session status"),
+            ("track", "make a track"),
             ("library", "latest releases"),
-            ("publish", "publish the last track"),
+            ("status", "engine and session status"),
             ("ask", "ask the assistant (Arabic)"),
-            ("end", "close the assistant chat"),
-            ("studio", "the Studio web app"),
-            ("social", "links to the profiles"),
-            ("liked", "tracks you kept"),
-            ("dataset", "training set status"),
-            ("get", "send a track's audio, cover and video"),
-            ("routenote", "RouteNote form text for a track"),
-            ("batch", "send several tracks as JSON"),
-            ("jobs", "import jobs saved by the Windows app"),
-            ("diag", "build version and update counts"),
             ("help", "all commands")]
 
 HELP = """Zi Music Studio bot - make tracks from chat.
-Menu and Studio are the two buttons under the message box.
+Menu and Studio are the buttons under the message box: Menu puts every action in the chat,
+Studio opens the web app. Telegram's own corner button only opens the short command list.
 /menu - every action as one button (start here)
 /ask - ask the assistant what is missing or what to do next (Arabic); /ask alone opens a chat
 /end - close the assistant chat
@@ -356,14 +348,16 @@ class Bot:
 
     @staticmethod
     def launcher():
-        """The two buttons under the message box: Menu opens the bot's menu, Studio opens the app."""
-        return {"keyboard": [[{"text": "\u2630 Menu"},
-                              {"text": "\U0001f39b Studio", "web_app": {"url": STUDIO_URL}}]],
+        """The buttons under the message box: Menu opens the bot's menu in the chat, Studio opens the app."""
+        return {"keyboard": [[{"text": "Menu"}],
+                             [{"text": "\U0001f39b Studio", "web_app": {"url": STUDIO_URL}}]],
                 "resize_keyboard": True, "is_persistent": True}
 
     def _launcher(self, chat_id, text=None):
-        text = text or ("Two buttons under the message box: Menu for the bot, Studio for the web app "
-                        "(" + STUDIO_URL + ").")
+        text = text or ("\u062a\u062d\u062a \u0627\u0644\u0645\u0643\u062a\u0648\u0628\u0629: Menu \u064a\u0641\u062a\u062d \u0643\u0644 \u0627\u0644\u0623\u0632\u0631\u0627\u0631 \u062c\u0648\u0651\u0647 \u0627\u0644\u0634\u0627\u062a\u060c "
+                        "\u0648 Studio \u064a\u0641\u062a\u062d \u0627\u0644\u062a\u0637\u0628\u064a\u0642. "
+                        "\u0632\u0631 \u0627\u0644\u062a\u0644\u064a\u062c\u0631\u0627\u0645 \u0641\u064a \u0627\u0644\u0631\u0643\u0646 \u0628\u064a\u0641\u062a\u062d "
+                        "\u0644\u0633\u062a\u0629 \u0623\u0648\u0627\u0645\u0631 \u0642\u0635\u064a\u0631\u0629 \u0628\u0633.")
         self.tg.send(chat_id, text, reply=self.launcher())
 
     def _is_owner(self, chat_id):
@@ -1306,12 +1300,10 @@ class Bot:
         low = text.lower().strip()
         if low in ("menu", "\u2630 menu", "\u2630") or low.startswith("menu ") or low == "\u0627\u0644\u0642\u0627\u0626\u0645\u0629":
             self._menu(chat_id)
-            self._launcher(chat_id, "Menu is above. Studio is the button on the right.")
             return
         if low in ("studio", "\U0001f39b studio", "\U0001f39b") or low.startswith("studio "):
             self.tg.send(chat_id, "Studio app: " + STUDIO_URL + "\nIt opens inside Telegram if your client supports it, "
                                   "or in the browser from that link.")
-            self._launcher(chat_id)
             return
         if not text.startswith("/"):
             # a spoken music idea still starts a track; anything else is a question for the

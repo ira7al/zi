@@ -224,8 +224,9 @@ class PublishTests(unittest.TestCase):
         self.assertIn("setChatMenuButton", called)
         set_cmds = [c for c in self.bot.tg.calls if c[0][0] == "setMyCommands"][-1]
         cmds = [c["command"] for c in json.loads(set_cmds[1]["commands"])]
-        self.assertIn("social", cmds)
-        self.assertIn("publish", cmds)
+        self.assertIn("help", cmds)
+        # the corner list stays short: the rest live in /help and in the inline menu
+        self.assertLessEqual(len(cmds), 8)
 
     def test_stale_release_key_does_not_crash(self):
         self.bot._publish_cb(self.chat, "pub:tg:deadbeefdeadbeefdeadbeef")
