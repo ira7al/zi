@@ -214,8 +214,9 @@ class BuilderTests(unittest.TestCase):
         self.msg("/menu")
         data = buttons(self.bot.tg.sent[-1])
         for want in ("menu:track", "menu:own", "menu:ai", "menu:library",
-                     "menu:social", "menu:routenote", "menu:more"):
+                     "menu:social", "menu:more"):
             self.assertIn(want, data)
+        self.assertNotIn("menu:routenote", data)
 
     def test_menu_own_prompt_goes_straight_to_the_prompt_question(self):
         self.bot._callback(self.chat, "menu:own")

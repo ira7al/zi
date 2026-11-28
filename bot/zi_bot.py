@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.50"
+VERSION = "2026-11-28.51"
 OWNER_ID_DEFAULT = 7835590874      # Rahal's Telegram id, used only when no owner file exists
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
@@ -176,12 +176,11 @@ PLATFORMS = [("yt", "YouTube"), ("ig", "Instagram"), ("tt", "TikTok"),
              ("tg", "Telegram channel"), ("fb", "Facebook")]
 PLATFORM_LABEL = dict(PLATFORMS)
 
-# Verified profile links only. Facebook is left out on purpose: its page URL was never
-# confirmed, and a wrong link is worse than no button. Add it as one more tuple once the
-# exact URL is verified.
+# Profile links the owner confirmed. Facebook was added once he sent the exact Page URL.
 SOCIAL = [("\u25b6\ufe0f YouTube", "https://www.youtube.com/@rahalofficialmusic"),
           ("\U0001f4f8 Instagram", "https://www.instagram.com/rahal.official.music/"),
           ("\U0001f3b5 TikTok", "https://www.tiktok.com/@rahalofficialmusic"),
+          ("\U0001f4d8 Facebook", "https://www.facebook.com/profile.php?id=61597045319184"),
           ("\U0001f4e3 \u0642\u0646\u0627\u0629 \u062a\u064a\u0644\u064a\u062c\u0631\u0627\u0645", "https://t.me/rahal_music"),
           ("\u2601\ufe0f SoundCloud (\u0627\u0644\u0628\u0631\u0648\u0641\u0627\u064a\u0644 \u0628\u0633)", "https://soundcloud.com/rahal-835976183")]
 
@@ -2878,6 +2877,21 @@ class Bot:
                 f"[v2]scale={w}:{h}:force_original_aspect_ratio=decrease[fg];"
                 f"[bg][fg]overlay=(W-w)/2:(H-h)/2,format=yuv420p[out]")
 
+    @staticmethod
+    def _audio_seconds(path):
+        """Length of the audio in seconds through ffprobe, or None. Used to cut the video to exactly that."""
+        try:
+            out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                                  "-of", "default=nw=1:nk=1", path], capture_output=True, text=True, timeout=60).stdout
+            v = float(out.strip())
+            return v if v > 0 else None
+        except Exception:
+            return None
+
+    def _cut(self, audio):
+        secs = self._audio_seconds(audio)
+        return ["-t", f"{secs:.3f}"] if secs else []
+
     def _make_video(self, folder, kind="9x16"):
         """Visual for a track: the cover art with the mastered audio under it.
 
@@ -2907,7 +2921,7 @@ class Bot:
                 "-filter_complex", self._video_filter(w, h),
                 "-map", "[out]", "-map", "1:a",
                 "-c:v", "libx264", "-preset", "veryfast", "-tune", "stillimage", "-crf", "30",
-                "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", out]
+                "-c:a", "aac", "-b:a", "192k", "-shortest"] + self._cut(audio) + ["-movflags", "+faststart", out]
         try:
             self._run_ffmpeg(args)
         except Exception as e:
@@ -2950,7 +2964,7 @@ class Bot:
         args = ["ffmpeg", "-y", "-loglevel", "error", "-loop", "1", "-framerate", "20", "-i", cover,
                 "-i", audio, "-filter_complex", self._viz_filter(),
                 "-map", "[out]", "-map", "1:a", "-c:v", "libx264", "-preset", "veryfast", "-crf", "24",
-                "-r", "20", "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", out + ".part"]
+                "-r", "20", "-c:a", "aac", "-b:a", "192k", "-shortest"] + self._cut(audio) + ["-movflags", "+faststart", "-f", "mp4", out + ".part"]
         try:
             self._run_ffmpeg(args, timeout=3600)
             os.replace(out + ".part", out)
@@ -3002,14 +3016,17 @@ class Bot:
             threading.Thread(target=self._video_job, args=(chat_id, key, folder, title), daemon=True).start()
         elif kind == "vidyt":
             head, desc, tags = self._yt_metadata(folder, title, self._publish_caption(folder)[1])
-            self.tg.send(chat_id, "\u0643\u0644 \u062d\u0627\u062c\u0629 \u0627\u062a\u0645\u0644\u062a \u062a\u0644\u0642\u0627\u0626\u064a (public):\n\n" + head + "\n\n" + desc[:2500] +
-                         "\n\nTags: " + ", ".join(tags[:12]) + "\n\n\u0645\u062a\u0623\u0643\u062f\u061f",
-                         keyboard=[[{"text": "\u2705 \u0623\u064a\u0648\u0647\u060c \u0627\u0631\u0641\u0639", "callback_data": f"vidytok:{key}"},
+            self.tg.send(chat_id, "\u0643\u0644 \u062d\u0627\u062c\u0629 \u0627\u062a\u0645\u0644\u062a \u062a\u0644\u0642\u0627\u0626\u064a:\n\n" + head + "\n\n" + desc[:2500] +
+                         "\n\nTags: " + ", ".join(tags[:12]) + "\n\n\u0639\u0627\u064a\u0632\u0647 \u064a\u0628\u0642\u0649 \u0639\u0627\u0645 \u0648\u0644\u0627 \u063a\u064a\u0631 \u0645\u0639\u0644\u0646 \u0648\u0644\u0627 \u062e\u0627\u0635\u061f \u0648\u0644\u0627 \u062a\u0644\u063a\u064a\u061f",
+                         keyboard=[[{"text": "\U0001f30d Public", "callback_data": f"vidytok:{key}"},
+                                    {"text": "\U0001f517 Unlisted", "callback_data": f"vidytok:{key}:u"}],
+                                   [{"text": "\U0001f512 Private", "callback_data": f"vidytok:{key}:p"},
                                     {"text": "\u274c \u0644\u0623", "callback_data": "menu"}]])
         elif kind == "vidytok":
+            privacy = {"u": "unlisted", "p": "private"}.get(parts[1] if len(parts) > 1 else "", "public")
             try:
-                url = self._youtube_upload(folder, title, self._publish_caption(folder)[1])
-                self.tg.send(chat_id, "YouTube: اتنشر - " + url)
+                url = self._youtube_upload(folder, title, self._publish_caption(folder)[1], privacy=privacy)
+                self.tg.send(chat_id, f"YouTube: اتنشر ({privacy}) - " + url)
             except Exception as e:
                 self.tg.send(chat_id, "\u0645\u0627\u0642\u062f\u0631\u062a\u0634 \u0623\u0631\u0641\u0639 \u0639\u0644\u0649 \u064a\u0648\u062a\u064a\u0648\u0628: " + f"{type(e).__name__}: {str(e)[:160]}")
 
@@ -3166,7 +3183,7 @@ class Bot:
                 tags.append(t)
         return head, "\n".join(lines), tags
 
-    def _youtube_upload(self, folder, title, caption):
+    def _youtube_upload(self, folder, title, caption, privacy="public"):
         """Upload the 16:9 visual of a release to YouTube. Returns the watch URL."""
         tok = self._yt_token()
         if not tok:
@@ -3180,7 +3197,7 @@ class Bot:
                             "description": description[:4900],
                             "tags": tags,
                             "categoryId": "10"},
-                "status": {"privacyStatus": "public",
+                "status": {"privacyStatus": privacy if privacy in ("public", "unlisted", "private") else "public",
                            "selfDeclaredMadeForKids": False,
                            "containsSyntheticMedia": True}}
         req = urllib.request.Request(
@@ -3243,8 +3260,7 @@ class Bot:
             return {"text": t, "callback_data": d}
         kb = [[B("\U0001f3b5 \u062a\u0631\u0627\u0643 \u062c\u062f\u064a\u062f", "menu:track"), B("\U0001f4da \u0627\u0644\u0645\u0643\u062a\u0628\u0629", "menu:library")],
               [B("\u270d\ufe0f \u0628\u0631\u0648\u0645\u0628\u062a \u0645\u0646 \u0639\u0646\u062f\u064a", "menu:own"), B("\u2728 \u0627\u0644\u0630\u0643\u0627\u0621 \u064a\u0643\u062a\u0628\u0647", "menu:ai")],
-              [B("\U0001f310 \u0644\u064a\u0646\u0643\u0627\u062a \u0627\u0644\u0633\u0648\u0634\u064a\u0627\u0644", "menu:social"), B("\U0001f9ec \u0627\u0644\u062f\u0631\u063a\u0627\u0645", "menu:dataset")],
-              [B("\U0001f9fe \u0641\u0648\u0631\u0645 RouteNote", "menu:routenote"), B("\u2699\ufe0f \u062d\u0627\u062c\u0627\u062a \u062a\u0627\u0646\u064a\u0629", "menu:more")],
+              [B("\U0001f310 \u0644\u064a\u0646\u0643\u0627\u062a \u0627\u0644\u0633\u0648\u0634\u064a\u0627\u0644", "menu:social"), B("\u2699\ufe0f \u062d\u0627\u062c\u0627\u062a \u062a\u0627\u0646\u064a\u0629", "menu:more")],
               [{"text": "\U0001f39b \u0627\u0644\u0633\u062a\u0648\u062f\u064a\u0648 (\u0627\u0644\u0648\u064a\u0628)", "url": STUDIO_URL}]]
         self.tg.send(chat_id, "\u0627\u0644\u0642\u0627\u0626\u0645\u0629. \u0643\u0644 \u062d\u0627\u062c\u0629 \u0627\u0644\u0628\u0648\u062a \u0628\u064a\u0639\u0645\u0644\u0647\u0627 \u0628\u0636\u063a\u0637\u0629 \u0645\u0646 \u0647\u0646\u0627.", keyboard=kb)
 
@@ -3265,6 +3281,8 @@ class Bot:
                  {"text": "\U0001f6e0 \u062a\u0634\u062e\u064a\u0635", "callback_data": "menu:diag"}],
                 [{"text": "\U0001f916 \u0627\u0644\u0645\u0633\u0627\u0639\u062f", "callback_data": "menu:assistant"},
                  {"text": "\u2753 \u0645\u0633\u0627\u0639\u062f\u0629", "callback_data": "menu:help"}],
+                [{"text": "\U0001f9ec \u0627\u0644\u062f\u0631\u063a\u0627\u0645", "callback_data": "menu:dataset"},
+                 {"text": "\U0001f9fe \u0641\u0648\u0631\u0645 RouteNote", "callback_data": "menu:routenote"}],
                 [{"text": "\u2630 \u0627\u0644\u0642\u0627\u0626\u0645\u0629", "callback_data": "menu"}]])
         elif what == "publish":
             self._publish_cmd(chat_id, "")
@@ -3285,7 +3303,6 @@ class Bot:
 
     def _social(self, chat_id):
         btns = [{"text": name, "url": url} for name, url in SOCIAL]
-        btns.append({"text": "\U0001f4d8 \u0635\u0641\u062d\u0629 \u0641\u064a\u0633\u0628\u0648\u0643 (\u0647\u062a\u062a\u0636\u0627\u0641)", "callback_data": "social:fb"})
         kb = [btns[i:i + 2] for i in range(0, len(btns), 2)]
         self.tg.send(chat_id, "راهال في كل مكان:" if kb else
                      "مفيش لينكات بروفايل مؤكدة لسه.", keyboard=kb or None)

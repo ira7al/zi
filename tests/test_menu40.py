@@ -24,7 +24,7 @@ class Menu40(unittest.TestCase):
         for gone in ("menu:status", "menu:diag", "menu:help", "menu:assistant"):
             self.assertNotIn(gone, flat(m))
         self.assertIn("menu:more", flat(m))
-        self.assertTrue(any("الدرغام" in t for t in texts(m)))
+        self.assertFalse(any("الدرغام" in t for t in texts(m)))   # moved under More in .51
         self.assertFalse(any("الداتا" in t for t in texts(m)))
 
     def test_more_holds_the_four(self):
