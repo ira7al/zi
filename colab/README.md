@@ -124,7 +124,7 @@ The bot now loads a second file (`bot/zi_options.py`), so a cell 5 that only fet
 ```python
 # pinned reload - build .14 (bot + its shared option model)
 import os, sys, importlib.util, urllib.request
-SHA = "aea7a75e14a0324f2ea7d9a0a4d146fc3995154c"
+SHA = "d2427c0dd007abb8ad4365f4f4fb828f4b9c2700"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
@@ -211,4 +211,4 @@ LORA_ADAPTERS = {}
 
 Field meanings, from the ACE-Step 1.5 API reference: `guidance_scale` is CFG (default 7.0), `seed` is an int with -1 for random, `lyrics` is the full lyrics with `[inst]` for instrumental, `key_scale` takes values like `F# minor`. A vocal track with no lyrics still uses sample mode, so nothing that worked before changes.
 
-For voice prompts, the setup cell can add `!pip install -q faster-whisper` (CPU, int8, base.en about 75 MB). The bot uses it only when a voice note arrives.
+Voice prompts: the setup cell installs `faster-whisper` (CPU, int8, multilingual). The bot loads `small` (or `base` if that fails) the first time a voice note arrives and keeps it warm, so a render is never slowed. Arabic is mapped to English prompt words through the lexicon in `bot/zi_options.py`, and both the heard text and the English are echoed back before anything renders.
