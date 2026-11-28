@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, subprocess, threading, time, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.4"
+VERSION = "2026-11-28.5"
 
 API = "https://api.telegram.org/bot{token}/{method}"
 FILE_API = "https://api.telegram.org/file/bot{token}/{path}"
@@ -45,6 +45,7 @@ HELP = """Zi Music Studio bot - make tracks from chat.
 /get <title> - send a track's MP3 + cover + info
 /routenote <title> - send the RouteNote form text for a track
 /jobs - import jobs saved by the Windows app (Drive zi_data/jobs)
+/diag - build version and update counts (for debugging)
 /cancel - cancel the current builder step
 /help - this message
 Every track is AI-generated and delivered with that label."""
@@ -136,6 +137,7 @@ class Bot:
         self.builders = {}   # chat_id -> dict of the guided /track flow
         self.stop = threading.Event()
         self.conflict_warned = False
+        self.stats = {"message": 0, "callback": 0, "last": "nothing yet"}
         os.makedirs(out_root, exist_ok=True)
 
     @staticmethod
@@ -301,6 +303,12 @@ class Bot:
     # ---------- update handling ----------
     def _handle(self, u):
         cb = u.get("callback_query")
+        try:
+            kind = "callback" if cb else "message"
+            self.stats[kind] = self.stats.get(kind, 0) + 1
+            self.stats["last"] = f"{kind} at {time.strftime('%H:%M:%S')}"
+        except Exception:
+            pass
         if cb:
             cmsg = cb.get("message") or {}
             chat_id = (cmsg.get("chat") or {}).get("id")
@@ -313,7 +321,15 @@ class Bot:
                 self.tg.call("answerCallbackQuery", callback_query_id=cb["id"])
             except Exception as e:
                 print("answerCallbackQuery failed:", e)
-            self._callback(chat_id, cb["data"])
+            try:
+                self._callback(chat_id, cb["data"])
+            except Exception as e:
+                print("callback handler failed:", repr(e))
+                try:
+                    self.threads.pop(chat_id, None)
+                    self.tg.send(chat_id, f"That step failed: {str(e)[:200]}")
+                except Exception:
+                    pass
             return
         msg = u.get("message") or {}
         chat_id = (msg.get("chat") or {}).get("id")
@@ -363,6 +379,8 @@ class Bot:
             self._get(chat_id, arg.strip(), audio=False)
         elif cmd == "/routenote":
             self._routenote(chat_id, arg.strip())
+        elif cmd == "/diag":
+            self._diag(chat_id)
         elif cmd == "/jobs":
             self._jobs(chat_id)
         else:
@@ -517,6 +535,10 @@ class Bot:
         if self.out_root.startswith("/kaggle"):
             msg.append("Note: Kaggle keeps outputs in the notebook's Output section, not Drive. Save Version before the session ends.")
         msg.append("Owner: paired" if self.owner else "Owner: not paired yet")
+        try:
+            msg.append(f"Pollers in this process: {len(_bot_instances())}")
+        except Exception:
+            pass
         self.tg.send(chat_id, "\n".join(msg))
 
     def _queue(self, chat_id):
@@ -559,6 +581,19 @@ class Bot:
             if self._lib_key(d) == key:
                 return d
         return None
+
+    def _diag(self, chat_id):
+        lines = [f"build {VERSION}",
+                 f"messages handled: {self.stats.get('message', 0)}",
+                 f"callbacks handled: {self.stats.get('callback', 0)}",
+                 f"last update: {self.stats.get('last', '?')}"]
+        try:
+            lines.append(f"pollers in this process: {len(_bot_instances())}")
+        except Exception:
+            pass
+        lines.append(f"threads known: {len(self.threads)}")
+        lines.append(f"outputs: {self.out_root}")
+        self.tg.send(chat_id, "\n".join(lines))
 
     def _find_folder(self, needle):
         if not needle or not os.path.isdir(self.out_root):
@@ -642,6 +677,38 @@ class Bot:
         self.tg.send(chat_id, f"Imported {len(found)} app job(s) into the queue.")
 
 
+def _bot_instances():
+    """Every Bot instance that still has a polling thread in this process, whatever version created it."""
+    seen = []
+    for t in threading.enumerate():
+        obj = getattr(getattr(t, "_target", None), "__self__", None)
+        if obj is None or obj in seen:
+            continue
+        if obj.__class__.__name__ != "Bot" or not hasattr(obj, "stop"):
+            continue
+        if not t.is_alive():
+            continue
+        seen.append(obj)
+    return seen
+
+
+def stop_other_bots(keep=None, timeout=40):
+    """Stop stale pollers left by earlier runs (any version), then wait for them to exit."""
+    others = [b for b in _bot_instances() if b is not keep]
+    for b in others:
+        try:
+            b.stop.set()
+        except Exception:
+            pass
+    if others:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if not [b for b in others if b in _bot_instances()]:
+                break
+            time.sleep(1)
+    return len(others)
+
+
 def start_engine_bot(token, make_track, run_queue, out_root, work):
     """Start the bot inside the studio notebook (engine cells already run)."""
     # The previous instance is parked on builtins so it survives importlib.reload
@@ -652,12 +719,17 @@ def start_engine_bot(token, make_track, run_queue, out_root, work):
     if prev is not None:
         try:
             prev.stop.set()
-            print("Previous bot instance stopped; starting a fresh one.")
-            time.sleep(2)
         except Exception:
             pass
+    stale = stop_other_bots(keep=prev)
+    if prev is not None or stale:
+        print(f"Stopped {stale} stale poller(s) from earlier runs; starting a fresh one.")
     bot = Bot(token, out_root=out_root, work=work, make_track=make_track, run_queue=run_queue)
     bot.start()
     builtins._zi_bot_instance = bot
     print(f"Zi Telegram bot running (build {VERSION}). Chat with the bot in Telegram; /help lists commands.")
+    try:
+        print(f"Pollers in this process after start: {len(_bot_instances())} (1 is healthy)")
+    except Exception:
+        pass
     return bot
