@@ -214,6 +214,10 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
+## Bot build 2026-11-28.35: Groq for the assistant
+
+Answer order: Groq (OpenAI-compatible, free plan), then Gemini, then the grounded rule-based answers. Key: Kaggle/Colab secret `GROQ_API_KEY` (or env `ZI_GROQ_KEY`). Model: `llama-3.3-70b-versatile`, override with `ZI_GROQ_MODEL`. A 429 is retried with a short backoff, then it falls through. The key is only sent in the Authorization header and never printed. `/diag` shows whether each key is present. Reload with the pinned cell below.
+
 ## Bot build 2026-11-28.34: Arabic everywhere
 
 Every screen, button, status, error and help line the user sees is Egyptian Arabic now (proper names such as YouTube, RouteNote, LoRA and Mr Dorgham stay). All keyboards use at most two buttons per row, so labels are never cut off. Prompt text sent to the engine stays English by design. Reload with the pinned cell below.
@@ -252,9 +256,9 @@ What .25 changes for whoever is testing:
 - `/diag` prints which voice engines are on the box and whether screenshots have a key.
 
 ```python
-# pinned reload - build .34 (bot + options + assistant + voice + art)
+# pinned reload - build .35 (bot + options + assistant + voice + art)
 import os, sys, importlib.util, urllib.request
-SHA = "6d8bbe79bfcb88943625a386f154938a957e3e4e"
+SHA = "82fa6601ac6f24640041994fcd7ee397e3d77050"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
