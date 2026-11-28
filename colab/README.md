@@ -117,6 +117,19 @@ It comes from a Google Cloud project with the YouTube Data API enabled, an OAuth
 
 The 9:16 video is used for the channel, reels and shorts; the YouTube button renders a 1280x720 version from the same cover on demand so the full track reads properly on YouTube.
 
+## What a long render and a failure look like now (build .17)
+
+- A high-quality render sends one line every 5 minutes: still rendering, how long it has been, nothing to resend.
+- A failure is three different messages, not one: the render failed (with the error and where the traceback is), the track rendered but sending it failed (with the folder on disk), or the engine returned nothing.
+- One bad job cannot stop the queue. The bot says it is still running and the next job goes ahead.
+- Telegram network blips are retried three times (timeout, connection reset, 429 with its retry_after, 5xx) instead of losing a track.
+
+Prompt changes in the same build:
+
+- The section map is worked out in bars from the BPM and the length picked, so a 5:30 track at 102 BPM is no longer described as a 6:54 arrangement.
+- Instrumental prompts end the style line with "Instrumental, no vocals."; vocal prompts carry a vocal delivery line and the vocal language goes to the engine.
+- A theme written in Arabic is not silently dropped: the bot asks for it in English, because the prompt field has to be English.
+
 ## Keeping a track ("this is the one")
 
 Under every delivered track the publish menu has one star row: **⭐ This is the one**. A tap copies that release into `liked/<key>_<title>/` on the notebook machine - the 320 kbps MP3, the cover, the lyrics and metadata.json - and records it in `zi_bot_liked.json` next to the bot state. `/liked` lists the keepers with the date each was marked.
@@ -142,14 +155,14 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
-## Bot build 2026-11-28.16: reload and engine patch
+## Bot build 2026-11-28.17: reload and engine patch
 
 The bot now loads a second file (`bot/zi_options.py`), so a cell 5 that only fetches `zi_bot.py` fails. Use this cell instead; it pins the commit and fetches both.
 
 ```python
-# pinned reload - build .16 (bot + its shared option model)
+# pinned reload - build .17 (bot + its shared option model)
 import os, sys, importlib.util, urllib.request
-SHA = "83d0488033bc2ab3b167ad341f41249db17ddfba"
+SHA = "aefb00b848b2edcdafecb2cacf0d9e0ced3bcf5c"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
