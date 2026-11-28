@@ -9,11 +9,17 @@
 # the owner sends "/start <code>" in the bot chat to bind. Only the bound
 # owner can use the bot - anyone else is refused (GPU hours are capped).
 
-import hashlib, json, os, queue, random, re, threading, time, urllib.request, urllib.parse, uuid
+import hashlib, json, os, queue, random, re, subprocess, threading, time, urllib.request, urllib.parse, uuid
 
 API = "https://api.telegram.org/bot{token}/{method}"
 FILE_API = "https://api.telegram.org/file/bot{token}/{path}"
 TG_LIMIT = 49 * 1024 * 1024  # bot upload practical limit
+
+# GPU sharing guard: the bot renders in the same kernel as the notebook's own
+# renders (Infra's FL queue), so a bot job must wait for the GPU to be free.
+GPU_UTIL_LIMIT = 25        # percent; above this something is rendering
+GPU_PROC_MB = 2000         # another process holding more than this is rendering
+GPU_POLL_SEC = 30
 
 GENRE_PRESETS = {
  "Melodic Techno": "120-124 bpm melodic techno, tight punchy kick, deep sub bass, emotional minor chord progression on a soft pluck, lush atmospheric pads, hypnotic arpeggio, distant reverb vocal chops, long DJ-friendly intro and outro, bittersweet 4am mood",
@@ -121,6 +127,8 @@ class Bot:
         self.pair_code = None
         self.jobs = queue.Queue()
         self.threads = {}    # chat_id -> message_thread_id (topic chats)
+        self.gpu_marker = os.environ.get("ZI_GPU_MARKER") or os.path.join(out_root, ".gpu_busy")
+        self.gpu_poll = GPU_POLL_SEC
         self.queued = []     # titles waiting behind the current render
         self.current = None
         self.builders = {}   # chat_id -> dict of the guided /track flow
@@ -176,6 +184,66 @@ class Bot:
                 print("bot poll error:", e)
                 time.sleep(5)
 
+    def _gpu_busy(self):
+        """Why a render cannot start now, or None when the GPU looks free."""
+        try:
+            if self.gpu_marker and os.path.exists(self.gpu_marker):
+                # a marker left behind by a crashed run must not block forever
+                if time.time() - os.path.getmtime(self.gpu_marker) < 6 * 3600:
+                    return "another render is holding the GPU"
+        except Exception:
+            pass
+        try:
+            procs = subprocess.run(["nvidia-smi", "--query-compute-apps=pid,used_memory",
+                                    "--format=csv,noheader,nounits"],
+                                   capture_output=True, text=True, timeout=15).stdout
+            me = str(os.getpid())
+            for line in procs.strip().splitlines():
+                parts = [x.strip() for x in line.split(",")]
+                if len(parts) < 2 or not parts[0].isdigit():
+                    continue
+                try:
+                    mb = float(parts[1] or 0)
+                except ValueError:
+                    mb = 0
+                if parts[0] != me and mb > GPU_PROC_MB:
+                    return "another process is rendering"
+            util = subprocess.run(["nvidia-smi", "--query-gpu=utilization.gpu",
+                                   "--format=csv,noheader,nounits"],
+                                  capture_output=True, text=True, timeout=15).stdout
+            vals = [int(v) for v in util.replace("\n", " ").split() if v.strip().isdigit()]
+            if vals and max(vals) > GPU_UTIL_LIMIT:
+                return "the GPU is busy"
+        except Exception:
+            return None
+        return None
+
+    def _mark_busy(self, on):
+        try:
+            if not self.gpu_marker:
+                return
+            if on:
+                open(self.gpu_marker, "w").write(str(os.getpid()))
+            elif os.path.exists(self.gpu_marker):
+                os.remove(self.gpu_marker)
+        except Exception as e:
+            print("gpu marker failed:", e)
+
+    def _wait_for_gpu(self, chat_id):
+        """Hold the job until nothing else is rendering. Returns False if the bot stopped."""
+        told = None
+        while not self.stop.is_set():
+            why = self._gpu_busy()
+            if not why:
+                if told:
+                    self.tg.send(chat_id, "GPU is free, starting your render now.")
+                return True
+            if why != told:
+                self.tg.send(chat_id, f"Waiting: {why}. Your track starts on its own as soon as it frees up, no need to resend.")
+                told = why
+            time.sleep(self.gpu_poll)
+        return False
+
     def _worker(self):
         while not self.stop.is_set():
             try:
@@ -191,13 +259,17 @@ class Bot:
                     self.queued.pop(0)
             except Exception:
                 pass
+            if not self._wait_for_gpu(chat_id):
+                break
             self.tg.send(chat_id, f"Rendering: {self.current} ({spec.get('seconds', 330)}s, {spec.get('quality', 'standard')}). A high-quality track takes 10-25 min on the free GPU - I will send it here when done.")
             try:
+                self._mark_busy(True)
                 r = self.make_track(spec, "Rahal", "Rahal")
                 self._deliver(chat_id, r)
             except Exception as e:
                 self.tg.send(chat_id, f"That track failed: {str(e)[:300]}. It stays out of the queue; send it again if you want a retry.")
             finally:
+                self._mark_busy(False)
                 self.current = None
                 self.jobs.task_done()
 
