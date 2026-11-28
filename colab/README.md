@@ -214,6 +214,11 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
+## Bot build 2026-11-28.48: English buttons
+
+- Every button label is English, short, with an emoji (New Track, Library, Prompt + Reference, AI Writes It, Social Links, Dorgham, RouteNote Form, More, Studio, Generate, Ask Me, Publish, Remix / Cover, Remaster, Tweak & Regenerate, Cover Art, Video, Mark as The One, Another Track). All bot messages stay Egyptian Arabic.
+- The labels are mapped in one place (`BUTTON_EN` and `en_keyboard` in `bot/zi_bot.py`) when a keyboard is sent. A test checks that no button text in the source stays Arabic.
+
 ## Bot build 2026-11-28.47: any language in, English prompt out
 
 - Prompts and voice notes in any language (Arabic, English, Russian, German and others) work. Groq (gpt-oss-120b, then qwen) detects the language and writes a clean English music prompt, style only, no real artist or track names. The bot shows it in one short line, then continues.
@@ -353,9 +358,9 @@ What .25 changes for whoever is testing:
 - `/diag` prints which voice engines are on the box and whether screenshots have a key.
 
 ```python
-# pinned reload - build .47 (bot + options + assistant + voice + art)
+# pinned reload - build .48 (bot + options + assistant + voice + art)
 import os, sys, importlib.util, urllib.request
-SHA = "fb68aa7d0fbae685f9f1259b6ce68f58b3e1616c"
+SHA = "a0bb4f567cdf432c4e8cb215a47a3a1d69c90106"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
