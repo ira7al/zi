@@ -9,7 +9,7 @@ class FakeTG:
     def __init__(self):
         self.sent = []
 
-    def send(self, chat_id, text, keyboard=None):
+    def send(self, chat_id, text, keyboard=None, reply=None):
         self.sent.append({"chat_id": chat_id, "text": text, "keyboard": keyboard})
         return {"ok": True}
 
