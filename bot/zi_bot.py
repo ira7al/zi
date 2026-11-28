@@ -9,9 +9,9 @@
 # the owner sends "/start <code>" in the bot chat to bind. Only the bound
 # owner can use the bot - anyone else is refused (GPU hours are capped).
 
-import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.request, urllib.parse, uuid
+import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.16"
+VERSION = "2026-11-28.17"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -49,6 +49,7 @@ except Exception:  # loaded by path from the notebook: add this file's folder
 
 build_prompt = opt.build_prompt
 clean_idea = opt.clean_idea
+has_non_latin = opt.has_non_latin
 _structure = opt.structure
 OPTIONS = opt.OPTIONS
 
@@ -159,14 +160,44 @@ class TG:
         self.log = []              # last sends: (time, text, ok|error)
 
     def call(self, method, **fields):
+        # a notebook network blip must not lose a message or a track: retry the
+        # transient failures (timeout, connection reset, 429, 5xx) a few times
         url = API.format(token=self.token, method=method)
         data = urllib.parse.urlencode({k: v for k, v in fields.items() if v is not None}).encode()
-        req = urllib.request.Request(url, data=data)
-        with urllib.request.urlopen(req, timeout=90) as r:
-            out = json.loads(r.read())
-        if not out.get("ok"):
-            raise RuntimeError(f"telegram {method} failed: {out.get('description')}")
-        return out["result"]
+        last = None
+        for attempt in range(3):
+            try:
+                req = urllib.request.Request(url, data=data)
+                with urllib.request.urlopen(req, timeout=90) as r:
+                    out = json.loads(r.read())
+                if not out.get("ok"):
+                    desc = str(out.get("description") or "")
+                    wait = int((out.get("parameters") or {}).get("retry_after") or 3)
+                    last = RuntimeError(f"telegram {method} failed: {desc}")
+                    if out.get("error_code") == 429 or "retry after" in desc.lower():
+                        if attempt < 2:
+                            time.sleep(min(wait, 30))
+                            continue
+                    raise last
+                return out["result"]
+            except urllib.error.HTTPError as e:
+                body = ""
+                try:
+                    body = e.read().decode("utf-8", "ignore")[:300]
+                except Exception:
+                    pass
+                last = RuntimeError(f"telegram {method} failed: HTTP {e.code} {body}")
+                if e.code in (429, 500, 502, 503, 504) and attempt < 2:
+                    time.sleep(2 * (attempt + 1))
+                    continue
+                raise last
+            except (urllib.error.URLError, TimeoutError, OSError) as e:
+                last = e
+                if attempt < 2:
+                    time.sleep(2 * (attempt + 1))
+                    continue
+                raise
+        raise last if last else RuntimeError(f"telegram {method} failed")
 
     def _note(self, what, ok, err=None):
         try:
@@ -270,6 +301,7 @@ class Bot:
         self.conflict_warned = False
         self.stats = {"message": 0, "callback": 0, "last": "nothing yet"}
         self.ds_lyrics = {}   # chat_id -> sha of the file whose lyrics we are waiting for
+        self.render_note_minutes = 5   # how often a long render says it is still alive
         os.makedirs(out_root, exist_ok=True)
 
     @staticmethod
@@ -335,6 +367,15 @@ class Bot:
                         self._handle(u)
                     except Exception as e:
                         print("bot handle error:", e)
+                        traceback.print_exc()
+                        try:
+                            cid = (((u.get("message") or {}).get("chat") or {}).get("id")
+                                   or ((u.get("callback_query") or {}).get("message", {}).get("chat") or {}).get("id"))
+                            if cid and self.owner and cid == self.owner:
+                                self.tg.send(cid, f"That message broke something: {type(e).__name__}: {str(e)[:160]}. "
+                                                  "The bot is still running, so send it again or /status.")
+                        except Exception:
+                            pass
             except Exception as e:
                 msg = str(e)
                 if "409" in msg or "Conflict" in msg or "terminated by other" in msg:
@@ -424,45 +465,109 @@ class Bot:
                 job = self.jobs.get(timeout=1)
             except queue.Empty:
                 continue
-            chat_id, spec = job
-            if spec.get("_thread"):
-                self.threads[chat_id] = spec["_thread"]
-            self.current = spec.get("title") or spec.get("name") or spec["genre"]
             try:
-                if self.queued:
-                    self.queued.pop(0)
-            except Exception:
-                pass
-            if not self._wait_for_gpu(chat_id):
-                break
-            self.tg.send(chat_id, f"Rendering: {self.current} ({spec.get('seconds', 330)}s, {spec.get('quality', 'standard')}). A high-quality track takes 10-25 min on the free GPU - I will send it here when done.")
-            try:
-                self._mark_busy(True)
-                r = self.make_track(spec, "Rahal", "Rahal")
-                self._deliver(chat_id, r)
+                self._run_job(*job)
             except Exception as e:
-                tb = traceback.format_exc()
-                print("render failed:\n" + tb)
+                # a bad job must never take the worker down with it
+                print("job crashed:\n" + traceback.format_exc())
                 try:
-                    with open(os.path.join(self.out_root, "render_errors.log"), "a") as fh:
-                        fh.write(f"\n=== {time.strftime('%Y-%m-%d %H:%M:%S')} {self.current}\n{tb}")
+                    self.tg.send(job[0], f"That job stopped: {type(e).__name__}: {str(e)[:200]}\n"
+                                          "The bot is still running - send /track again.")
                 except Exception:
                     pass
-                last = tb.strip().splitlines()[-1] if tb.strip() else ""
-                self.tg.send(chat_id, f"That track failed: {type(e).__name__}: {str(e)[:200]}\n"
-                                      f"Last line: {last[:200]}\n"
-                                      "Full traceback is in the notebook console and in render_errors.log.")
             finally:
-                self._mark_busy(False)
                 self.current = None
-                self.jobs.task_done()
+                try:
+                    self.jobs.task_done()
+                except Exception:
+                    pass
+
+    def _run_job(self, chat_id, spec):
+        if spec.get("_thread"):
+            self.threads[chat_id] = spec["_thread"]
+        self.current = spec.get("title") or spec.get("name") or spec.get("genre") or "track"
+        try:
+            if self.queued:
+                self.queued.pop(0)
+        except Exception:
+            pass
+        if not self._wait_for_gpu(chat_id):
+            return
+        self.tg.send(chat_id, f"Rendering: {self.current} ({spec.get('seconds', 330)}s, {spec.get('quality', 'standard')}). A high-quality track takes 10-25 min on the free GPU - I will send it here when done.")
+        self._mark_busy(True)
+        try:
+            r = self._render(chat_id, spec)
+        except Exception as e:
+            tb = traceback.format_exc()
+            print("render failed:\n" + tb)
+            try:
+                with open(os.path.join(self.out_root, "render_errors.log"), "a") as fh:
+                    fh.write(f"\n=== {time.strftime('%Y-%m-%d %H:%M:%S')} {self.current}\n{tb}")
+            except Exception:
+                pass
+            last = tb.strip().splitlines()[-1] if tb.strip() else ""
+            self.tg.send(chat_id, f"That track failed: {type(e).__name__}: {str(e)[:200]}\n"
+                                  f"Last line: {last[:200]}\n"
+                                  "Full traceback is in the notebook console and in render_errors.log.")
+            return
+        finally:
+            self._mark_busy(False)
+        try:
+            self._deliver(chat_id, r)
+        except Exception as e:
+            tb = traceback.format_exc()
+            print("delivery failed:\n" + tb)
+            try:
+                with open(os.path.join(self.out_root, "render_errors.log"), "a") as fh:
+                    fh.write(f"\n=== {time.strftime('%Y-%m-%d %H:%M:%S')} delivery {self.current}\n{tb}")
+            except Exception:
+                pass
+            folder = r.get("folder") if isinstance(r, dict) else None
+            self.tg.send(chat_id, f"The track rendered but sending it to you failed: {type(e).__name__}: {str(e)[:200]}\n"
+                                  + (f"It is on disk at {folder} - /library reopens it.\n" if folder else "")
+                                  + "Nothing was lost.")
+
+    def _render(self, chat_id, spec):
+        """Run make_track in its own thread so a long render can still say it is alive."""
+        box = {}
+
+        def run():
+            try:
+                box["r"] = self.make_track(spec, "Rahal", "Rahal")
+            except BaseException as e:      # noqa: BLE001 - handed to the caller below
+                box["err"] = e
+
+        t = threading.Thread(target=run, daemon=True)
+        t.start()
+        started = time.time()
+        step = (self.render_note_minutes or 0) * 60 or 20
+        note_at = step
+        while t.is_alive():
+            t.join(timeout=min(step, 20))
+            if t.is_alive() and note_at and time.time() - started >= note_at:
+                mins = int((time.time() - started) // 60)
+                try:
+                    self.tg.send(chat_id, f"Still rendering {self.current}: {mins} min in. It carries on by itself, nothing to resend.")
+                except Exception as e:
+                    print("heartbeat send failed:", repr(e))
+                note_at += step
+        if "err" in box:
+            raise box["err"]
+        r = box.get("r")
+        if not isinstance(r, dict) or not r.get("folder"):
+            raise RuntimeError("the engine finished but returned no track folder")
+        return r
 
     def _deliver(self, chat_id, r):
         base, folder, title = r["base"], r["folder"], r["title"]
+        if not os.path.isdir(folder):
+            raise RuntimeError(f"the release folder is missing on disk: {folder}")
         meta = self._load(os.path.join(folder, "metadata.json"), {})
         mp3 = base + "_320kbps.mp3"
         if not os.path.exists(mp3) or os.path.getsize(mp3) > TG_LIMIT:
             mp3 = base + "_preview_128k.mp3"
+        if not os.path.exists(mp3):
+            raise RuntimeError(f"no audio in {os.path.basename(folder)} (looked for the 320 kbps file and the 128 kbps preview)")
         info = (f"{title} | {meta.get('genre','')} | BPM {meta.get('bpm')} | key {meta.get('key') or meta.get('keyscale')}"
                 f" | {meta.get('actual_duration_sec','?')}s | QC {meta.get('qc_candidates',[{}])[0].get('score','?')}\n{AI_LABEL}")
         try:
@@ -851,7 +956,7 @@ class Bot:
             if b:
                 b["idea_seed"] = text
                 b["variant"] = 0
-                b["built"] = build_prompt(text, b["spec"].get("seconds", 330), 0)
+                b["built"] = build_prompt(text, b["spec"].get("seconds", 330), 0, instrumental=b["spec"].get("instrumental", True))
                 self._show_prompt(chat_id, b)
             return
         cmd, _, arg = text.partition(" ")
@@ -980,7 +1085,7 @@ class Bot:
             if b.get("built") and b["spec"].get("idea") == b["built"].get("prompt"):
                 # the generated prompt carries a structure map, so rebuild it for the
                 # length he just picked instead of rendering 7 minutes off a 5:30 map
-                b["built"] = build_prompt(b["idea_seed"], int(data), b.get("variant", 0))
+                b["built"] = build_prompt(b["idea_seed"], int(data), b.get("variant", 0), instrumental=b["spec"].get("instrumental", True))
                 b["spec"]["idea"] = b["built"]["prompt"]
             b["step"] = "instrumental"
             self.tg.send(chat_id, "Vocals?", keyboard=[[{"text": "Instrumental", "callback_data": "v:1"}, {"text": "With lyrics", "callback_data": "v:0"}]])
@@ -1100,7 +1205,7 @@ class Bot:
                                   "No artist or track names - I build the full prompt from the library rules.")
         elif code == "again" and b.get("idea_seed") is not None:
             b["variant"] = b.get("variant", 0) + 1
-            b["built"] = build_prompt(b["idea_seed"], b["spec"].get("seconds", 330), b["variant"])
+            b["built"] = build_prompt(b["idea_seed"], b["spec"].get("seconds", 330), b["variant"], instrumental=b["spec"].get("instrumental", True))
             self._show_prompt(chat_id, b)
         elif code == "edit":
             b["step"] = "edit_prompt"
@@ -1131,6 +1236,11 @@ class Bot:
 
     def _builder_text(self, chat_id, text):
         b = self.builders[chat_id]
+        if has_non_latin(text) and b["step"] in ("theme", "own_prompt", "edit_prompt", "ai_idea"):
+            # the engine reads an English prompt, so the theme has to be English too
+            self.tg.send(chat_id, "The engine reads English, so write that in English: a few words are enough, "
+                                  "e.g. 'night drive, longing, warm bass'. Send it again, or /cancel.")
+            return
         if b["step"] == "theme":
             b["spec"]["idea"] = b["spec"]["idea"] + text
             b["step"] = "seconds"
@@ -1142,7 +1252,7 @@ class Bot:
                 return
             spec = b["spec"]
             spec["idea"] = clean
-            meta = build_prompt(clean, spec.get("seconds", 330))
+            meta = build_prompt(clean, spec.get("seconds", 330), 0, instrumental=spec.get("instrumental", True))
             spec["bpm"], spec["key"] = meta["bpm"], meta["key"]
             spec.setdefault("genre", meta["genre"])
             spec.setdefault("name", meta["genre"])
@@ -1165,7 +1275,7 @@ class Bot:
         elif b["step"] == "ai_idea":
             b["idea_seed"] = text
             b["variant"] = 0
-            b["built"] = build_prompt(text, b["spec"].get("seconds", 330), 0)
+            b["built"] = build_prompt(text, b["spec"].get("seconds", 330), 0, instrumental=b["spec"].get("instrumental", True))
             self._show_prompt(chat_id, b)
 
     def _confirm(self, chat_id, b):
