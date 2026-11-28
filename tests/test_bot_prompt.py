@@ -203,6 +203,7 @@ class BuilderTests(unittest.TestCase):
         self.assertFalse(norm["instrumental"])
 
     def test_model_button_cycles(self):
+        self.bot._models_available = lambda: {"turbo", "turbo-shift3"}
         self._to_options()
         self.tap("o:model")
         self.assertEqual(self.bot.builders[self.chat]["spec"]["model"], "turbo-shift3")

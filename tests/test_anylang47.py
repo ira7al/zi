@@ -48,9 +48,16 @@ class Flow(unittest.TestCase):
     def test_english_with_label_passes_no_refusal(self):
         b = make_bot(())
         b.groq_key = ""
-        r = b._english_text(5, SHOT)
-        self.assertEqual(r[0], EN)
+        music = "البرومبت: deep melodic techno, 124 bpm, dark warm pads, rolling bass, hypnotic arpeggio"
+        r = b._english_text(5, music)
+        self.assertEqual(r[0], music.split(": ", 1)[1])
         self.assertFalse(any("بيفهم إنجليزي" in str(m) for m in b.tg.sent))
+
+    def test_image_prompt_is_refused_not_used_as_music(self):
+        b = make_bot(())
+        b.groq_key = ""
+        self.assertIsNone(b._english_text(5, SHOT))
+        self.assertTrue(b.tg.sent)
 
     def test_russian_goes_to_groq(self):
         b = make_bot(()); b.groq_key = "K"; b._llm = lambda: True
