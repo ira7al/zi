@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.31"
+VERSION = "2026-11-28.32"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -66,6 +66,15 @@ except Exception:  # loaded by path from the notebook
     voice = _ilu3.module_from_spec(_vo_spec)
     _vo_spec.loader.exec_module(voice)
 
+try:
+    import zi_art as art
+except Exception:  # loaded by path from the notebook
+    import importlib.util as _ilu4
+    _ar_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "zi_art.py")
+    _ar_spec = _ilu4.spec_from_file_location("zi_art", _ar_path)
+    art = _ilu4.module_from_spec(_ar_spec)
+    _ar_spec.loader.exec_module(art)
+
 build_prompt = opt.build_prompt
 clean_idea = opt.clean_idea
 has_non_latin = opt.has_non_latin
@@ -93,6 +102,10 @@ DATASET_SUBDIR = os.path.join("dataset", "mr-dorgham")
 DS_MAX_BYTES = 20 * 1024 * 1024      # Bot API getFile cap
 DS_AUDIO_EXT = {".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg", ".oga", ".opus",
                 ".aiff", ".aif", ".wma"}
+MOOD_WORDS = ("dark", "warm", "dreamy", "melancholic", "euphoric", "uplifting", "calm", "energetic",
+              "driving", "hypnotic", "emotional", "cinematic", "nostalgic", "late-night", "sunset",
+              "ocean", "groovy", "deep", "atmospheric", "chill", "epic", "romantic", "mysterious")
+AI_LABEL_YT = "AI-generated with ACE-Step under Rahal's direction and selection."
 PUBLISH_AI = "AI-generated with ACE-Step under Rahal's direction and selection."
 PUBLISH_TAGS = "#melodictechno #indiedance #progressivehouse #afrohouse"
 PLATFORMS = [("yt", "YouTube"), ("ig", "Instagram"), ("tt", "TikTok"),
@@ -105,7 +118,8 @@ PLATFORM_LABEL = dict(PLATFORMS)
 SOCIAL = [("\u25b6\ufe0f YouTube", "https://www.youtube.com/@rahalofficialmusic"),
           ("\U0001f4f8 Instagram", "https://www.instagram.com/rahal.official.music/"),
           ("\U0001f3b5 TikTok", "https://www.tiktok.com/@rahalofficialmusic"),
-          ("\U0001f4e3 Telegram channel", "https://t.me/rahal_music")]
+          ("\U0001f4e3 \u0642\u0646\u0627\u0629 \u062a\u064a\u0644\u064a\u062c\u0631\u0627\u0645", "https://t.me/rahal_music"),
+          ("\u2601\ufe0f SoundCloud (\u0627\u0644\u0628\u0631\u0648\u0641\u0627\u064a\u0644 \u0628\u0633)", "https://soundcloud.com/rahal-835976183")]
 
 # One command only. Telegram's corner button can only open this list, never send a
 # message, so the shortest path is: corner -> Menu -> the inline menu in the chat.
@@ -1024,7 +1038,8 @@ class Bot:
                             "when": time.strftime("%Y-%m-%d %H:%M:%S")}
         self._save(self._liked_path(), d)
         total = sum(1 for v in d["tracks"].values() if v.get("kept"))
-        self.tg.send(chat_id, f"\u2b50 Saved to Liked: {title}\n{dest}\n{copied} files. {total} track(s) liked. /liked lists them.")
+        self.tg.send(chat_id, f"\u2b50 Saved to Liked: {title}\n{dest}\n{copied} files. {total} track(s) liked. /liked lists them.",
+                     keyboard=self._visual_kb(key))
 
     def _liked_cmd(self, chat_id):
         d = self._liked()
@@ -1398,7 +1413,7 @@ class Bot:
         cmd, _, arg = text.partition(" ")
         cmd = cmd.lower().split("@")[0]
         if cmd == "/start" or cmd == "/help":
-            self.tg.send(chat_id, HELP, keyboard=[[{"text": "\u2630 Menu", "callback_data": "menu"}]])
+            self.tg.send(chat_id, HELP, keyboard=[[{"text": "\u2630 \u0627\u0644\u0642\u0627\u0626\u0645\u0629", "callback_data": "menu"}]])
             self._launcher(chat_id)
         elif cmd == "/menu":
             self._menu(chat_id)
@@ -1465,6 +1480,9 @@ class Bot:
         if data.startswith("keep:"):
             self._keep(chat_id, data.split(":", 1)[1])
             return
+        if data.startswith(("art:", "artpick:", "vid:", "vidyt:", "vidytok:")):
+            self._visual_cb(chat_id, data)
+            return
         if data.startswith("ds:"):
             parts = data.split(":")
             act = parts[1] if len(parts) > 1 else ""
@@ -1494,6 +1512,9 @@ class Bot:
             return
         if data == "menu":
             self._menu(chat_id)
+            return
+        if data == "social:fb":
+            self.tg.send(chat_id, "\u0644\u064a\u0646\u0643 \u0635\u0641\u062d\u0629 \u0641\u064a\u0633\u0628\u0648\u0643 \u0644\u0633\u0647 \u0645\u0634 \u0645\u0636\u0627\u0641. \u0628\u0645\u062c\u0631\u062f \u0645\u0627 \u062a\u0628\u0639\u062a\u0647\u0648\u0644\u064a \u0647\u064a\u062a\u0636\u0627\u0641 \u0647\u0646\u0627.")
             return
         if data.startswith("menu:"):
             self._menu_step(chat_id, data[5:])
@@ -2145,6 +2166,174 @@ class Bot:
             return out
         return None
 
+    # ---------- animated YouTube video and artwork ----------
+    VIZ_SUFFIX = "_youtube_viz_16x9.mp4"
+
+    @staticmethod
+    def _viz_filter():
+        # blurred, darkened cover as the backdrop; the cover whole in the middle; a live
+        # waveform under it and spectrum bars rising from the bottom, both from the audio
+        return ("[0:v]scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,"
+                "boxblur=30:3,eq=brightness=-0.12:saturation=1.3[bg];"
+                "[0:v]scale=440:440,format=rgba[art];"
+                "[1:a]asplit=2[a1][a2];"
+                "[a1]showwaves=s=1280x110:mode=cline:rate=20:colors=0xE8D9FF@0.9,format=rgba[wv];"
+                "[a2]showfreqs=s=1280x150:mode=bar:fscale=log:colors=0xB48CFF@0.8,format=rgba[fq];"
+                "[bg][art]overlay=(W-w)/2:60:format=auto[b1];"
+                "[b1][wv]overlay=0:H-h-170:format=auto[b2];"
+                "[b2][fq]overlay=0:H-h:format=auto,format=yuv420p[out]")
+
+    def _make_viz(self, folder):
+        """Animated video as long as the track: audio-reactive, built from cover + audio."""
+        audio = self._release_audio(folder)
+        cover = os.path.join(folder, "cover_3000x3000.jpg")
+        if not audio or not os.path.exists(cover):
+            return None
+        stem = os.path.basename(audio)
+        for suffix in ("_320kbps.mp3", "_preview_128k.mp3"):
+            if stem.endswith(suffix):
+                stem = stem[:-len(suffix)]
+        out = os.path.join(folder, stem + self.VIZ_SUFFIX)
+        if os.path.exists(out) and os.path.getsize(out) > 0:
+            return out
+        args = ["ffmpeg", "-y", "-loglevel", "error", "-loop", "1", "-framerate", "20", "-i", cover,
+                "-i", audio, "-filter_complex", self._viz_filter(),
+                "-map", "[out]", "-map", "1:a", "-c:v", "libx264", "-preset", "veryfast", "-crf", "24",
+                "-r", "20", "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", out + ".part"]
+        try:
+            self._run_ffmpeg(args, timeout=3600)
+            os.replace(out + ".part", out)
+        except Exception as e:
+            print("viz render failed:", type(e).__name__, str(e)[:120])
+            try:
+                os.remove(out + ".part")
+            except Exception:
+                pass
+            return None
+        return out if os.path.exists(out) and os.path.getsize(out) > 0 else None
+
+    def _viz_path(self, folder):
+        try:
+            for n in os.listdir(folder):
+                if n.endswith(self.VIZ_SUFFIX):
+                    return os.path.join(folder, n)
+        except Exception:
+            pass
+        return None
+
+    @staticmethod
+    def _visual_kb(key):
+        return [[{"text": "\U0001f3a8 \u0623\u0631\u062a \u0648\u0631\u0643 \u0644\u0644\u062a\u0631\u0627\u0643", "callback_data": f"art:{key}"},
+                 {"text": "\U0001f3ac \u0641\u064a\u062f\u064a\u0648 \u064a\u0648\u062a\u064a\u0648\u0628", "callback_data": f"vid:{key}"}]]
+
+    def _mood_text(self, folder):
+        meta = self._load(os.path.join(folder, "metadata.json"), {})
+        bits = [str(meta.get(k) or "") for k in ("genre", "idea", "prompt", "caption")]
+        return " ".join(bits)[:600]
+
+    def _visual_cb(self, chat_id, data):
+        kind, _, rest = data.partition(":")
+        parts = rest.split(":")
+        key = parts[0]
+        name = self._lib_folder(key)
+        folder = os.path.join(self.out_root, name) if name else None
+        if not folder:
+            self.tg.send(chat_id, "\u0627\u0644\u062a\u0631\u0627\u0643 \u062f\u0647 \u0645\u0634 \u0645\u0648\u062c\u0648\u062f \u0639\u0644\u0649 \u0627\u0644\u062c\u0647\u0627\u0632 \u0627\u0644\u0644\u064a \u0634\u063a\u0627\u0644 \u062f\u0644\u0648\u0642\u062a\u064a. "
+                                  "\u062f\u0648\u0633 \u0627\u0644\u0632\u0631\u0627\u0631 \u0645\u0646 \u062a\u062d\u062a \u062a\u0631\u0627\u0643 \u0623\u062d\u062f\u062b\u060c \u0623\u0648 /library.")
+            return
+        title = self._publish_caption(folder)[0]
+        if kind == "art":
+            self._art_options(chat_id, key, folder, more=(len(parts) > 1 and parts[1] == "more"))
+        elif kind == "artpick":
+            self._art_pick(chat_id, key, folder, int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0)
+        elif kind == "vid":
+            threading.Thread(target=self._video_job, args=(chat_id, key, folder, title), daemon=True).start()
+        elif kind == "vidyt":
+            head, desc, tags = self._yt_metadata(folder, title, self._publish_caption(folder)[1])
+            self.tg.send(chat_id, "\u0643\u0644 \u062d\u0627\u062c\u0629 \u0627\u062a\u0645\u0644\u062a \u062a\u0644\u0642\u0627\u0626\u064a (public):\n\n" + head + "\n\n" + desc[:2500] +
+                         "\n\nTags: " + ", ".join(tags[:12]) + "\n\n\u0645\u062a\u0623\u0643\u062f\u061f",
+                         keyboard=[[{"text": "\u2705 \u0623\u064a\u0648\u0647\u060c \u0627\u0631\u0641\u0639", "callback_data": f"vidytok:{key}"},
+                                    {"text": "\u274c \u0644\u0623", "callback_data": "menu"}]])
+        elif kind == "vidytok":
+            try:
+                url = self._youtube_upload(folder, title, self._publish_caption(folder)[1])
+                self.tg.send(chat_id, "YouTube: posted - " + url)
+            except Exception as e:
+                self.tg.send(chat_id, "\u0645\u0627\u0642\u062f\u0631\u062a\u0634 \u0623\u0631\u0641\u0639 \u0639\u0644\u0649 \u064a\u0648\u062a\u064a\u0648\u0628: " + f"{type(e).__name__}: {str(e)[:160]}")
+
+    def _video_job(self, chat_id, key, folder, title):
+        self.tg.send(chat_id, "\u0628\u062c\u0647\u0632 \u0627\u0644\u0641\u064a\u062f\u064a\u0648 \u0628\u0646\u0641\u0633 \u0637\u0648\u0644 \u0627\u0644\u062a\u0631\u0627\u0643 (\u0645\u0645\u0643\u0646 \u064a\u0627\u062e\u062f \u0645\u0646 \u0662 \u0644\u0640 \u0661\u0660 \u062f\u0642\u0627\u064a\u0642 \u062d\u0633\u0628 \u0627\u0644\u0637\u0648\u0644). \u0647\u0628\u0639\u062a\u0644\u0643 \u0644\u0645\u0627 \u064a\u062e\u0644\u0635.")
+        vid = self._make_viz(folder)
+        if not vid:
+            self.tg.send(chat_id, "\u0627\u0644\u0641\u064a\u062f\u064a\u0648 \u0645\u0627\u0627\u062a\u0639\u0645\u0644\u0634: \u0645\u0634 \u0644\u0627\u0642\u064a \u0643\u0627\u0641\u0631 \u0623\u0648 \u0635\u0648\u062a \u0641\u064a \u0627\u0644\u0645\u062c\u0644\u062f\u060c \u0623\u0648 \u062d\u0635\u0644\u062a \u0645\u0634\u0643\u0644\u0629 \u0641\u064a \u0627\u0644\u0631\u0646\u062f\u0631.")
+            return
+        mb = os.path.getsize(vid) / 1048576
+        sent = False
+        if os.path.getsize(vid) < TG_LIMIT:
+            try:
+                self.tg._upload("sendVideo", chat_id, "video", vid, caption=title)
+                sent = True
+            except Exception as e:
+                print("viz send failed:", type(e).__name__)
+        self.tg.send(chat_id, ("\u0627\u0644\u0641\u064a\u062f\u064a\u0648 \u062c\u0627\u0647\u0632" if sent else f"\u0627\u0644\u0641\u064a\u062f\u064a\u0648 \u062c\u0627\u0647\u0632 \u0648\u0645\u062d\u0641\u0648\u0638 ({mb:.0f} MB \u0643\u062a\u064a\u0631 \u0639\u0644\u0649 \u062a\u0644\u064a\u062c\u0631\u0627\u0645)")
+                     + f": {os.path.basename(vid)}\n\u0647\u0648 \u0645\u062d\u0641\u0648\u0638 \u0641\u064a \u0645\u062c\u0644\u062f \u0627\u0644\u062a\u0631\u0627\u0643. \u0627\u0644\u0631\u0641\u0639 \u0639\u0644\u0649 \u064a\u0648\u062a\u064a\u0648\u0628 \u0645\u0634 \u0647\u064a\u062d\u0635\u0644 \u063a\u064a\u0631 \u0644\u0645\u0627 \u062a\u0636\u063a\u0637 \u0639\u0644\u0649 \u0627\u0644\u0632\u0631\u0627\u0631.",
+                     keyboard=[[{"text": "\u25b6\ufe0f \u0627\u0631\u0641\u0639 \u0639\u0644\u0649 \u064a\u0648\u062a\u064a\u0648\u0628", "callback_data": f"vidyt:{key}"}],
+                               [{"text": "\U0001f3a8 \u063a\u064a\u0651\u0631 \u0627\u0644\u0623\u0631\u062a \u0648\u0631\u0643", "callback_data": f"art:{key}"}]])
+
+    def _art_dir(self, folder):
+        d = os.path.join(folder, "_art_options")
+        os.makedirs(d, exist_ok=True)
+        return d
+
+    def _art_options(self, chat_id, key, folder, more=False):
+        text = self._mood_text(folder)
+        seed_file = os.path.join(self._art_dir(folder), "seed.txt")
+        try:
+            seed = int(open(seed_file).read()) + (10 if more else 0) if os.path.exists(seed_file) else 0
+        except Exception:
+            seed = 0
+        if not os.path.exists(seed_file) or more:
+            seed = seed or (int(hashlib.md5(folder.encode()).hexdigest()[:6], 16) % 100000)
+        open(seed_file, "w").write(str(seed))
+        self.tg.send(chat_id, "\u0628\u0631\u0633\u0645 \u0623\u0631\u0628\u0639 \u0623\u0634\u0643\u0627\u0644 \u0639\u0644\u0649 \u0645\u0632\u0627\u062c \u0627\u0644\u062a\u0631\u0627\u0643...")
+        try:
+            opts = art.options(text, seed, 1500)
+        except Exception as e:
+            self.tg.send(chat_id, "\u0645\u0627\u0642\u062f\u0631\u062a\u0634 \u0623\u0631\u0633\u0645: " + f"{type(e).__name__}: {str(e)[:120]}")
+            return
+        d = self._art_dir(folder)
+        for i, (look, sd, img) in enumerate(opts):
+            path = os.path.join(d, f"opt{i}.jpg")
+            img.save(path, quality=90)
+            try:
+                self.tg.photo(chat_id, path, caption=f"{i + 1}")
+            except Exception as e:
+                print("art send failed:", type(e).__name__)
+        self.tg.send(chat_id, "\u0627\u062e\u062a\u0627\u0631 \u0627\u0644\u0634\u0643\u0644 \u0627\u0644\u0644\u064a \u0639\u0627\u062c\u0628\u0643. \u0647\u064a\u0628\u0642\u0649 \u0643\u0627\u0641\u0631 \u0627\u0644\u062a\u0631\u0627\u0643 \u0648\u0627\u0644\u0641\u064a\u062f\u064a\u0648 \u0647\u064a\u062a\u0628\u0646\u064a \u0645\u0646\u0647.",
+                     keyboard=[[{"text": str(i + 1), "callback_data": f"artpick:{key}:{i}"} for i in range(len(opts))],
+                               [{"text": "\U0001f504 \u0623\u0634\u0643\u0627\u0644 \u062a\u0627\u0646\u064a\u0629", "callback_data": f"art:{key}:more"}]])
+
+    def _art_pick(self, chat_id, key, folder, i):
+        src = os.path.join(self._art_dir(folder), f"opt{i}.jpg")
+        cover = os.path.join(folder, "cover_3000x3000.jpg")
+        if not os.path.exists(src):
+            self.tg.send(chat_id, "\u0627\u0644\u0634\u0643\u0644 \u062f\u0647 \u0645\u0634 \u0645\u0648\u062c\u0648\u062f\u060c \u062f\u0648\u0633 \u0623\u0631\u062a \u0648\u0631\u0643 \u062a\u0627\u0646\u064a.")
+            return
+        from PIL import Image
+        keep = os.path.join(folder, "cover_original.jpg")
+        if os.path.exists(cover) and not os.path.exists(keep):
+            shutil.copy2(cover, keep)
+        Image.open(src).convert("RGB").resize((3000, 3000), Image.LANCZOS).save(cover, quality=92)
+        # a video built from the old cover would be stale
+        for n in os.listdir(folder):
+            if n.endswith(("_youtube_viz_16x9.mp4", "_youtube_16x9.mp4", "_reel_9x16.mp4")):
+                try:
+                    os.remove(os.path.join(folder, n))
+                except Exception:
+                    pass
+        self.tg.send(chat_id, "\u0627\u062a\u0639\u0645\u0644 \u0643\u0627\u0641\u0631 \u0627\u0644\u062a\u0631\u0627\u0643 (\u0627\u0644\u0642\u062f\u064a\u0645 \u0645\u062d\u0641\u0648\u0638 \u0643\u0640 cover_original.jpg). \u0639\u0627\u064a\u0632 \u0623\u0639\u0645\u0644 \u0627\u0644\u0641\u064a\u062f\u064a\u0648\u061f",
+                     keyboard=[[{"text": "\U0001f3ac \u0641\u064a\u062f\u064a\u0648 \u064a\u0648\u062a\u064a\u0648\u0628", "callback_data": f"vid:{key}"}]])
+
     # ---------- YouTube (Data API, needs the OAuth client) ----------
     def _yt_token(self):
         """The OAuth client + refresh token, once the Google Cloud task leaves them here."""
@@ -2168,18 +2357,76 @@ class Bot:
         with urllib.request.urlopen(req, timeout=60) as r:
             return json.loads(r.read())["access_token"]
 
+    @staticmethod
+    def _mmss(sec):
+        sec = int(sec)
+        return f"{sec // 60}:{sec % 60:02d}"
+
+    def _yt_metadata(self, folder, title, caption):
+        """Everything YouTube asks for, filled in from the release: nothing to type.
+
+        Names are cleaned out of every free-text field, so no real artist or track name
+        can reach the title, description or tags.
+        """
+        meta = self._load(os.path.join(folder, "metadata.json"), {})
+        genre = str(meta.get("genre") or "").strip()
+        # free text can carry a real name, so the mood is only ever picked from a fixed
+        # list of mood words, never copied from what he typed
+        src = " ".join(str(meta.get(k) or "") for k in ("idea", "prompt", "caption")).lower()
+        mood = ", ".join(w for w in MOOD_WORDS if re.search(r"\b" + w + r"\b", src))[:120]
+        bpm, key = meta.get("bpm"), meta.get("key") or meta.get("keyscale")
+        dur = meta.get("actual_duration_sec")
+        head = f"{title} - Rahal"
+        if genre:
+            head += f" | {genre}"
+        head = head[:100]
+        lines = [f"{title} by Rahal.", "", AI_LABEL_YT, ""]
+        facts = []
+        if genre:
+            facts.append(f"Genre: {genre}")
+        if mood:
+            facts.append(f"Mood: {mood}")
+        if bpm:
+            facts.append(f"Tempo: {bpm} BPM")
+        if key:
+            facts.append(f"Key: {key}")
+        if dur:
+            try:
+                facts.append(f"Length: {self._mmss(float(dur))}")
+            except Exception:
+                pass
+        lines += facts + [""]
+        secs = meta.get("sections")
+        if isinstance(secs, list) and len(secs) >= 3:
+            ch = [f"{self._mmss(x.get('start', 0))} {x.get('name', '')}".strip() for x in secs
+                  if isinstance(x, dict)]
+            if ch and ch[0].startswith("0:00"):
+                lines += ["Chapters:"] + ch + [""]
+        lines += ["Credits:", "Music: Rahal (direction and selection), generated with ACE-Step 1.5 (MIT licence).",
+                  "Visuals: made automatically from the track and its cover.", ""]
+        lines += ["Follow Rahal:"] + [url for _n, url in SOCIAL] + [""]
+        lines += [PUBLISH_TAGS]
+        words = [w.strip().lower() for w in re.findall(r"[A-Za-z][A-Za-z0-9 \-]+", genre.replace(",", " , ") + " , " + mood)]
+        tags = []
+        for t in ["Rahal", "AI generated music", "ACE-Step"] + words + PUBLISH_TAGS.replace("#", "").split():
+            t = t.strip()
+            if t and t.lower() not in [x.lower() for x in tags] and sum(len(x) + 1 for x in tags) + len(t) < 450:
+                tags.append(t)
+        return head, "\n".join(lines), tags
+
     def _youtube_upload(self, folder, title, caption):
         """Upload the 16:9 visual of a release to YouTube. Returns the watch URL."""
         tok = self._yt_token()
         if not tok:
             raise RuntimeError("no youtube_token.json yet (the Google Cloud OAuth client is still being set up)")
-        video = self._make_video(folder, "16x9")
+        video = self._viz_path(folder) or self._make_video(folder, "16x9")
         if not video:
             raise RuntimeError("no video to upload (no cover or audio in the release folder)")
         access = self._yt_access_token(tok)
+        title, description, tags = self._yt_metadata(folder, title, caption)
         body = {"snippet": {"title": title[:100],
-                            "description": caption + "\n\nMade with ACE-Step 1.5 (MIT licence).",
-                            "tags": PUBLISH_TAGS.replace("#", "").split(),
+                            "description": description[:4900],
+                            "tags": tags,
                             "categoryId": "10"},
                 "status": {"privacyStatus": "public",
                            "selfDeclaredMadeForKids": False,
@@ -2240,20 +2487,16 @@ class Bot:
         return title, line, line + "\n\n" + PUBLISH_TAGS
 
     def _menu(self, chat_id):
-        kb = [[{"text": "\U0001f3b5 New track", "callback_data": "menu:track"},
-               {"text": "\U0001f4da Library", "callback_data": "menu:library"}],
-              [{"text": "\u270d\ufe0f My own prompt", "callback_data": "menu:own"},
-               {"text": "\u2728 AI writes it", "callback_data": "menu:ai"}],
-              [{"text": "\u25b6\ufe0f Publish last track", "callback_data": "menu:publish"},
-               {"text": "\U0001f310 Social links", "callback_data": "menu:social"}],
-              [{"text": "\U0001f916 Assistant", "callback_data": "menu:assistant"},
-               {"text": "\U0001f4be Dataset", "callback_data": "menu:dataset"},
-               {"text": "\U0001f4ca Status", "callback_data": "menu:status"},
-               {"text": "\U0001f9fe RouteNote form", "callback_data": "menu:routenote"}],
-              [{"text": "\U0001f6e0 Diag", "callback_data": "menu:diag"},
-               {"text": "\u2753 Help", "callback_data": "menu:help"}],
-              [{"text": "\U0001f39b Studio (web app)", "url": STUDIO_URL}]]
-        self.tg.send(chat_id, "Menu. Everything the bot can do is one tap from here.", keyboard=kb)
+        def B(t, d):
+            return {"text": t, "callback_data": d}
+        kb = [[B("\U0001f3b5 \u062a\u0631\u0627\u0643 \u062c\u062f\u064a\u062f", "menu:track"), B("\U0001f4da \u0627\u0644\u0645\u0643\u062a\u0628\u0629", "menu:library")],
+              [B("\u270d\ufe0f \u0628\u0631\u0648\u0645\u0628\u062a \u0645\u0646 \u0639\u0646\u062f\u064a", "menu:own"), B("\u2728 \u0627\u0644\u0630\u0643\u0627\u0621 \u064a\u0643\u062a\u0628\u0647", "menu:ai")],
+              [B("\u25b6\ufe0f \u0627\u0646\u0634\u0631 \u0622\u062e\u0631 \u062a\u0631\u0627\u0643", "menu:publish"), B("\U0001f310 \u0644\u064a\u0646\u0643\u0627\u062a \u0627\u0644\u0633\u0648\u0634\u064a\u0627\u0644", "menu:social")],
+              [B("\U0001f916 \u0627\u0644\u0645\u0633\u0627\u0639\u062f", "menu:assistant"), B("\U0001f4be \u0627\u0644\u062f\u0627\u062a\u0627 \u0633\u064a\u062a", "menu:dataset")],
+              [B("\U0001f4ca \u0627\u0644\u062d\u0627\u0644\u0629", "menu:status"), B("\U0001f9fe \u0641\u0648\u0631\u0645 RouteNote", "menu:routenote")],
+              [B("\U0001f6e0 \u062a\u0634\u062e\u064a\u0635", "menu:diag"), B("\u2753 \u0645\u0633\u0627\u0639\u062f\u0629", "menu:help")],
+              [{"text": "\U0001f39b \u0627\u0644\u0633\u062a\u0648\u062f\u064a\u0648 (\u0627\u0644\u0648\u064a\u0628)", "url": STUDIO_URL}]]
+        self.tg.send(chat_id, "\u0627\u0644\u0642\u0627\u0626\u0645\u0629. \u0643\u0644 \u062d\u0627\u062c\u0629 \u0627\u0644\u0628\u0648\u062a \u0628\u064a\u0639\u0645\u0644\u0647\u0627 \u0628\u0636\u063a\u0637\u0629 \u0645\u0646 \u0647\u0646\u0627.", keyboard=kb)
 
     def _menu_step(self, chat_id, what):
         if what == "track":
@@ -2281,10 +2524,12 @@ class Bot:
         elif what == "diag":
             self._diag(chat_id)
         else:
-            self.tg.send(chat_id, HELP, keyboard=[[{"text": "\u2630 Menu", "callback_data": "menu"}]])
+            self.tg.send(chat_id, HELP, keyboard=[[{"text": "\u2630 \u0627\u0644\u0642\u0627\u0626\u0645\u0629", "callback_data": "menu"}]])
 
     def _social(self, chat_id):
-        kb = [[{"text": name, "url": url}] for name, url in SOCIAL]
+        btns = [{"text": name, "url": url} for name, url in SOCIAL]
+        btns.append({"text": "\U0001f4d8 \u0635\u0641\u062d\u0629 \u0641\u064a\u0633\u0628\u0648\u0643 (\u0647\u062a\u062a\u0636\u0627\u0641)", "callback_data": "social:fb"})
+        kb = [btns[i:i + 2] for i in range(0, len(btns), 2)]
         self.tg.send(chat_id, "Rahal everywhere:" if kb else
                      "No verified profile links yet.", keyboard=kb or None)
 
@@ -2315,10 +2560,12 @@ class Bot:
         title = title or self._publish_caption(folder)[0]
         kb = [[{"text": PLATFORM_LABEL[c], "callback_data": f"pub:{c}:{key}"} for c in ("yt", "ig")],
               [{"text": PLATFORM_LABEL[c], "callback_data": f"pub:{c}:{key}"} for c in ("tt", "tg")],
-              [{"text": "Facebook (manual)", "callback_data": f"pub:fb:{key}"},
-               {"text": "All", "callback_data": f"pub:all:{key}"}],
-              [{"text": "\u2b50 This is the one", "callback_data": f"keep:{key}"}],
-              [{"text": "\u2630 Menu", "callback_data": "menu"}]]
+              [{"text": "\U0001f4d8 \u0641\u064a\u0633\u0628\u0648\u0643 (\u064a\u062f\u0648\u064a)", "callback_data": f"pub:fb:{key}"},
+               {"text": "\U0001f680 \u0627\u0644\u0643\u0644", "callback_data": f"pub:all:{key}"}],
+              [{"text": "\u2b50 \u062f\u0647 \u0627\u0644\u062a\u0631\u0627\u0643 \u0627\u0644\u0645\u0637\u0644\u0648\u0628", "callback_data": f"keep:{key}"}],
+              [{"text": "\U0001f3a8 \u0623\u0631\u062a\u0648\u0631\u0643", "callback_data": f"art:{key}"},
+               {"text": "\U0001f3ac \u0641\u064a\u062f\u064a\u0648 YouTube", "callback_data": f"vid:{key}"}],
+              [{"text": "\u2630 \u0627\u0644\u0642\u0627\u0626\u0645\u0629", "callback_data": "menu"}]]
         self.tg.send(chat_id, f"Publish {title}?\n"
                               "A tap posts only the platform you tap, once.", keyboard=kb)
 
