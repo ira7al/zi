@@ -8,7 +8,7 @@ class House(unittest.TestCase):
         r = o.build_prompt("")
         self.assertEqual(r["style"], "house style")
         self.assertEqual(r["bpm"], 124)
-        for w in ("round sidechained sub bass", "punchy dry kick", "offbeat open hats", "warm wide analog pads", "headroom"):
+        for w in ("weighty round sub bass", "punchy dry kick", "offbeat open hats", "warm analog pads", "headroom"):
             self.assertIn(w, r["prompt"])
 
     def test_other_styles_share_traits(self):

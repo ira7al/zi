@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.53"
+VERSION = "2026-11-28.54"
 OWNER_ID_DEFAULT = 7835590874      # Rahal's Telegram id, used only when no owner file exists
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
@@ -833,6 +833,7 @@ class Bot:
         r = box.get("r")
         try:
             glob = getattr(self.make_track, "__globals__", {}) or {}
+            self.last_engine = dict(glob.get("ENGINE_USED") or {})
             self.trace("engine_used", used=glob.get("ENGINE_USED") or {}, spec_model=spec.get("model"),
                        idea=(spec.get("idea") or "")[:300], genre=spec.get("genre"), seconds=spec.get("seconds"),
                        bpm=spec.get("bpm"), key=spec.get("key"), quality=spec.get("quality"))
@@ -841,6 +842,20 @@ class Bot:
         if not isinstance(r, dict) or not r.get("folder"):
             raise RuntimeError("the engine finished but returned no track folder")
         return r
+
+    def _model_note(self):
+        """Which model made the last track, and a plain word when the big one had to be swapped."""
+        used = getattr(self, "last_engine", None) or {}
+        model = str(used.get("model") or "")
+        if not model:
+            return ""
+        name = "XL turbo" if "xl" in model else "Turbo"
+        fb = used.get("fallback")
+        if fb == "turbo":
+            return f"الموديل: {name}. الموديل الكبير ما كملش فاشتغلت بالسريع."
+        if fb == "xl_light":
+            return f"الموديل: {name} (وضع خفيف: نسخة واحدة بدل اتنين، لأن الجهاز كان تقيل)."
+        return f"الموديل: {name}"
 
     def _deliver(self, chat_id, r):
         base, folder, title = r["base"], r["folder"], r["title"]
@@ -854,6 +869,9 @@ class Bot:
             raise RuntimeError(f"no audio in {os.path.basename(folder)} (looked for the 320 kbps file and the 128 kbps preview)")
         info = (f"{title} | {meta.get('genre','')} | BPM {meta.get('bpm')} | key {meta.get('key') or meta.get('keyscale')}"
                 f" | {meta.get('actual_duration_sec','?')}s | QC {meta.get('qc_candidates',[{}])[0].get('score','?')}\n{AI_LABEL}")
+        note = self._model_note()
+        if note:
+            info += "\n" + note
         try:
             self.tg.photo(chat_id, os.path.join(folder, "cover_3000x3000.jpg"))
         except Exception as e:
