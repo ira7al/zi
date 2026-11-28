@@ -117,6 +117,17 @@ It comes from a Google Cloud project with the YouTube Data API enabled, an OAuth
 
 The 9:16 video is used for the channel, reels and shorts; the YouTube button renders a 1280x720 version from the same cover on demand so the full track reads properly on YouTube.
 
+## The free model behind the Assistant (build .22)
+
+Add a secret named **ZI_LLM_KEY** (Kaggle: Add-ons > Secrets; Colab: key icon > Secrets with notebook access on) holding a free Gemini API key from Google AI Studio. Nothing else changes: the bot reads it itself, and without it the Assistant keeps answering from the bot's state exactly as in .21.
+
+- Model: `gemini-2.0-flash` by default. Override with an environment variable `ZI_LLM_MODEL` (for example `gemini-2.5-flash`) if the free tier moves.
+- Grounding: the request carries the same state block the rule-based answers use (build, engine, queue, dataset split, liked count, connected platforms, LoRA, voice/OCR). The system instruction tells the model to answer in Egyptian Arabic, short, from that state only, and to say it cannot see something rather than invent it.
+- Rate limits and failures: a 429, a quota error, a broken response or a network blip all fall back to the grounded answers, so a tap never goes unanswered.
+- The key never appears in a URL or in the logs: it travels in the `x-goog-api-key` header, and only an HTTP status code is ever printed. The state block carries no tokens or secrets.
+
+Also fixed in .22: the notebook's bot cell and this reload cell now fetch `bot/zi_assistant.py` as well - .21 added the file, and a cell that fetched only two files would have failed to import the bot.
+
 ## The assistant (build .21)
 
 Menu > Assistant, or `/ask <question>`, or `/ask` alone for a short chat (ends with `/end` or "خروج"). It answers in Egyptian Arabic, short, from the bot's own state: build, engine loaded or not, what is rendering, the queue, the training set count and split, how many tracks are liked, which platforms are really connected, whether the LoRA is trained, and whether voice and OCR are available on the box.
@@ -194,7 +205,7 @@ Nothing in this feature generates music or touches the GPU.
 The bot now loads a second file (`bot/zi_options.py`), so a cell 5 that only fetches `zi_bot.py` fails. Use this cell instead; it pins the commit and fetches both.
 
 ```python
-# pinned reload - build .21 (bot + its shared option model)
+# pinned reload - build .22 (bot + its shared option model + the assistant)
 import os, sys, importlib.util, urllib.request
 SHA = "5916fa116c1fcc89be607c29dcf463dbfeac4c76"
 try:
@@ -202,7 +213,7 @@ try:
     print("Stopped the previous bot instance.")
 except Exception:
     pass
-for _rel in ("bot/zi_bot.py", "bot/zi_options.py"):
+for _rel in ("bot/zi_bot.py", "bot/zi_options.py", "bot/zi_assistant.py"):
     _api = f"https://api.github.com/repos/ira7al/zi/contents/{_rel}?ref={SHA}"
     _raw = f"https://raw.githubusercontent.com/ira7al/zi/{SHA}/{_rel}"
     try:

@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.21"
+VERSION = "2026-11-28.22"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -322,6 +322,9 @@ class Bot:
         self.stats = {"message": 0, "callback": 0, "last": "nothing yet"}
         self.ds_lyrics = {}   # chat_id -> sha of the file whose lyrics we are waiting for
         self.ask_mode = set()  # chats talking to the assistant
+        self._llm_ready = None
+        self.llm_key = ""
+        self.llm_model = ""
         self.render_note_minutes = 5   # how often a long render says it is still alive
         os.makedirs(out_root, exist_ok=True)
 
@@ -654,17 +657,56 @@ class Bot:
                             "instagram": False, "tiktok": False, "facebook": False},
                 "lora": lora, "voice": have("faster_whisper"), "ocr": have("pytesseract")}
 
+    def _secret(self, name):
+        """A secret by name: environment first, then Colab or Kaggle secrets."""
+        v = (os.environ.get(name) or "").strip()
+        if v:
+            return v
+        try:
+            from google.colab import userdata
+            v = (userdata.get(name) or "").strip()
+            if v:
+                return v
+        except Exception:
+            pass
+        try:
+            from kaggle_secrets import UserSecretsClient
+            v = (UserSecretsClient().get_secret(name) or "").strip()
+            if v:
+                return v
+        except Exception:
+            pass
+        return ""
+
+    def _llm(self):
+        """True when a free model key is configured. The key itself is never printed."""
+        if self._llm_ready is None:
+            self.llm_key = self._secret("ZI_LLM_KEY")
+            self.llm_model = (os.environ.get("ZI_LLM_MODEL") or "gemini-2.0-flash").strip()
+            self._llm_ready = True
+            if self.llm_key:
+                print("assistant: free model on (" + self.llm_model + ")")
+        return bool(self.llm_key)
+
     def _assistant(self, chat_id, question):
         try:
             state = self._snapshot()
         except Exception as e:
             print("assistant snapshot failed:", repr(e))
             state = {"build": VERSION}
-        try:
-            text = ziassist.answer(question, state)
-        except Exception as e:
-            print("assistant answer failed:", repr(e))
-            text = "حصلت مشكلة وأنا بجهز الرد. جرب تاني، أو /status."
+        text = None
+        if self._llm():
+            try:
+                text = ziassist.ask_llm(question, state, self.llm_key, self.llm_model)
+            except Exception as e:                 # never let the model path break the bot
+                print("assistant llm call failed:", type(e).__name__)
+                text = None
+        if not text:
+            try:
+                text = ziassist.answer(question, state)
+            except Exception as e:
+                print("assistant answer failed:", repr(e))
+                text = "حصلت مشكلة وأنا بجهز الرد. جرب تاني، أو /status."
         self.tg.send(chat_id, text)
 
     def _ask(self, chat_id, arg):
