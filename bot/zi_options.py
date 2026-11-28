@@ -159,6 +159,24 @@ def structure(seconds, bpm=122):
     return text
 
 
+# what the free iTunes lookup returns (primaryGenreName) -> one of our style profiles
+GENRE_STYLE = (("dance", "melodic house"), ("house", "melodic house"), ("techno", "melodic techno"),
+               ("electronic", "melodic techno"), ("ambient", "downtempo"), ("downtempo", "downtempo"),
+               ("alternative", "indie dance"), ("indie", "indie dance"), ("rock", "indie dance"),
+               ("pop", "melodic house"), ("world", "afro house"), ("afro", "afro house"),
+               ("hip-hop", "downtempo"), ("r&b", "downtempo"), ("soul", "downtempo"),
+               ("jazz", "downtempo"), ("classical", "downtempo"))
+
+
+def genre_to_style(genre):
+    """Map a reference's genre label onto a style profile. None when it says nothing useful."""
+    low = (genre or "").lower()
+    for key, style in GENRE_STYLE:
+        if key in low:
+            return style
+    return None
+
+
 def pick_style(idea):
     low = (idea or "").lower()
     for words, name in STYLE_LOOKUP:
@@ -171,8 +189,12 @@ VOCAL_LINE = ("Lead vocal: close-miked male baritone, clear diction, sits just b
               "doubled in the chorus")
 
 
-def build_prompt(idea, seconds=330, variant=0, instrumental=True):
-    """A full ACE-Step prompt from a short idea, following the library's rules."""
+def build_prompt(idea, seconds=330, variant=0, instrumental=True, style=None):
+    """A full ACE-Step prompt from a short idea, following the library's rules.
+
+    `style` forces one of PROMPT_STYLES; the reference path uses it when a lookup
+    has already worked out the style and the words alone would not.
+    """
     clean, removed = clean_idea(idea or "")
     if has_non_latin(clean):
         # the engine reads an English prompt; a theme in another script only dilutes it
@@ -180,7 +202,7 @@ def build_prompt(idea, seconds=330, variant=0, instrumental=True):
         clean = ARABIC_RANGE.sub(" ", clean)
         clean = re.sub(r"\s{2,}", " ", clean).strip(" ,.;-")
     low = clean.lower()
-    style = pick_style(clean)
+    style = style if style in PROMPT_STYLES else pick_style(clean)
     prof = PROMPT_STYLES[style]
     m = BPM_RE.search(clean)
     bpm = int(m.group(1)) if m else prof["bpm"]
@@ -205,8 +227,12 @@ def build_prompt(idea, seconds=330, variant=0, instrumental=True):
               + (f", {focus}" if focus else "") + f". "
               f"{voice} Structure in bars: {structure(seconds, bpm)}. {mix[0].upper() + mix[1:]}."
               + (f" Theme: {theme}." if theme else ""))
+    sounds = [x.strip() for x in prof["sound"].split(",") if x.strip()][:3]
+    summary = (f"{prof['label']}, {mood}, about {bpm} BPM ({bpm - 3}-{bpm + 3}), {key}, "
+               f"{'instrumental' if instrumental else 'with vocals'}, "
+               f"{', '.join(sounds)}")
     return {"prompt": prompt, "bpm": bpm, "key": key, "genre": prof["label"],
-            "removed": removed, "style": style}
+            "removed": removed, "style": style, "summary": summary}
 
 
 # ---------- the text-level controls ----------
