@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, subprocess, threading, time, traceback, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.7"
+VERSION = "2026-11-28.8"
 
 API = "https://api.telegram.org/bot{token}/{method}"
 FILE_API = "https://api.telegram.org/file/bot{token}/{path}"
@@ -204,9 +204,26 @@ class Bot:
         threading.Thread(target=self._poll, daemon=True).start()
 
     def _poll(self):
+        import builtins
+        lock = getattr(builtins, "_zi_bot_poll_lock", None)
+        if lock is None:
+            lock = threading.Lock()
+            builtins._zi_bot_poll_lock = lock
+        if not lock.acquire(blocking=False):
+            print("Another bot instance is already polling in this process; this one will not poll.")
+            return
+        try:
+            self._poll_loop()
+        finally:
+            try:
+                lock.release()
+            except Exception:
+                pass
+
+    def _poll_loop(self):
         while not self.stop.is_set():
             try:
-                ups = self.tg.call("getUpdates", offset=self.state["offset"] + 1, timeout=30,
+                ups = self.tg.call("getUpdates", offset=self.state["offset"] + 1, timeout=10,
                                    allowed_updates=json.dumps(["message", "callback_query"]))
                 for u in ups:
                     self.state["offset"] = u["update_id"]
@@ -761,9 +778,13 @@ def start_engine_bot(token, make_track, run_queue, out_root, work):
             prev.stop.set()
         except Exception:
             pass
-    stale = stop_other_bots(keep=prev)
-    if prev is not None or stale:
-        print(f"Stopped {stale} stale poller(s) from earlier runs; starting a fresh one.")
+    # Stop every poller in this process and wait for them to exit before the new one
+    # starts: two pollers fight over getUpdates (409) and taps land on the old one.
+    stale = stop_other_bots(keep=None)
+    still = _bot_instances()
+    print(f"Stopped {stale} previous poller(s); {len(still)} still alive before start.")
+    if still:
+        print("WARNING: a previous poller did not stop. Restart the kernel if callbacks stop arriving.")
     bot = Bot(token, out_root=out_root, work=work, make_track=make_track, run_queue=run_queue)
     bot.start()
     builtins._zi_bot_instance = bot
