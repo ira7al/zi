@@ -63,7 +63,7 @@ class QuickPathTests(unittest.TestCase):
         self.enqueue()
         self.bot._callback(9, "last")
         self.bot._callback(9, "go")
-        self.assertIn("Queued", self.text())
+        self.assertIn("اتحط في الطابور", self.text())
         queued = self.bot.jobs.get_nowait()[1]
         self.assertEqual(queued["seconds"], 300)
         self.assertEqual(queued["genre"], "melodic techno")
@@ -75,7 +75,7 @@ class QuickPathTests(unittest.TestCase):
 
     def test_nothing_saved_yet(self):
         self.bot._callback(9, "last")
-        self.assertIn("No saved settings yet", self.text())
+        self.assertIn("مفيش إعدادات محفوظة لسه", self.text())
 
 
 class VariantTests(unittest.TestCase):

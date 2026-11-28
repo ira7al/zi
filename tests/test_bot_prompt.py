@@ -103,13 +103,13 @@ class BuilderTests(unittest.TestCase):
     def test_own_prompt_path_reaches_the_confirm(self):
         self.msg("/track")
         self.tap("p:own")
-        self.assertIn("Send the prompt", self.bot.tg.sent[-1]["text"])
+        self.assertIn("ابعت البرومبت", self.bot.tg.sent[-1]["text"])
         self.bot._handle({"message": {"chat": {"id": self.chat, "type": "private"},
                                       "from": {"id": self.chat},
                                       "text": "124 BPM melodic house, uplifting, F# major, airy pluck, long intro"}})
-        self.assertIn("Options.", self.bot.tg.sent[-1]["text"])
+        self.assertIn("الخيارات.", self.bot.tg.sent[-1]["text"])
         self.tap("o:sec")
-        self.assertIn("Length?", self.bot.tg.sent[-1]["text"])
+        self.assertIn("الطول؟", self.bot.tg.sent[-1]["text"])
         self.tap("330")
         self.tap("v:1")
         self.tap("q:high")
@@ -124,7 +124,7 @@ class BuilderTests(unittest.TestCase):
     def test_ai_path_shows_the_prompt_then_use_then_length(self):
         self.msg("/track")
         self.tap("p:ai")
-        self.assertIn("Give me the idea", self.bot.tg.sent[-1]["text"])
+        self.assertIn("قولي الفكرة", self.bot.tg.sent[-1]["text"])
         self.bot._handle({"message": {"chat": {"id": self.chat, "type": "private"},
                                       "from": {"id": self.chat},
                                       "text": "something dark and hypnotic for a late drive"}})
@@ -135,9 +135,9 @@ class BuilderTests(unittest.TestCase):
         self.tap("p:again")
         self.assertNotEqual(self.bot.tg.sent[-1]["text"], shown["text"])
         self.tap("p:use")
-        self.assertIn("Options.", self.bot.tg.sent[-1]["text"])
+        self.assertIn("الخيارات.", self.bot.tg.sent[-1]["text"])
         self.tap("o:sec")
-        self.assertIn("Length?", self.bot.tg.sent[-1]["text"])
+        self.assertIn("الطول؟", self.bot.tg.sent[-1]["text"])
         self.tap("330")
         self.tap("v:1")
         self.tap("q:high")
@@ -151,7 +151,7 @@ class BuilderTests(unittest.TestCase):
         self.bot._handle({"message": {"chat": {"id": self.chat, "type": "private"},
                                       "from": {"id": self.chat}, "text": "afro house sunset"}})
         self.tap("p:edit")
-        self.assertIn("your version", self.bot.tg.sent[-1]["text"])
+        self.assertIn("نسختك", self.bot.tg.sent[-1]["text"])
         self.bot._handle({"message": {"chat": {"id": self.chat, "type": "private"},
                                       "from": {"id": self.chat},
                                       "text": "121 BPM deep afro house, warm, G minor, djembe groove, long intro"}})
@@ -181,7 +181,7 @@ class BuilderTests(unittest.TestCase):
         self._to_options()
         before = dict(self.bot.builders[self.chat]["spec"])
         self.tap("o:coming:lora")
-        self.assertIn("not wired yet", self.bot.tg.sent[-1]["text"])
+        self.assertIn("لسه مش شغال", self.bot.tg.sent[-1]["text"])
         self.assertIn("Mr Dorgham", self.bot.tg.sent[-1]["text"])
         self.assertEqual(self.bot.builders[self.chat]["spec"], before)
 
@@ -239,11 +239,11 @@ class BuilderTests(unittest.TestCase):
 
     def test_menu_own_prompt_goes_straight_to_the_prompt_question(self):
         self.bot._callback(self.chat, "menu:own")
-        self.assertIn("Send the prompt", self.bot.tg.sent[-1]["text"])
+        self.assertIn("ابعت البرومبت", self.bot.tg.sent[-1]["text"])
 
     def test_menu_ai_asks_for_the_idea(self):
         self.bot._callback(self.chat, "menu:ai")
-        self.assertIn("Give me the idea", self.bot.tg.sent[-1]["text"])
+        self.assertIn("قولي الفكرة", self.bot.tg.sent[-1]["text"])
 
     def test_start_shows_the_inline_menu_and_no_reply_keyboard(self):
         self.msg("/start")
@@ -263,7 +263,7 @@ class BuilderTests(unittest.TestCase):
         self.bot._handle({"message": {"chat": {"id": self.chat, "type": "private"},
                                       "from": {"id": self.chat},
                                       "text": "in the style of Some Famous DJ"}})
-        self.assertIn("too short", self.bot.tg.sent[-1]["text"])
+        self.assertIn("قصير أوي", self.bot.tg.sent[-1]["text"])
 
 
 if __name__ == "__main__":

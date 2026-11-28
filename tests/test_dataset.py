@@ -1,4 +1,4 @@
-"""Training-set intake: save, dedupe, label, lyrics, the 20 MB cap, and the status command."""
+"""Training-set intake: save, dedupe, label, lyrics, the ٢٠ ميجا cap, and the status command."""
 import json, os, sys, tempfile, unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -51,8 +51,8 @@ class DatasetTests(unittest.TestCase):
 
     def test_audio_is_saved_with_its_name_and_counted(self):
         self.upload()
-        self.assertIn("Saved Track One.mp3", self.last()["text"])
-        self.assertIn("1 received", self.last()["text"])
+        self.assertIn("تمام، Track One.mp3", self.last()["text"])
+        self.assertIn("اتحفظ 1", self.last()["text"])
         self.assertTrue(os.path.exists(os.path.join(self.bot._dataset_dir(), "Track One.mp3")))
         self.assertEqual(sorted(b["callback_data"].split(":")[1] for b in self.last()["keyboard"][0]),
                          ["i", "v"])
@@ -61,10 +61,10 @@ class DatasetTests(unittest.TestCase):
         self.upload("a.mp3", file_id="f1")
         self.payload = b"other-bytes"
         self.upload("b.mp3", file_id="f2")
-        self.assertIn("2 received", self.last()["text"])
+        self.assertIn("اتحفظ 2", self.last()["text"])
         self.payload = b"ID3fake-audio-bytes"          # same bytes as the first file
         self.upload("a-copy.mp3", file_id="f3")
-        self.assertIn("Already have that one (a.mp3)", self.last()["text"])
+        self.assertIn("موجود عندي قبل كده (a.mp3)", self.last()["text"])
         self.assertEqual(len(os.listdir(self.bot._dataset_dir())), 3)  # two audio files + manifest
 
     def test_same_name_never_overwrites(self):
@@ -76,23 +76,23 @@ class DatasetTests(unittest.TestCase):
     def test_over_20mb_is_refused_with_what_to_do(self):
         self.upload("big.wav", size=30 * 1024 * 1024)
         text = self.last()["text"]
-        self.assertIn("30.0 MB", text)
-        self.assertIn("20 MB", text)
+        self.assertIn("30.0 ميجا", text)
+        self.assertIn("٢٠ ميجا", text)
         self.assertIn("MP3", text)
-        self.assertIn("Drive folder", text)
+        self.assertIn("درايف", text)
         self.assertEqual(os.listdir(self.bot._dataset_dir()), [])
 
     def test_label_then_lyrics(self):
         self.upload()
         short = next(iter(self.bot._ds_manifest()["files"]))[:10]
         self.bot._callback(9, f"ds:v:{short}")
-        self.assertIn("Marked vocal", self.last()["text"])
+        self.assertIn("اتعلّم إنه بصوت", self.last()["text"])
         self.assertEqual(self.bot._ds_manifest()["files"][next(iter(self.bot._ds_manifest()["files"]))]["kind"], "vocal")
         self.bot._callback(9, f"ds:l:{short}")
-        self.assertIn("Send the lyrics", self.last()["text"])
+        self.assertIn("ابعت كلمات", self.last()["text"])
         self.bot._handle({"message": {"chat": {"id": 9, "type": "private"}, "from": {"id": 9},
                                       "text": "[Verse] under the sodium light"}})
-        self.assertIn("Lyrics saved", self.last()["text"])
+        self.assertIn("الكلمات اتحفظت", self.last()["text"])
         entry = self.bot._ds_manifest()["files"][next(iter(self.bot._ds_manifest()["files"]))]
         self.assertTrue(entry["lyrics"].endswith(".lyrics.txt"))
         self.assertTrue(os.path.exists(os.path.join(self.bot._dataset_dir(), entry["lyrics"])))
@@ -101,7 +101,7 @@ class DatasetTests(unittest.TestCase):
         self.upload()
         short = next(iter(self.bot._ds_manifest()["files"]))[:10]
         self.bot._callback(9, f"ds:i:{short}")
-        self.assertIn("Marked instrumental", self.last()["text"])
+        self.assertIn("اتعلّم إنه موسيقى", self.last()["text"])
         self.assertNotIn("Lyrics", self.last()["text"])
 
     def test_dataset_status_counts_everything(self):
@@ -113,15 +113,15 @@ class DatasetTests(unittest.TestCase):
         self.bot._handle({"message": {"chat": {"id": 9, "type": "private"}, "from": {"id": 9},
                                       "text": "/dataset"}})
         text = self.last()["text"]
-        self.assertIn("2 files", text)
-        self.assertIn("vocal 1", text)
-        self.assertIn("not labelled 1", text)
+        self.assertIn("2 ملف", text)
+        self.assertIn("بصوت 1", text)
+        self.assertIn("من غير تصنيف 1", text)
         self.assertIn("two.mp3", text)          # named as waiting for a label
 
     def test_only_the_owner_can_upload(self):
         self.bot._handle({"message": {"chat": {"id": 77, "type": "private"}, "from": {"id": 77},
                                       "audio": {"file_id": "f9", "file_name": "x.mp3", "file_size": 10}}})
-        self.assertIn("private studio bot", self.last()["text"])
+        self.assertIn("بوت استوديو خاص", self.last()["text"])
         self.assertEqual(os.listdir(self.bot._dataset_dir()), [])
 
 

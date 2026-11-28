@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.33"
+VERSION = "2026-11-28.34"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -26,7 +26,7 @@ GPU_PROC_MB = 2000         # another process holding more than this is rendering
 GPU_POLL_SEC = 30
 
 GENRE_PRESETS = {
- "Melodic Techno": "120-124 bpm melodic techno, tight punchy kick, deep sub bass, emotional minor chord progression on a soft pluck, lush atmospheric pads, hypnotic arpeggio, distant reverb vocal chops, long DJ-friendly intro and outro, bittersweet 4am mood",
+ "Melodic Techno": "120-124 bpm melodic techno, tight punchy kick, deep sub bass, emotional minor chord progression on a soft pluck, lush atmospheric pads, hypnotic arpeggio, distant reverb بصوت chops, long DJ-friendly intro and outro, bittersweet 4am mood",
  "Indie Dance": "118-124 bpm indie dance, live-feel bass guitar groove, four-on-the-floor kick, funky guitar chops, analog synth stabs, warm claps, playful sun-soaked mood",
  "Peak Techno": "128 bpm peak-time techno, hard punchy kick, driving offbeat bass, hypnotic acid sequence, sharp hats, white-noise risers, relentless peak-hour club mood",
  "Afro House": "121-122 bpm deep afro house, smooth deep kick, warm sub, layered djembe and shaker groove, soulful chord stabs, flute-like lead, ocean-breeze pads",
@@ -85,7 +85,7 @@ OPTIONS = opt.OPTIONS
 # names for the length, so the bot fills all of them with the same value.
 REQUIRED_SPEC_KEYS = ("name", "genre", "idea", "lang", "instrumental", "seconds", "quality")
 LENGTH_KEYS = ("seconds", "duration", "duration_sec", "target_sec")
-QUALITIES = [("high", "High (2 seeds, best pick)"), ("standard", "Standard"), ("fast", "Fast draft")]
+QUALITIES = [("high", "عالية (نسختين، تختار الأحسن)"), ("standard", "عادية"), ("fast", "مسودة سريعة")]
 ASSIST_HINT = "\U0001f916 محتاج حاجة؟ اكتب سؤالك هنا في أي وقت، أو دوس اسألني."
 VISION_HINT = ("مش قادر أقرا الصورة دلوقتي، القراءة مش مدّية نتيجة. "
                "ابعت اسم التراك أو المغني بالكلام، أو فويس نوت، وأنا أطلع الستايل من غير ما أستخدم الاسم.")
@@ -126,32 +126,32 @@ SOCIAL = [("\u25b6\ufe0f YouTube", "https://www.youtube.com/@rahalofficialmusic"
 # Everything else is inside that menu, and /help still lists every command by name.
 COMMANDS = [("menu", "\u0643\u0644 \u0627\u0644\u0623\u0632\u0631\u0627\u0631 - Menu")]
 
-HELP = """Zi Music Studio bot - make tracks from chat.
-Tap Menu in the corner, then Menu: every action arrives in the chat as buttons, Studio included.
-/menu - every action as one button (start here)
-/ask - ask the assistant what is missing or what to do next (Arabic); /ask alone opens a chat
-/end - close the assistant chat
-/track - guided builder: pick a style, write your own prompt, let it write one from your idea,
-         or send a reference (a name, a link, a screenshot, a voice note) to work out the style
-/track <spec> - one-shot, e.g.: /track melodic techno, night drive, 330s, instrumental, high
-/batch - send several tracks as JSON (list of specs), or paste after the command
-/queue - what's rendering and what's waiting
-/status - engine and session status
-/library - latest releases (buttons to fetch)
-/get <title> - send a track's MP3 + cover + info
-/routenote <title> - send the RouteNote form text for a track
-/publish [title] - post the last track (or the named one) to YouTube, Instagram, TikTok, the Telegram channel, Facebook
-/studio - the Studio web app link, and the Menu / Studio buttons
-/social - links to the YouTube, Instagram, TikTok and Telegram channel profiles
-/liked - tracks you marked as keepers (LoRA set)
-/dataset - training set status (files sent for the Mr Dorgham model)
-/jobs - import jobs saved by the Windows app (Drive zi_data/jobs)
-/diag - build version and update counts (for debugging)
-/cancel - cancel the current builder step
-/help - this message
-Voice: send a voice note and the assistant answers out loud; a spoken music idea starts a track.
-Screenshots: send a screenshot of a track and the style is read off it - the name never enters the prompt.
-Every track is AI-generated and delivered with that label."""
+HELP = """بوت Zi Music Studio - اعمل تراكات من الشات.
+دوس Menu في الركن، وبعدين Menu: كل حاجة بتوصلك في الشات كأزرار، والاستوديو كمان.
+/menu - كل حاجة كأزرار (ابدأ من هنا)
+/ask - اسأل المساعد إيه الناقص أو أعمل إيه بعد كده؛ /ask لوحدها بتفتح شات
+/end - اقفل شات المساعد
+/track - بناء التراك خطوة خطوة: اختار ستايل، أو اكتب البرومبت بنفسك، أو سيب الذكاء يكتبه من فكرتك،
+         أو ابعت مرجع (اسم، لينك، سكرين شوت، فويس نوت) وأنا أطلّع الستايل
+/track <spec> - تراك في خطوة، مثلاً: /track melodic techno, night drive, 330s, instrumental, high
+/batch - ابعت كذا تراك JSON (قايمة), أو الصقها بعد الأمر
+/queue - إيه اللي بيتعمل وإيه المستني
+/status - حالة الجلسة
+/library - آخر التراكات (أزرار تجيبها)
+/get <العنوان> - ابعتلي MP3 التراك + الغلاف + المعلومات
+/routenote <العنوان> - ابعتلي نص فورم RouteNote للتراك
+/publish [العنوان] - انشر آخر تراك (أو اللي تسميه) على YouTube وInstagram وTikTok وقناة تيليجرام وفيسبوك
+/studio - لينك الاستوديو
+/social - لينكات البروفايلات
+/liked - التراكات اللي علّمتها مفضّلة (مجموعة LoRA)
+/dataset - حالة مجموعة التدريب (الملفات اللي اتبعتت لموديل Mr Dorgham)
+/jobs - مهام اتحفظت من تطبيق ويندوز (درايف zi_data/jobs)
+/diag - إصدار البوت وعدّادات التحديثات (للتشخيص)
+/cancel - إلغاء خطوة البناء الحالية
+/help - الرسالة دي
+الصوت: ابعت فويس نوت والمساعد بيرد بالصوت؛ فكرة موسيقى بالكلام بتبدأ تراك.
+السكرين شوت: ابعت سكرين شوت تراك والستايل بيتقرا منه - الاسم مبيدخلش البرومبت أبداً.
+كل تراك مولّد بالذكاء الاصطناعي وبيتسلّم بالتصنيف ده."""
 
 
 class SpecDict(dict):
@@ -427,8 +427,8 @@ class Bot:
                             cid = (((u.get("message") or {}).get("chat") or {}).get("id")
                                    or ((u.get("callback_query") or {}).get("message", {}).get("chat") or {}).get("id"))
                             if cid and self.owner and cid == self.owner:
-                                self.tg.send(cid, f"That message broke something: {type(e).__name__}: {str(e)[:160]}. "
-                                                  "The bot is still running, so send it again or /status.")
+                                self.tg.send(cid, f"الرسالة دي عملت مشكلة: {type(e).__name__}: {str(e)[:160]}. "
+                                                  "البوت شغال، ابعتها تاني أو /status.")
                         except Exception:
                             pass
             except Exception as e:
@@ -458,7 +458,7 @@ class Bot:
             if self.gpu_marker and os.path.exists(self.gpu_marker):
                 # a marker left behind by a crashed run must not block forever
                 if time.time() - os.path.getmtime(self.gpu_marker) < 6 * 3600:
-                    return "another render is holding the GPU"
+                    return "في تراك تاني شغال على الجهاز"
         except Exception:
             pass
         try:
@@ -477,13 +477,13 @@ class Bot:
                 if parts[0] == me or self._is_engine_process(parts[0]):
                     continue
                 if mb > GPU_PROC_MB:
-                    return "another process is rendering"
+                    return "في عملية تانية شغالة"
             util = subprocess.run(["nvidia-smi", "--query-gpu=utilization.gpu",
                                    "--format=csv,noheader,nounits"],
                                   capture_output=True, text=True, timeout=15).stdout
             vals = [int(v) for v in util.replace("\n", " ").split() if v.strip().isdigit()]
             if vals and max(vals) > GPU_UTIL_LIMIT:
-                return "the GPU is busy"
+                return "الجهاز مشغول"
         except Exception:
             return None
         return None
@@ -506,10 +506,10 @@ class Bot:
             why = self._gpu_busy()
             if not why:
                 if told:
-                    self.tg.send(chat_id, "GPU is free, starting your render now.")
+                    self.tg.send(chat_id, "الجهاز فاضي، بدأت التراك دلوقتي.")
                 return True
             if why != told:
-                self.tg.send(chat_id, f"Waiting: {why}. Your track starts on its own as soon as it frees up, no need to resend.")
+                self.tg.send(chat_id, f"مستني: {why}. التراك هيبدأ لوحده أول ما الجهاز يفضى، مش محتاج تبعت تاني.")
                 told = why
             time.sleep(self.gpu_poll)
         return False
@@ -526,8 +526,8 @@ class Bot:
                 # a bad job must never take the worker down with it
                 print("job crashed:\n" + traceback.format_exc())
                 try:
-                    self.tg.send(job[0], f"That job stopped: {type(e).__name__}: {str(e)[:200]}\n"
-                                          "The bot is still running - send /track again.")
+                    self.tg.send(job[0], f"الشغلانة وقفت: {type(e).__name__}: {str(e)[:200]}\n"
+                                          "البوت شغال - ابعت /track تاني.")
                 except Exception:
                     pass
             finally:
@@ -548,7 +548,7 @@ class Bot:
             pass
         if not self._wait_for_gpu(chat_id):
             return
-        self.tg.send(chat_id, f"Rendering: {self.current} ({spec.get('seconds', 330)}s, {spec.get('quality', 'standard')}). A high-quality track takes 10-25 min on the free GPU - I will send it here when done.")
+        self.tg.send(chat_id, f"بيتعمل دلوقتي: {self.current} ({spec.get('seconds', 330)} ثانية، {spec.get('quality', 'standard')}). التراك عالي الجودة بياخد من ١٠ لـ ٢٥ دقيقة على الجهاز المجاني - هبعتهولك هنا أول ما يخلص.")
         self._mark_busy(True)
         try:
             r = self._render(chat_id, spec)
@@ -561,9 +561,9 @@ class Bot:
             except Exception:
                 pass
             last = tb.strip().splitlines()[-1] if tb.strip() else ""
-            self.tg.send(chat_id, f"That track failed: {type(e).__name__}: {str(e)[:200]}\n"
-                                  f"Last line: {last[:200]}\n"
-                                  "Full traceback is in the notebook console and in render_errors.log.")
+            self.tg.send(chat_id, f"التراك فشل: {type(e).__name__}: {str(e)[:200]}\n"
+                                  f"آخر سطر: {last[:200]}\n"
+                                  "التفاصيل الكاملة في كونسول النوتبوك وفي render_errors.log.")
             return
         finally:
             self._mark_busy(False)
@@ -578,9 +578,9 @@ class Bot:
             except Exception:
                 pass
             folder = r.get("folder") if isinstance(r, dict) else None
-            self.tg.send(chat_id, f"The track rendered but sending it to you failed: {type(e).__name__}: {str(e)[:200]}\n"
-                                  + (f"It is on disk at {folder} - /library reopens it.\n" if folder else "")
-                                  + "Nothing was lost.")
+            self.tg.send(chat_id, f"التراك اتعمل بس مقدرتش أبعتهولك: {type(e).__name__}: {str(e)[:200]}\n"
+                                  + (f"موجود على الجهاز في {folder} - /library بيفتحه تاني.\n" if folder else "")
+                                  + "مفيش حاجة ضاعت.")
 
     def _render(self, chat_id, spec):
         """Run make_track in its own thread so a long render can still say it is alive."""
@@ -602,7 +602,7 @@ class Bot:
             if t.is_alive() and note_at and time.time() - started >= note_at:
                 mins = int((time.time() - started) // 60)
                 try:
-                    self.tg.send(chat_id, f"Still rendering {self.current}: {mins} min in. It carries on by itself, nothing to resend.")
+                    self.tg.send(chat_id, f"لسه بيتعمل {self.current}: عدّى {mins} دقيقة. شغال لوحده، مش محتاج تبعت حاجة.")
                 except Exception as e:
                     print("heartbeat send failed:", repr(e))
                 note_at += step
@@ -636,8 +636,8 @@ class Bot:
                 self.tg._upload("sendVideo", chat_id, "video", vid, caption=title)
         except Exception as e:
             print("video step failed:", repr(e))
-        self.tg.send(chat_id, "Saved in Drive: " + os.path.basename(folder)
-                              + " (WAV/FLAC/MP3, cover, lyrics, metadata, RouteNote form).\n" + ASSIST_HINT,
+        self.tg.send(chat_id, "اتحفظ على درايف: " + os.path.basename(folder)
+                              + " (WAV/FLAC/MP3 والغلاف والكلمات والمعلومات وفورم RouteNote).\n" + ASSIST_HINT,
                      keyboard=[[{"text": "\U0001f916 اسألني", "callback_data": "ask"},
                                 {"text": "\U0001f3b5 تراك تاني", "callback_data": "sug:track"}]])
         try:
@@ -815,9 +815,9 @@ class Bot:
         self.tg.send(chat_id, head)
 
     # ---------- style reference ----------
-    REF_HINT = ("Send the reference: a track or artist name, a screenshot, a link, or a voice note. "
-                "I use it only to work out the style - the name never goes into the prompt, "
-                "no audio is downloaded, and nothing is copied from the song itself.")
+    REF_HINT = ("ابعت المرجع: اسم تراك أو مغني، سكرين شوت، لينك، أو فويس نوت. "
+                "بستخدمه بس عشان أطلّع الستايل - الاسم مبيدخلش البرومبت أبداً، "
+                "ومبيتحمّلش أي صوت، ومفيش حاجة بتتنسخ من الأغنية نفسها.")
 
     def _http_text(self, url, limit=200000, timeout=8):
         req = urllib.request.Request(url, headers={"User-Agent": "zi-studio-bot/1.0 (+music studio)"})
@@ -850,8 +850,8 @@ class Bot:
         try:
             page = self._http_text(url)
         except Exception as e:
-            self.tg.send(chat_id, f"I could not open that link: {str(e)[:120]}\n"
-                                  "Send the track name as text instead.")
+            self.tg.send(chat_id, f"معرفتش أفتح اللينك ده: {str(e)[:120]}\n"
+                                  "ابعت اسم التراك كتابة بدله.")
             return
         # only the page's own title and description are used - never the audio
         title = ""
@@ -873,10 +873,10 @@ class Bot:
                 break
         text = " ".join(x for x in (title, desc) if x)
         if not text.strip():
-            self.tg.send(chat_id, "That page gave me no title or description to work from. "
-                                  "Send the track name as text instead.")
+            self.tg.send(chat_id, "الصفحة دي مفيهاش عنوان أو وصف أشتغل عليه. "
+                                  "ابعت اسم التراك كتابة بدله.")
             return
-        self.tg.send(chat_id, "From the link I read: " + title[:120])
+        self.tg.send(chat_id, "قريت من اللينك: " + title[:120])
         # the title identifies it; only the page's own description becomes prompt words
         q = title.split("|")[0].strip()
         q = re.sub(r"\s*-\s*(YouTube|Spotify|SoundCloud|Apple\s*Music|Deezer|Tidal|Bandcamp)\s*$", "",
@@ -887,14 +887,14 @@ class Bot:
         try:
             data = self._download_file(photo["file_id"])
         except Exception as e:
-            self.tg.send(chat_id, f"I could not fetch that screenshot: {str(e)[:120]}")
+            self.tg.send(chat_id, f"معرفتش أجيب السكرين شوت دي: {str(e)[:120]}")
             return
         path = os.path.join(self.work, "reference.jpg")
         try:
             with open(path, "wb") as fh:
                 fh.write(data)
         except Exception as e:
-            self.tg.send(chat_id, f"I could not save that screenshot: {str(e)[:120]}")
+            self.tg.send(chat_id, f"معرفتش أحفظ السكرين شوت دي: {str(e)[:120]}")
             return
         # the vision model reads layouts far better than OCR, so it goes first when there is a key
         text = (self._vision_text(path) or "") if self._llm() else ""
@@ -921,14 +921,14 @@ class Bot:
         raw = (text or "").strip()
         if len(raw) < 3:
             b = self.builders.get(chat_id)
-            self.tg.send(chat_id, self.REF_HINT if b else "That builder expired. /track starts a new one.")
+            self.tg.send(chat_id, self.REF_HINT if b else "الجلسة دي انتهت. /track بيبدأ تراك جديد.")
             return
         self._reference_from(chat_id, query=raw, words=raw)
 
     def _reference_from(self, chat_id, query, words=""):
         b = self.builders.get(chat_id)
         if not b:
-            self.tg.send(chat_id, "That builder expired. /track starts a new one.")
+            self.tg.send(chat_id, "الجلسة دي انتهت. /track بيبدأ تراك جديد.")
             return
         clean, removed = clean_idea(words or "")
         found = self._itunes(query) if query else None
@@ -946,8 +946,8 @@ class Bot:
             word_style = opt.pick_style(clean or query)
         style = word_style or (opt.genre_to_style(found["genre"]) if found else None)
         if not style:
-            self.tg.send(chat_id, "I could not work out a style from that. Send the genre and the tempo in words - "
-                                  "for example 'melodic techno, 122 bpm, dark' - or /cancel.")
+            self.tg.send(chat_id, "معرفتش أطلّع ستايل من ده. ابعت النوع والتمبو بالكلام - "
+                                  "مثلاً 'melodic techno, 122 bpm, dark' - أو /cancel.")
             return
         theme = clean if clean and not opt.has_non_latin(clean) else ""
         built = build_prompt(theme, b["spec"].get("seconds", 330), 0,
@@ -957,10 +957,10 @@ class Bot:
             heard.append(f"{found.get('track') or ''} - {found.get('artist') or ''}".strip(" -"))
             heard.append(found.get("genre") or "")
         b["built"] = built
-        b["ref_note"] = ("From your reference I understood: " + built["summary"]
-                         + (f"\n(Read from: {' / '.join(x for x in heard if x)})" if heard else ""))
+        b["ref_note"] = ("فهمت من المرجع: " + built["summary"]
+                         + (f"\n(اتقرا من: {' / '.join(x for x in heard if x)})" if heard else ""))
         if removed:
-            b["ref_note"] += "\nLeft the name out of the prompt: " + "; ".join(removed[:3])
+            b["ref_note"] += "\nشلت الاسم من البرومبت: " + "; ".join(removed[:3])
         self._show_prompt(chat_id, b)
 
     # ---------- last settings ----------
@@ -988,7 +988,7 @@ class Bot:
     def _start_from_last(self, chat_id):
         d = self._last_spec()
         if not d:
-            self.tg.send(chat_id, "No saved settings yet. /track makes one.")
+            self.tg.send(chat_id, "مفيش إعدادات محفوظة لسه. /track بيعمل واحدة.")
             return
         spec = dict(d)
         self.builders[chat_id] = {"step": "confirm", "spec": spec}
@@ -1017,8 +1017,8 @@ class Bot:
             self.tg.send(chat_id, f"Already in Liked: {entry.get('title', 'that track')}")
             return
         if not folder:
-            self.tg.send(chat_id, "That track is not on this machine any more (the notebook may have restarted). "
-                                  "Tap the button under a newer track, or /liked shows what is already kept.")
+            self.tg.send(chat_id, "التراك ده مش على الجهاز تاني (ممكن النوتبوك اتعمله ريستارت). "
+                                  "دوس الزرار تحت تراك أحدث، أو /liked بيعرض اللي اتحفظ.")
             return
         try:
             title = self._publish_caption(folder)[0]
@@ -1038,14 +1038,14 @@ class Bot:
                             "when": time.strftime("%Y-%m-%d %H:%M:%S")}
         self._save(self._liked_path(), d)
         total = sum(1 for v in d["tracks"].values() if v.get("kept"))
-        self.tg.send(chat_id, f"\u2b50 Saved to Liked: {title}\n{dest}\n{copied} files. {total} track(s) liked. /liked lists them.",
+        self.tg.send(chat_id, f"\u2b50 اتحفظ في المفضلة: {title}\n{dest}\n{copied} ملف. {total} تراك مفضّل. /liked بيعرضهم.",
                      keyboard=self._visual_kb(key))
 
     def _liked_cmd(self, chat_id):
         d = self._liked()
         kept = sorted((v.get("when", ""), v) for v in d["tracks"].values() if v.get("kept"))
         if not kept:
-            self.tg.send(chat_id, "Nothing liked yet. Tap \u2b50 This is the one under a track and it is kept for the LoRA set.")
+            self.tg.send(chat_id, "مفيش مفضّل لسه. دوس \u2b50 دُه التراك المطلوب تحت أي تراك وهيتحفظ لمجموعة LoRA.")
             return
         lines = [f"Liked: {len(kept)} track(s)"]
         for when, v in kept[-20:]:
@@ -1098,21 +1098,21 @@ class Bot:
         size = int(f.get("file_size") or 0)
         if size > DS_MAX_BYTES:
             self.tg.send(chat_id,
-                         f"That one is {size / 1048576:.1f} MB, and Telegram only lets a bot download up to 20 MB, "
-                         "so I cannot pull it.\nSend it as an MP3 (almost always well under 20 MB), or put the WAVs "
-                         "in a Drive folder and tell me which folder.")
+                         f"الملف ده {size / 1048576:.1f} ميجا، وتيليجرام بيسمح للبوت ينزّل لحد ٢٠ ميجا بس، "
+                         "فمش هقدر أسحبه.\nابعته MP3 (غالباً أقل بكتير من ٢٠ ميجا)، أو حط الـ WAV "
+                         "في فولدر على درايف وقولي أنهي فولدر.")
             return
         try:
             data = self._download_file(f["file_id"])
         except Exception as e:
-            self.tg.send(chat_id, f"I could not download that one: {str(e)[:200]}\n"
-                                  "If it is over 20 MB, send an MP3 or a Drive folder instead.")
+            self.tg.send(chat_id, f"معرفتش أنزّل الملف ده: {str(e)[:200]}\n"
+                                  "لو أكبر من ٢٠ ميجا ابعت MP3 أو فولدر درايف.")
             return
         sha = hashlib.sha256(data).hexdigest()
         m = self._ds_manifest()
         files = m["files"]
         if sha in files:
-            self.tg.send(chat_id, f"Already have that one ({files[sha]['name']}). {len(files)} in the set.")
+            self.tg.send(chat_id, f"الملف ده موجود عندي قبل كده ({files[sha]['name']}). {len(files)} في المجموعة.")
             return
         saved = name
         stem, ext = os.path.splitext(name)
@@ -1127,10 +1127,10 @@ class Bot:
         self._ds_save(m)
         count = len(files)
         short = sha[:10]
-        self.tg.send(chat_id, f"Saved {saved} ({len(data) / 1048576:.1f} MB). {count} received so far.\n"
-                              "Vocal or instrumental?",
-                     keyboard=[[{"text": "\U0001f3a4 Vocal", "callback_data": f"ds:v:{short}"},
-                                {"text": "\U0001f3b9 Instrumental", "callback_data": f"ds:i:{short}"}]])
+        self.tg.send(chat_id, f"تمام، {saved} ({len(data) / 1048576:.1f} ميجا). اتحفظ {count} لحد دلوقتي.\n"
+                              "بصوت ولا موسيقى بس؟",
+                     keyboard=[[{"text": "\U0001f3a4 بصوت", "callback_data": f"ds:v:{short}"},
+                                {"text": "\U0001f3b9 موسيقى بس", "callback_data": f"ds:i:{short}"}]])
 
     def _ds_find(self, short):
         for sha, v in self._ds_manifest()["files"].items():
@@ -1141,27 +1141,27 @@ class Bot:
     def _ds_label(self, chat_id, short, kind):
         sha, v = self._ds_find(short)
         if not sha:
-            self.tg.send(chat_id, "That file is not in the set any more. /dataset shows the count.")
+            self.tg.send(chat_id, "الملف ده مش في المجموعة تاني. /dataset بيعرض العدد.")
             return
         m = self._ds_manifest()
         m["files"][sha]["kind"] = kind
         self._ds_save(m)
         total = len(m["files"])
         if kind == "vocal":
-            self.tg.send(chat_id, f"Marked vocal. {total} in the set.\nLyrics for it? Send them as a message or a .txt, "
-                                  "or skip.",
-                         keyboard=[[{"text": "\u270d\ufe0f Add lyrics", "callback_data": f"ds:l:{short}"},
-                                    {"text": "Skip", "callback_data": f"ds:s:{short}"}]])
+            self.tg.send(chat_id, f"اتعلّم إنه بصوت. {total} في المجموعة.\nعايز تضيف الكلمات؟ ابعتها رسالة أو ملف .txt، "
+                                  "أو تخطّى.",
+                         keyboard=[[{"text": "\u270d\ufe0f ضيف كلمات", "callback_data": f"ds:l:{short}"},
+                                    {"text": "تخطّى", "callback_data": f"ds:s:{short}"}]])
         else:
-            self.tg.send(chat_id, f"Marked instrumental. {total} in the set.")
+            self.tg.send(chat_id, f"اتعلّم إنه موسيقى بس. {total} في المجموعة.")
 
     def _ds_lyrics_wait(self, chat_id, short):
         sha, v = self._ds_find(short)
         if not sha:
-            self.tg.send(chat_id, "That file is not in the set any more.")
+            self.tg.send(chat_id, "الملف ده مش في المجموعة تاني.")
             return
         self.ds_lyrics[chat_id] = sha
-        self.tg.send(chat_id, f"Send the lyrics for {v['name']} as one message, or a .txt file.")
+        self.tg.send(chat_id, f"ابعت كلمات {v['name']} في رسالة واحدة أو ملف .txt.")
 
     def _ds_save_lyrics(self, chat_id, text=None, path=None):
         sha = self.ds_lyrics.pop(chat_id, None)
@@ -1170,7 +1170,7 @@ class Bot:
         m = self._ds_manifest()
         entry = m["files"].get(sha)
         if not entry:
-            self.tg.send(chat_id, "That file is not in the set any more.")
+            self.tg.send(chat_id, "الملف ده مش في المجموعة تاني.")
             return True
         body = text
         if path:
@@ -1178,7 +1178,7 @@ class Bot:
                 body = fh.read()
         body = (body or "").strip()
         if not body:
-            self.tg.send(chat_id, "Empty lyrics, nothing saved.")
+            self.tg.send(chat_id, "الكلمات فاضية، مفيش حاجة اتحفظت.")
             return True
         stem = os.path.splitext(entry["name"])[0]
         lp = os.path.join(self._dataset_dir(), stem + ".lyrics.txt")
@@ -1186,7 +1186,7 @@ class Bot:
             fh.write(body + "\n")
         m["files"][sha]["lyrics"] = os.path.basename(lp)
         self._ds_save(m)
-        self.tg.send(chat_id, f"Lyrics saved next to {entry['name']}.")
+        self.tg.send(chat_id, f"الكلمات اتحفظت جنب {entry['name']}.")
         return True
 
     def _dataset(self, chat_id):
@@ -1196,13 +1196,13 @@ class Bot:
         unlabelled = [v["name"] for v in files.values() if not v.get("kind")]
         lyrics = sum(1 for v in files.values() if v.get("lyrics"))
         total = sum(int(v.get("size") or 0) for v in files.values())
-        lines = [f"Training set (mr-dorgham): {len(files)} files, {total / 1048576:.1f} MB",
-                 f"vocal {vocal} | instrumental {inst} | not labelled {len(unlabelled)} | with lyrics {lyrics}",
-                 f"Folder: {self._dataset_dir()}",
-                 "Send audio files or .txt lyrics any time. A bot can only download files up to 20 MB, "
-                 "so send MP3s or a Drive folder for the rest."]
+        lines = [f"مجموعة التدريب (mr-dorgham): {len(files)} ملف، {total / 1048576:.1f} MB",
+                 f"بصوت {vocal} | موسيقى بس {inst} | من غير تصنيف {len(unlabelled)} | بكلمات {lyrics}",
+                 f"الفولدر: {self._dataset_dir()}",
+                 "ابعت ملفات صوت أو كلمات .txt في أي وقت. البوت مبيقدرش ينزّل أكتر من ٢٠ ميجا، "
+                 "فابعت MP3 أو فولدر درايف للباقي."]
         if unlabelled:
-            lines.append("Waiting for a label: " + ", ".join(unlabelled[:8]) +
+            lines.append("مستني تصنيف: " + ", ".join(unlabelled[:8]) +
                          (f" and {len(unlabelled) - 8} more" if len(unlabelled) > 8 else ""))
         self.tg.send(chat_id, "\n".join(lines))
 
@@ -1245,21 +1245,21 @@ class Bot:
         try:
             path = self._download_voice(voice)
         except Exception as e:
-            self.tg.send(chat_id, f"I could not fetch that voice note: {str(e)[:150]}")
+            self.tg.send(chat_id, f"معرفتش أجيب الفويس نوت دي: {str(e)[:150]}")
             return None
-        self.tg.send(chat_id, "Listening...")
+        self.tg.send(chat_id, "بسمع...")
         text = self._transcribe(path)
         if not text:
-            self.tg.send(chat_id, "I cannot transcribe on this box yet. In the notebook run "
-                                  "`!pip install -q faster-whisper` and restart the bot, then speak again. "
-                                  "You can also type the prompt.")
+            self.tg.send(chat_id, "لسه مش قادر أحوّل الصوت لكلام على الجهاز ده. شغّل في النوتبوك "
+                                  "`!pip install -q faster-whisper` وأعد تشغيل البوت وبعدين قول تاني. "
+                                  "أو اكتب الفكرة.")
             return None
-        self.tg.send(chat_id, "Heard: " + text)
+        self.tg.send(chat_id, "سمعتك: " + text)
         if opt.has_arabic(text):
             english, leftover = opt.to_english(text)
             if english:
-                note = f"\n(no English for: {', '.join(leftover[:5])})" if leftover else ""
-                self.tg.send(chat_id, "In English: " + english + note)
+                note = f"\n(مفيش ترجمة إنجليزي لـ: {', '.join(leftover[:5])})" if leftover else ""
+                self.tg.send(chat_id, "بالإنجليزي: " + english + note)
                 return english
             # no music words in it: it is a question, so the assistant answers it
             return text
@@ -1306,7 +1306,7 @@ class Bot:
                 traceback.print_exc()
                 try:
                     self.threads.pop(chat_id, None)
-                    self.tg.send(chat_id, f"That step failed: {str(e)[:200]}")
+                    self.tg.send(chat_id, f"الخطوة دي فشلت: {str(e)[:200]}")
                 except Exception:
                     pass
             return
@@ -1323,10 +1323,10 @@ class Bot:
                 self.owner = chat_id
                 self._save(self.owner_path, {"chat_id": chat_id})
                 self.pair_code = None
-                self.tg.send(chat_id, "Bound. This bot answers only you now.\n\n" + HELP)
+                self.tg.send(chat_id, "تمام. البوت ده بيرد عليك إنت بس دلوقتي.\n\n" + HELP)
                 self._launcher(chat_id)
             else:
-                self.tg.send(chat_id, "This is a private studio bot.")
+                self.tg.send(chat_id, "ده بوت استوديو خاص.")
             return
         if not self._launcher_sent:
             # after a restart or a cleared chat the buttons are gone until the bot
@@ -1360,7 +1360,7 @@ class Bot:
                     fh.write(data)
                 self._ds_save_lyrics(chat_id, path=tmp)
             except Exception as e:
-                self.tg.send(chat_id, f"Could not read that .txt: {str(e)[:150]}")
+                self.tg.send(chat_id, f"معرفتش أقرا ملف الـ txt ده: {str(e)[:150]}")
             return
         if doc and (doc.get("file_name") or "").endswith(".json"):
             self._batch_doc(chat_id, doc)
@@ -1392,8 +1392,8 @@ class Bot:
             self._menu(chat_id)
             return
         if low in ("studio", "\U0001f39b studio", "\U0001f39b") or low.startswith("studio "):
-            self.tg.send(chat_id, "Studio app: " + STUDIO_URL + "\nIt opens inside Telegram if your client supports it, "
-                                  "or in the browser from that link.")
+            self.tg.send(chat_id, "تطبيق الاستوديو: " + STUDIO_URL + "\nبيفتح جوّه تيليجرام لو التطبيق بيدعم، "
+                                  "أو في المتصفح من اللينك ده.")
             return
         if not text.startswith("/"):
             # a spoken music idea still starts a track; anything else is a question for the
@@ -1426,10 +1426,10 @@ class Bot:
             else:
                 self.tg.send(chat_id, "مفيش محادثة مفتوحة. /ask يفتحها.")
         elif cmd == "/studio":
-            self.tg.send(chat_id, "Studio app: " + STUDIO_URL)
+            self.tg.send(chat_id, "تطبيق الاستوديو: " + STUDIO_URL)
         elif cmd == "/cancel":
             self.builders.pop(chat_id, None)
-            self.tg.send(chat_id, "Cancelled.")
+            self.tg.send(chat_id, "اتلغى.")
         elif cmd == "/track":
             self._track(chat_id, arg.strip())
         elif cmd == "/batch":
@@ -1459,7 +1459,7 @@ class Bot:
         elif cmd == "/jobs":
             self._jobs(chat_id)
         else:
-            self.tg.send(chat_id, "Unknown command. /help lists them.")
+            self.tg.send(chat_id, "الأمر ده مش معروف. /help بيعرض الأوامر.")
 
     def _callback(self, chat_id, data):
         b = self.builders.get(chat_id)
@@ -1468,7 +1468,7 @@ class Bot:
             return
         if data.startswith("ov:"):
             if not b:
-                self.tg.send(chat_id, "That builder expired. /track starts a new one.")
+                self.tg.send(chat_id, "الجلسة دي انتهت. /track بيبدأ تراك جديد.")
                 return
             _, key, val = data.split(":")
             try:
@@ -1494,7 +1494,7 @@ class Bot:
             elif act == "l":
                 self._ds_lyrics_wait(chat_id, short)
             elif act == "s":
-                self.tg.send(chat_id, "Skipped.")
+                self.tg.send(chat_id, "اتخطّى.")
             return
         if data == "last":
             self._start_from_last(chat_id)
@@ -1521,7 +1521,7 @@ class Bot:
             return
         if data.startswith("o:"):
             if not b:
-                self.tg.send(chat_id, "That builder expired. /track starts a new one.")
+                self.tg.send(chat_id, "الجلسة دي انتهت. /track بيبدأ تراك جديد.")
                 return
             self._option_step(chat_id, b, data[2:])
             return
@@ -1533,12 +1533,12 @@ class Bot:
             if not name:
                 self.tg.send(chat_id, "مش لاقي اسم في اللي اتشال. جرب Reference واكتب الاسم بنفسك.")
                 return
-            self.tg.send(chat_id, f"بستخدم {name} كمرجع للستايل / using {name} as a style reference...")
+            self.tg.send(chat_id, f"بستخدم {name} كمرجع للستايل...")
             self._reference_from(chat_id, query=name, words="")
             return
         if data.startswith("p:"):
             if not b:
-                self.tg.send(chat_id, "That builder expired. /track starts a new one.")
+                self.tg.send(chat_id, "الجلسة دي انتهت. /track بيبدأ تراك جديد.")
                 return
             self._prompt_step(chat_id, b, data[2:])
             return
@@ -1550,7 +1550,7 @@ class Bot:
         if data.startswith("lib:"):
             folder = self._lib_folder(data[4:])
             if not folder:
-                self.tg.send(chat_id, "That release is not in this session's folder any more. /library lists the current ones.")
+                self.tg.send(chat_id, "التراك ده مش في فولدر الجلسة تاني. /library بيعرض الحاليين.")
                 return
             self._get(chat_id, folder, audio=True)
             return
@@ -1561,19 +1561,19 @@ class Bot:
                                                                "instrumental": True, "seconds": 330}}
             b = self.builders[chat_id]
         if not b:
-            self.tg.send(chat_id, "That builder expired. /track starts a new one.")
+            self.tg.send(chat_id, "الجلسة دي انتهت. /track بيبدأ تراك جديد.")
             return
         step = b["step"]
         if step == "genre":
             b["spec"]["name"] = b["spec"]["genre"] = data
-            b["spec"]["idea"] = GENRE_PRESETS[data] + ". Theme: "
+            b["spec"]["idea"] = GENRE_PRESETS[data] + ". الفكرة: "
             b["step"] = "theme"
-            self.tg.send(chat_id, f"{data}. Theme or mood? (free text)")
+            self.tg.send(chat_id, f"{data}. الفكرة أو المود؟ (اكتب بحرية)")
         elif step == "seconds" and data.isdigit():
             b["spec"]["seconds"] = int(data)
             if b.pop("skip_vocals", False):
                 b["step"] = "quality"
-                self.tg.send(chat_id, "Quality?", keyboard=[[{"text": label, "callback_data": "q:" + q}] for q, label in QUALITIES])
+                self.tg.send(chat_id, "الجودة؟", keyboard=[[{"text": label, "callback_data": "q:" + q}] for q, label in QUALITIES])
                 return
             if b.get("built") and b["spec"].get("idea") == b["built"].get("prompt"):
                 # the generated prompt carries a structure map, so rebuild it for the
@@ -1581,11 +1581,11 @@ class Bot:
                 b["built"] = build_prompt(b["idea_seed"], int(data), b.get("variant", 0), instrumental=b["spec"].get("instrumental", True))
                 b["spec"]["idea"] = b["built"]["prompt"]
             b["step"] = "instrumental"
-            self.tg.send(chat_id, "Vocals?", keyboard=[[{"text": "Instrumental", "callback_data": "v:1"}, {"text": "With lyrics", "callback_data": "v:0"}]])
+            self.tg.send(chat_id, "بصوت ولا موسيقى بس؟", keyboard=[[{"text": "موسيقى بس", "callback_data": "v:1"}, {"text": "بكلمات", "callback_data": "v:0"}]])
         elif step == "instrumental" and data.startswith("v:"):
             b["spec"]["instrumental"] = data == "v:1"
             b["step"] = "quality"
-            self.tg.send(chat_id, "Quality?", keyboard=[[{"text": label, "callback_data": "q:" + q}] for q, label in QUALITIES])
+            self.tg.send(chat_id, "الجودة؟", keyboard=[[{"text": label, "callback_data": "q:" + q}] for q, label in QUALITIES])
         elif step == "quality" and data.startswith("q:"):
             b["spec"]["quality"] = data[2:]
             self._confirm(chat_id, b)
@@ -1597,39 +1597,39 @@ class Bot:
             if data == "go":
                 self._enqueue(chat_id, spec)
             else:
-                self.tg.send(chat_id, "Cancelled.")
+                self.tg.send(chat_id, "اتلغى.")
         else:
-            hint = {"theme": "Type the theme or mood as a message, or tap a style to start over.",
-                    "mode": "Tap a style, My own prompt, or AI writes it - or /cancel.",
-                    "own_prompt": "Send the prompt as one message, or /cancel.",
-                    "edit_prompt": "Send your version of the prompt, or /cancel.",
-                    "ai_idea": "Send a short idea: genre, mood, vibe. No artist names.",
-                    "options": "Tap a button above, or Generate when it reads right.",
-                    "seconds": "Pick a length from the buttons above.",
-                    "instrumental": "Pick Instrumental or With lyrics above.",
-                    "quality": "Pick a quality from the buttons above."}.get(step, "/track starts a new one.")
+            hint = {"theme": "اكتب الفكرة أو المود في رسالة، أو دوس على ستايل تبدأ من الأول.",
+                    "mode": "دوس على ستايل، أو بروموبت من عندي، أو الذكاء يكتبه - أو /cancel.",
+                    "own_prompt": "ابعت البرومبت في رسالة واحدة، أو /cancel.",
+                    "edit_prompt": "ابعت نسختك من البرومبت، أو /cancel.",
+                    "ai_idea": "ابعت فكرة قصيرة: النوع، المود، الجو. من غير أسماء مغنيين.",
+                    "options": "دوس على زرار من فوق، أو ولّد لما يبقى تمام.",
+                    "seconds": "اختار الطول من الأزرار اللي فوق.",
+                    "instrumental": "اختار موسيقى بس أو بكلمات من فوق.",
+                    "quality": "اختار الجودة من الأزرار اللي فوق."}.get(step, "/track starts a new one.")
             self.tg.send(chat_id, hint)
 
     def _options_kb(self, spec):
         seed = spec.get("seed")
         seed_txt = "random" if seed in (None, "") else str(seed)
         return [
-            [{"text": ("Instrumental: on" if spec.get("instrumental") else "Instrumental: off"), "callback_data": "o:instr"},
+            [{"text": ("موسيقى بس: شغال" if spec.get("instrumental") else "موسيقى بس: مقفول"), "callback_data": "o:instr"},
              {"text": ("Lyrics" + (" (set)" if (spec.get("lyrics") or "").strip() else "")), "callback_data": "o:lyrics"}],
-            [{"text": "Style tags", "callback_data": "o:tags"}, {"text": "Exclude styles", "callback_data": "o:excl"}],
+            [{"text": "تاجات الستايل", "callback_data": "o:tags"}, {"text": "ستايلات تتشال", "callback_data": "o:excl"}],
             [{"text": f"Weirdness {spec.get('weirdness', 50)}", "callback_data": "o:weird"},
-             {"text": f"Style influence {spec.get('style_influence', 50)}", "callback_data": "o:infl"}],
+             {"text": f"تأثير الستايل {spec.get('style_influence', 50)}", "callback_data": "o:infl"}],
             [{"text": f"BPM {spec.get('bpm') or '-'}", "callback_data": "o:bpm"},
              {"text": f"Key {spec.get('key') or '-'}", "callback_data": "o:key"}],
             [{"text": f"Title {spec.get('title') or '-'}", "callback_data": "o:title"},
              {"text": f"Steps {spec.get('steps') or 'auto'}", "callback_data": "o:steps"}],
             [{"text": f"Seed {seed_txt}", "callback_data": "o:seed"},
              {"text": f"Model {spec.get('model') or 'turbo'}", "callback_data": "o:model"}],
-            [{"text": "Reference audio (coming)", "callback_data": "o:coming:reference_audio"},
-             {"text": "LoRA (coming)", "callback_data": "o:coming:lora"}],
-            [{"text": "Cover / repaint (coming)", "callback_data": "o:coming:cover"}],
+            [{"text": "صوت مرجعي (قريباً)", "callback_data": "o:coming:reference_audio"},
+             {"text": "LoRA (قريباً)", "callback_data": "o:coming:lora"}],
+            [{"text": "كفر / إعادة رسم (قريباً)", "callback_data": "o:coming:cover"}],
             [{"text": f"Length {spec.get('seconds', 330)}s", "callback_data": "o:sec"},
-             {"text": "\u25b6\ufe0f Generate", "callback_data": "go"}],
+             {"text": "\u25b6\ufe0f ولّد", "callback_data": "go"}],
         ]
 
     def _show_options(self, chat_id, b):
@@ -1639,16 +1639,16 @@ class Bot:
         kb = self._options_kb(s)
         kb.append([{"text": "\U0001f916 اسألني", "callback_data": "ask"}])
         self.tg.send(chat_id,
-                     "Options. Everything here is a button; tap Generate when it reads right.\n\n"
-                     f"Prompt: {prompt[:900]}{'...' if len(prompt) > 900 else ''}\n\n" + ASSIST_HINT,
+                     "الخيارات. كل حاجة هنا زرار؛ دوس ولّد لما يبقى تمام.\n\n"
+                     f"البرومبت: {prompt[:900]}{'...' if len(prompt) > 900 else ''}\n\n" + ASSIST_HINT,
                      keyboard=kb)
 
     def _option_step(self, chat_id, b, code):
         spec = b["spec"]
         if code.startswith("coming:"):
             key = code.split(":", 1)[1]
-            note = next((o.get("note", "") for o in OPTIONS if o["key"] == key), "")
-            self.tg.send(chat_id, f"That one is not wired yet: {note}")
+            note = next((o.get("note_ar") or o.get("note", "") for o in OPTIONS if o["key"] == key), "")
+            self.tg.send(chat_id, f"الخيار ده لسه مش شغال: {note}")
             return
         if code == "instr":
             spec["instrumental"] = not spec.get("instrumental", True)
@@ -1669,16 +1669,16 @@ class Bot:
         elif code == "sec":
             b["step"] = "seconds"
             b["skip_vocals"] = True   # instrumental/lyrics are already set on this screen
-            self.tg.send(chat_id, "Length?", keyboard=self._length_kb())
+            self.tg.send(chat_id, "الطول؟", keyboard=self._length_kb())
         else:
-            asks = {"lyrics": "Send the lyrics, with [Intro]/[Verse]/[Chorus] tags. One message.",
-                    "tags": "Send short style tags, e.g. 'analog, tape hiss, 90s'.",
-                    "excl": "What should it avoid? Written into the prompt as avoid phrasing.",
-                    "title": "Send the title.",
-                    "key": "Send the key, e.g. F# minor.",
-                    "bpm": "Send the BPM (60-180).",
-                    "steps": "Send the diffusion steps (4-60).",
-                    "seed": "Send a seed number, or 0 for random."}
+            asks = {"lyrics": "ابعت الكلمات مع تاجات [Intro]/[Verse]/[Chorus]. رسالة واحدة.",
+                    "tags": "ابعت تاجات ستايل قصيرة، مثلاً 'analog, tape hiss, 90s'.",
+                    "excl": "إيه اللي يتجنبه؟ هيتكتب في البرومبت كتجنّب.",
+                    "title": "ابعت العنوان.",
+                    "key": "ابعت المقام، مثلاً F# minor.",
+                    "bpm": "ابعت الـ BPM (٦٠ - ١٨٠).",
+                    "steps": "ابعت عدد الخطوات (٤ - ٦٠).",
+                    "seed": "ابعت رقم السيد، أو 0 للعشوائي."}
             if code in asks:
                 b["step"] = "opt:" + code
                 self.tg.send(chat_id, asks[code])
@@ -1686,8 +1686,8 @@ class Bot:
                 self._show_options(chat_id, b)
 
     def _length_kb(self):
-        return [[{"text": f"{d//60}:{d%60:02d}", "callback_data": str(d)} for d in DURATIONS[:4]],
-                [{"text": f"{d//60}:{d%60:02d}", "callback_data": str(d)} for d in DURATIONS[4:]]]
+        btns = [{"text": f"{d//60}:{d%60:02d}", "callback_data": str(d)} for d in DURATIONS]
+        return [btns[i:i + 2] for i in range(0, len(btns), 2)]
 
     def _prompt_step(self, chat_id, b, code):
         if code == "ref":
@@ -1695,21 +1695,21 @@ class Bot:
             self.tg.send(chat_id, self.REF_HINT)
         elif code == "own":
             b["step"] = "own_prompt"
-            self.tg.send(chat_id, "Send the prompt as one message. Anything the engine needs goes in it: "
-                                  "BPM, key, sound, structure.\n"
-                                  "A real artist or track name is taken out, and I show you exactly what I took out and why - "
-                                  "everything else stays as you wrote it.")
+            self.tg.send(chat_id, "ابعت البرومبت في رسالة واحدة. كل اللي محتاجه التراك يتكتب فيها: "
+                                  "BPM، المقام، الصوت، الهيكل.\n"
+                                  "أي اسم مغني أو تراك حقيقي بيتشال، وبوريك بالظبط إيه اللي اتشال وليه - "
+                                  "والباقي زي ما كتبته.")
         elif code == "ai":
             b["step"] = "ai_idea"
-            self.tg.send(chat_id, "Give me the idea in a few words: genre, mood, anything it should feel like. "
-                                  "No artist or track names - I build the full prompt from the library rules.")
+            self.tg.send(chat_id, "قولي الفكرة في كلمتين: النوع، المود، أي إحساس عايزه. "
+                                  "من غير أسماء مغنيين أو تراكات - أنا بكتب البرومبت الكامل من قواعد المكتبة.")
         elif code == "again" and b.get("idea_seed") is not None:
             b["variant"] = b.get("variant", 0) + 1
             b["built"] = build_prompt(b["idea_seed"], b["spec"].get("seconds", 330), b["variant"], instrumental=b["spec"].get("instrumental", True))
             self._show_prompt(chat_id, b)
         elif code == "edit":
             b["step"] = "edit_prompt"
-            self.tg.send(chat_id, "Send your version of the prompt as one message.")
+            self.tg.send(chat_id, "ابعت نسختك من البرومبت في رسالة واحدة.")
         elif code == "use" and b.get("built"):
             built = b["built"]
             spec = b["spec"]
@@ -1720,7 +1720,7 @@ class Bot:
             spec["name"] = built["genre"]
             self._show_options(chat_id, b)
         else:
-            self.tg.send(chat_id, "Tap My own prompt or AI writes it, or /cancel.")
+            self.tg.send(chat_id, "دوس بروموبت من عندي أو الذكاء يكتبه، أو /cancel.")
 
     def _removal_block(self, removed):
         """A marker and the reason, in both languages, whenever something was taken out."""
@@ -1744,11 +1744,11 @@ class Bot:
         b["removed"] = built.get("removed") or []
         kb = []
         if built.get("removed"):
-            kb.append([{"text": "\U0001f50e Use as reference", "callback_data": "p:refname"}])
-        kb.append([{"text": "\u2705 Use it", "callback_data": "p:use"},
-                   {"text": "\u270f\ufe0f Edit", "callback_data": "p:edit"}])
-        kb.append([{"text": "\U0001f504 Another", "callback_data": "p:again"},
-                   {"text": "\U0001f50e New reference", "callback_data": "p:ref"}])
+            kb.append([{"text": "\U0001f50e استخدمه كمرجع", "callback_data": "p:refname"}])
+        kb.append([{"text": "\u2705 استخدمه", "callback_data": "p:use"},
+                   {"text": "\u270f\ufe0f عدّل", "callback_data": "p:edit"}])
+        kb.append([{"text": "\U0001f504 واحد تاني", "callback_data": "p:again"},
+                   {"text": "\U0001f50e مرجع جديد", "callback_data": "p:ref"}])
         kb.append([{"text": "\U0001f916 اسألني", "callback_data": "ask"}])
         self.tg.send(chat_id, f"{note}Prompt ({built['bpm']} BPM, {built['key']}, {built['genre']}):\n\n"
                               f"{built['prompt']}\n\n{ASSIST_HINT}", keyboard=kb)
@@ -1771,17 +1771,17 @@ class Bot:
             return
         if has_non_latin(text) and b["step"] in ("theme", "own_prompt", "edit_prompt", "ai_idea"):
             # the engine reads an English prompt, so the theme has to be English too
-            self.tg.send(chat_id, "The engine reads English, so write that in English: a few words are enough, "
-                                  "e.g. 'night drive, longing, warm bass'. Send it again, or /cancel.")
+            self.tg.send(chat_id, "الموديل بيفهم إنجليزي، فاكتبها بالإنجليزي: كلمتين كفاية، "
+                                  "مثلاً 'night drive, longing, warm bass'. ابعتها تاني، أو /cancel.")
             return
         if b["step"] == "theme":
             b["spec"]["idea"] = b["spec"]["idea"] + text
             b["step"] = "seconds"
-            self.tg.send(chat_id, "Length?", keyboard=self._length_kb())
+            self.tg.send(chat_id, "الطول؟", keyboard=self._length_kb())
         elif b["step"] in ("own_prompt", "edit_prompt"):
             clean, removed = clean_idea(text)
             if len(clean) < 8:
-                self.tg.send(chat_id, "That is too short to render from. Send the full prompt again, or /cancel.")
+                self.tg.send(chat_id, "ده قصير أوي. ابعت البرومبت كامل تاني، أو /cancel.")
                 return
             spec = b["spec"]
             spec["idea"] = clean
@@ -1792,7 +1792,7 @@ class Bot:
             b["removed"] = removed
             if removed:
                 self.tg.send(chat_id, self._removal_block(removed),
-                             keyboard=[[{"text": "\U0001f50e Use as reference", "callback_data": "p:refname"}]])
+                             keyboard=[[{"text": "\U0001f50e استخدمه كمرجع", "callback_data": "p:refname"}]])
             else:
                 self.tg.send(chat_id, self._removal_block([]))
             self._show_options(chat_id, b)
@@ -1803,7 +1803,7 @@ class Bot:
             raw = (text or "").strip()
             if key in ("bpm", "steps", "seed"):
                 if not raw.isdigit():
-                    self.tg.send(chat_id, "Send a number, or /cancel.")
+                    self.tg.send(chat_id, "ابعت رقم، أو /cancel.")
                     return
                 spec[key] = int(raw) if not (key == "seed" and raw == "0") else None
             else:
@@ -1823,9 +1823,9 @@ class Bot:
         self.tg.send(chat_id,
             f"Ready: {s.get('genre')} | {s.get('seconds')}s | "
             f"{'instrumental' if s.get('instrumental') else 'lyrics'} | {s.get('quality', 'standard')}"
-            + (f" | title: {s['title']}" if s.get("title") else "") + tail
+            + (f" | العنوان: {s['title']}" if s.get("title") else "") + tail
             + "\n\n" + ASSIST_HINT,
-            keyboard=[[{"text": "Generate", "callback_data": "go"}, {"text": "Cancel", "callback_data": "no"}],
+            keyboard=[[{"text": "ولّد", "callback_data": "go"}, {"text": "إلغاء", "callback_data": "no"}],
                       [{"text": "\U0001f916 اسألني", "callback_data": "ask"}]])
 
     def _track(self, chat_id, arg):
@@ -1840,15 +1840,15 @@ class Bot:
         self.builders[chat_id] = {"step": "mode", "spec": {"lang": "en", "quality": "high",
                                                            "instrumental": True, "seconds": 330}}
         genres = list(GENRE_PRESETS)
-        kb = [[{"text": "\u270d\ufe0f My own prompt", "callback_data": "p:own"},
-               {"text": "\u2728 AI writes it", "callback_data": "p:ai"}],
-              [{"text": "\U0001f50e Reference", "callback_data": "p:ref"}]]
+        kb = [[{"text": "\u270d\ufe0f بروموبت من عندي", "callback_data": "p:own"},
+               {"text": "\u2728 الذكاء يكتبه", "callback_data": "p:ai"}],
+              [{"text": "\U0001f50e مرجع", "callback_data": "p:ref"}]]
         last = self._last_spec()
         if last:
             kb.append([{"text": self._last_label(last), "callback_data": "last"}])
         kb += [[{"text": g, "callback_data": g}] for g in genres]
-        self.tg.send(chat_id, "New track. Pick a style, write the prompt yourself, "
-                              "or let me write it from a short idea.\n" + ASSIST_HINT, keyboard=kb)
+        self.tg.send(chat_id, "تراك جديد. اختار ستايل، أو اكتب البرومبت بنفسك، "
+                              "أو سيبني أكتبه من فكرة قصيرة.\n" + ASSIST_HINT, keyboard=kb)
 
     def _parse_spec(self, arg):
         # "melodic techno, night drive, 330s, instrumental, high, key Am, bpm 122, title X"
@@ -1859,7 +1859,7 @@ class Bot:
         preset = GENRE_PRESETS.get(genre) or GENRE_PRESETS.get(genre.title())
         spec = {"name": genre, "genre": genre, "lang": "en", "quality": "standard",
                 "instrumental": True, "seconds": 330,
-                "idea": (preset or genre) + (". Theme: " + parts[1] if len(parts) > 1 else "")}
+                "idea": (preset or genre) + (". الفكرة: " + parts[1] if len(parts) > 1 else "")}
         for p in parts[1:]:
             m = re.match(r"^(\d+)\s*s(ec)?$", p.lower())
             if m: spec["seconds"] = max(60, min(600, int(m.group(1)))); continue
@@ -1874,8 +1874,8 @@ class Bot:
             mt = re.match(r"^title\s+(.+)$", low)
             if mt: spec["title"] = mt.group(1); continue
             if p != parts[1] or len(parts) == 1:
-                if ". Theme: " not in spec["idea"]:
-                    spec["idea"] += ". Theme: " + p
+                if ". الفكرة: " not in spec["idea"]:
+                    spec["idea"] += ". الفكرة: " + p
         return spec
 
     def _normalize_spec(self, spec):
@@ -1917,7 +1917,7 @@ class Bot:
 
     def _enqueue(self, chat_id, spec):
         if not self.make_track:
-            self.tg.send(chat_id, "No engine in this session. Run the notebook's engine cell first.")
+            self.tg.send(chat_id, "مفيش موديل شغال في الجلسة دي. شغّل خلية الموديل في النوتبوك الأول.")
             return
         spec = self._normalize_spec(spec)
         self._remember(spec)
@@ -1925,11 +1925,11 @@ class Bot:
         self.jobs.put((chat_id, spec))
         self.queued.append(spec.get("title") or spec.get("name") or spec.get("genre") or "track")
         n = self.jobs.qsize()
-        self.tg.send(chat_id, f"Queued: {spec.get('title') or spec.get('name') or spec['genre']} ({spec['seconds']}s, {spec.get('quality','standard')})." + (f" {n-1} ahead of it." if n > 1 and not self.current else ""))
+        self.tg.send(chat_id, f"اتحط في الطابور: {spec.get('title') or spec.get('name') or spec['genre']} ({spec['seconds']} ثانية، {spec.get('quality','standard')})." + (f" {n-1} قبله." if n > 1 and not self.current else ""))
 
     def _batch_text(self, chat_id, arg):
         if not arg:
-            self.tg.send(chat_id, "Send the queue as JSON after /batch, or as a .json file. Each item: {\"title\":..., \"genre\":..., \"seconds\":..., \"instrumental\":true/false, \"quality\":\"high|standard|fast\", \"idea\":...}")
+            self.tg.send(chat_id, "ابعت القايمة JSON بعد /batch، أو كملف .json. كل عنصر: {\"title\":..., \"genre\":..., \"seconds\":..., \"instrumental\":true/false, \"quality\":\"high|standard|fast\", \"idea\":...}")
             return
         self._batch_load(chat_id, arg)
 
@@ -1940,7 +1940,7 @@ class Bot:
             with urllib.request.urlopen(url, timeout=60) as r:
                 self._batch_load(chat_id, r.read().decode())
         except Exception as e:
-            self.tg.send(chat_id, f"Could not read that file: {str(e)[:200]}")
+            self.tg.send(chat_id, f"معرفتش أقرا الملف ده: {str(e)[:200]}")
 
     def _batch_load(self, chat_id, raw):
         try:
@@ -1951,7 +1951,7 @@ class Bot:
             if not specs:
                 raise ValueError("no valid specs")
         except Exception as e:
-            self.tg.send(chat_id, f"That JSON did not parse into track specs: {str(e)[:200]}")
+            self.tg.send(chat_id, f"الـ JSON ده معرفتش أفهمه كتراكات: {str(e)[:200]}")
             return
         for s in specs:
             s = self._normalize_spec(s)
@@ -1959,7 +1959,7 @@ class Bot:
             s.setdefault("lang", "en")
             self.jobs.put((chat_id, s))
             self.queued.append(s.get("title") or s.get("name") or s.get("genre") or "track")
-        self.tg.send(chat_id, f"Batch queued: {len(specs)} track(s). They render back to back and land here as they finish.")
+        self.tg.send(chat_id, f"الطابور اتحط: {len(specs)} تراك في الطابور. هيتعملوا ورا بعض وهيوصلوا هنا أول بأول.")
 
     def _status(self, chat_id):
         """Plain Egyptian Arabic: what is happening now, what is waiting, and the one
@@ -1986,15 +1986,15 @@ class Bot:
 
     def _queue(self, chat_id):
         q = list(self.queued)
-        msg = ["Rendering now: " + (self.current or "nothing")]
+        msg = ["بيتعمل دلوقتي: " + (self.current or "nothing")]
         if q:
-            msg.append(f"Waiting ({len(q)}):")
+            msg.append(f"مستني ({len(q)}):")
             for i, t in enumerate(q[:10], 1):
                 msg.append(f"{i}. {t}")
             if len(q) > 10:
                 msg.append(f"...and {len(q) - 10} more")
         else:
-            msg.append("Nothing waiting. /track starts a new one.")
+            msg.append("مفيش حاجة مستنية. /track بيبدأ تراك جديد.")
         self.tg.send(chat_id, "\n".join(msg))
 
     def _release_folders(self):
@@ -2072,15 +2072,15 @@ class Bot:
     def _library(self, chat_id):
         folders = self._release_folders()[:8]
         if not folders:
-            self.tg.send(chat_id, "No releases yet in this session's folder. /track makes one; /status shows where they save.")
+            self.tg.send(chat_id, "مفيش تراكات لسه في الجلسة دي. /track بيعمل واحد؛ /status بيوريك بيتحفظوا فين.")
             return
         kb = [[{"text": re.sub(r"^\d{8}-\d{6}_", "", f).replace("_", " ")[:60], "callback_data": "lib:" + self._lib_key(f)}] for f in folders]
-        self.tg.send(chat_id, "Latest releases (tap to fetch):", keyboard=kb)
+        self.tg.send(chat_id, "آخر التراكات (دوس تجيبه):", keyboard=kb)
 
     def _get(self, chat_id, needle, audio=True):
         folder = self._find_folder(needle)
         if not folder:
-            self.tg.send(chat_id, "Nothing found for that. /library lists releases.")
+            self.tg.send(chat_id, "مفيش حاجة بالاسم ده. /library بيعرض التراكات.")
             return
         title = re.sub(r"^\d{8}-\d{6}_", "", os.path.basename(folder)).replace("_", " ")
         base = None
@@ -2092,24 +2092,24 @@ class Bot:
             if os.path.exists(cov):
                 self.tg.photo(chat_id, cov, caption=title)
             else:
-                self.tg.send(chat_id, "No cover in that folder.")
+                self.tg.send(chat_id, "مفيش غلاف في الفولدر ده.")
             return
         meta = self._load(os.path.join(folder, "metadata.json"), {})
         r = {"base": base or os.path.join(folder, title.replace(" ", "_")),
              "folder": folder, "title": meta.get("title", title)}
         if base is None:
-            self.tg.send(chat_id, "That folder has no MP3 yet.")
+            self.tg.send(chat_id, "الفولدر ده مفيهوش MP3 لسه.")
             return
         self._deliver(chat_id, r)
 
     def _routenote(self, chat_id, needle):
         folder = self._find_folder(needle)
         if not folder:
-            self.tg.send(chat_id, "Nothing found for that. /library lists releases.")
+            self.tg.send(chat_id, "مفيش حاجة بالاسم ده. /library بيعرض التراكات.")
             return
         p = os.path.join(folder, "routenote_form.txt")
         if not os.path.exists(p):
-            self.tg.send(chat_id, "No RouteNote form text in that folder.")
+            self.tg.send(chat_id, "مفيش نص فورم RouteNote في الفولدر ده.")
             return
         self.tg.send(chat_id, open(p).read())
 
@@ -2257,7 +2257,7 @@ class Bot:
         elif kind == "vidytok":
             try:
                 url = self._youtube_upload(folder, title, self._publish_caption(folder)[1])
-                self.tg.send(chat_id, "YouTube: posted - " + url)
+                self.tg.send(chat_id, "YouTube: اتنشر - " + url)
             except Exception as e:
                 self.tg.send(chat_id, "\u0645\u0627\u0642\u062f\u0631\u062a\u0634 \u0623\u0631\u0641\u0639 \u0639\u0644\u0649 \u064a\u0648\u062a\u064a\u0648\u0628: " + f"{type(e).__name__}: {str(e)[:160]}")
 
@@ -2418,10 +2418,10 @@ class Bot:
         """Upload the 16:9 visual of a release to YouTube. Returns the watch URL."""
         tok = self._yt_token()
         if not tok:
-            raise RuntimeError("no youtube_token.json yet (the Google Cloud OAuth client is still being set up)")
+            raise RuntimeError("لسه مفيش youtube_token.json (ربط جوجل كلاود لسه بيتظبط)")
         video = self._viz_path(folder) or self._make_video(folder, "16x9")
         if not video:
-            raise RuntimeError("no video to upload (no cover or audio in the release folder)")
+            raise RuntimeError("مفيش فيديو يترفع (مفيش غلاف أو صوت في فولدر التراك)")
         access = self._yt_access_token(tok)
         title, description, tags = self._yt_metadata(folder, title, caption)
         body = {"snippet": {"title": title[:100],
@@ -2520,7 +2520,7 @@ class Bot:
         elif what == "status":
             self._status(chat_id)
         elif what == "routenote":
-            self.tg.send(chat_id, "Which track? /routenote <title>")
+            self.tg.send(chat_id, "أنهي تراك؟ /routenote <العنوان>")
         elif what == "diag":
             self._diag(chat_id)
         else:
@@ -2530,8 +2530,8 @@ class Bot:
         btns = [{"text": name, "url": url} for name, url in SOCIAL]
         btns.append({"text": "\U0001f4d8 \u0635\u0641\u062d\u0629 \u0641\u064a\u0633\u0628\u0648\u0643 (\u0647\u062a\u062a\u0636\u0627\u0641)", "callback_data": "social:fb"})
         kb = [btns[i:i + 2] for i in range(0, len(btns), 2)]
-        self.tg.send(chat_id, "Rahal everywhere:" if kb else
-                     "No verified profile links yet.", keyboard=kb or None)
+        self.tg.send(chat_id, "راهال في كل مكان:" if kb else
+                     "مفيش لينكات بروفايل مؤكدة لسه.", keyboard=kb or None)
 
     def _register_commands(self):
         """Keep the Telegram command menu in step with the code."""
@@ -2566,14 +2566,14 @@ class Bot:
               [{"text": "\U0001f3a8 \u0623\u0631\u062a\u0648\u0631\u0643", "callback_data": f"art:{key}"},
                {"text": "\U0001f3ac \u0641\u064a\u062f\u064a\u0648 YouTube", "callback_data": f"vid:{key}"}],
               [{"text": "\u2630 \u0627\u0644\u0642\u0627\u0626\u0645\u0629", "callback_data": "menu"}]]
-        self.tg.send(chat_id, f"Publish {title}?\n"
-                              "A tap posts only the platform you tap, once.", keyboard=kb)
+        self.tg.send(chat_id, f"عايز تنشر {title}؟\n"
+                              "الضغطة بتنشر على المنصة اللي دست عليها بس، مرة واحدة.", keyboard=kb)
 
     def _publish_cmd(self, chat_id, arg):
         folder = self._find_folder(arg) if arg else self._last_release()
         if not folder:
-            self.tg.send(chat_id, "Nothing found for that. /library lists releases." if arg
-                         else "No release in this session's folder yet. /track makes one.")
+            self.tg.send(chat_id, "مفيش حاجة بالاسم ده. /library بيعرض التراكات." if arg
+                         else "مفيش تراك في فولدر الجلسة دي لسه. /track بيعمل واحد.")
             return
         self._publish_menu(chat_id, folder)
 
@@ -2584,10 +2584,10 @@ class Bot:
         name = self._lib_folder(key)
         folder = os.path.join(self.out_root, name) if name else None
         if not folder or not os.path.isdir(folder):
-            self.tg.send(chat_id, "That release is not in this session's folder any more. /library lists the current ones.")
+            self.tg.send(chat_id, "التراك ده مش في فولدر الجلسة تاني. /library بيعرض الحاليين.")
             return
         if code not in PLATFORM_LABEL and code != "all":
-            self.tg.send(chat_id, "Unknown publish target. /publish reopens the menu.")
+            self.tg.send(chat_id, "وجهة النشر مش معروفة. /publish بيفتح القائمة تاني.")
             return
         self._publish(chat_id, code, folder)
 
@@ -2631,31 +2631,31 @@ class Bot:
             try:
                 if p == "tg":
                     how = to_channel()
-                    done.append(f"Telegram channel: posted ({how}) - https://t.me/rahal_music")
+                    done.append(f"قناة تيليجرام: اتنشر ({how}) - https://t.me/rahal_music")
                 elif p == "yt":
                     try:
                         url = self._youtube_upload(folder, title, caption)
-                        done.append(f"YouTube: posted - {url}")
+                        done.append(f"YouTube: اتنشر - {url}")
                     except Exception as e:
                         package("yt")
-                        done.append("YouTube: not uploaded yet (" + f"{type(e).__name__}: {str(e)[:160]}" +
-                                    "). The post package is in the release folder as publish_request_yt.json, "
-                                    "and this button uploads for real once the OAuth client is in place.")
+                        done.append("YouTube: لسه مترفعش (" + f"{type(e).__name__}: {str(e)[:160]}" +
+                                    "). ملف النشر جاهز في فولدر التراك باسم publish_request_yt.json، "
+                                    "والزرار ده هيرفع فعلاً أول ما الربط يتظبط.")
                 elif p == "fb":
-                    done.append("Facebook: caption below, file ready. Posting stays manual by your call.")
+                    done.append("فيسبوك: الكابشن تحت والملف جاهز. النشر يدوي بقرارك.")
                 else:
                     package(p)
-                    done.append(f"{PLATFORM_LABEL[p]}: no posting API on our side, so I wrote the post "
-                                f"package (caption + files) into the release folder as publish_request_{p}.json "
-                                "for a one-pass manual post.")
+                    done.append(f"{PLATFORM_LABEL[p]}: مفيش طريقة نشر تلقائية، فجهزت ملف النشر "
+                                f"(كابشن + ملفات) في فولدر التراك باسم publish_request_{p}.json "
+                                "عشان تنشره يدوي مرة واحدة.")
             except Exception as e:
-                failed.append(f"{PLATFORM_LABEL.get(p, p)} failed: {type(e).__name__}: {str(e)[:200]}")
+                failed.append(f"{PLATFORM_LABEL.get(p, p)} فشل: {type(e).__name__}: {str(e)[:200]}")
         msg = ["\n".join(done)] if done else []
         if failed:
             msg.append("\n".join(failed))
         if "fb" in targets:
-            msg.append("Facebook caption:\n" + caption)
-        self.tg.send(chat_id, "\n\n".join(msg) or "Nothing to publish.")
+            msg.append("كابشن فيسبوك:\n" + caption)
+        self.tg.send(chat_id, "\n\n".join(msg) or "مفيش حاجة تتنشر.")
 
     def _jobs(self, chat_id):
         roots = [os.path.join(self.out_root, "jobs"),
@@ -2674,7 +2674,7 @@ class Bot:
                 except Exception:
                     pass
         if not found:
-            self.tg.send(chat_id, "No app jobs found in Drive (looked in Zi_Music/jobs and zi_data/jobs).")
+            self.tg.send(chat_id, "مفيش مهام من التطبيق على درايف (دورت في Zi_Music/jobs و zi_data/jobs).")
             return
         for j in found:
             j = self._normalize_spec(j)
@@ -2682,7 +2682,7 @@ class Bot:
             j.setdefault("lang", "en")
             self.jobs.put((chat_id, j))
             self.queued.append(j.get("title") or j.get("name") or j.get("genre") or "track")
-        self.tg.send(chat_id, f"Imported {len(found)} app job(s) into the queue.")
+        self.tg.send(chat_id, f"Imported {len(found)} مهمة من التطبيق اتضافت للطابور.")
 
 
 def _bot_instances():
@@ -2733,15 +2733,15 @@ def start_engine_bot(token, make_track, run_queue, out_root, work):
     # starts: two pollers fight over getUpdates (409) and taps land on the old one.
     stale = stop_other_bots(keep=None)
     still = _bot_instances()
-    print(f"Stopped {stale} previous poller(s); {len(still)} still alive before start.")
+    print(f"Stopped {stale} متابِع قديم؛ {len(still)} still alive before start.")
     if still:
-        print("WARNING: a previous poller did not stop. Restart the kernel if callbacks stop arriving.")
+        print("تحذير: متابِع قديم مقفلش. أعد تشغيل الكيرنل لو الأزرار وقفت تشتغل.")
     bot = Bot(token, out_root=out_root, work=work, make_track=make_track, run_queue=run_queue)
     bot.start()
     builtins._zi_bot_instance = bot
-    print(f"Zi Telegram bot running (build {VERSION}). Chat with the bot in Telegram; /help lists commands.")
+    print(f"بوت Zi شغال (إصدار {VERSION}). كلّم البوت في تيليجرام؛ /help بيعرض الأوامر.")
     try:
-        print(f"Pollers in this process after start: {len(_bot_instances())} (1 is healthy)")
+        print(f"عدد المتابعات الشغالة بعد التشغيل: {len(_bot_instances())} (١ يعني سليم)")
     except Exception:
         pass
     return bot

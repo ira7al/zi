@@ -84,7 +84,7 @@ class ReliabilityTests(unittest.TestCase):
         self.bot.stop.set()
         th.join(timeout=3)
         self.assertEqual(seen, ["a", "b"])
-        self.assertIn("The bot is still running", self.texts())
+        self.assertIn("البوت شغال", self.texts())
 
     def test_engine_returning_nothing_is_a_plain_message(self):
         self.bot.make_track = lambda spec, *a: None
@@ -114,7 +114,7 @@ class ReliabilityTests(unittest.TestCase):
         self.bot.stop.set()
         th.join(timeout=3)
         self.assertIn("no audio in night_drive", self.texts())
-        self.assertIn("Nothing was lost", self.texts())
+        self.assertIn("مفيش حاجة ضاعت", self.texts())
 
     def test_a_long_render_says_it_is_still_alive(self):
         def slow(spec, *a):
@@ -126,7 +126,7 @@ class ReliabilityTests(unittest.TestCase):
         self.bot.current = "long"
         with self.assertRaises(RuntimeError):
             self.bot._render(9, {"genre": "techno", "title": "long"})
-        self.assertIn("Still rendering long", self.texts())
+        self.assertIn("لسه بيتعمل long", self.texts())
 
 
 if __name__ == "__main__":

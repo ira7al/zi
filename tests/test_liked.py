@@ -52,8 +52,8 @@ class LikedTests(unittest.TestCase):
 
     def test_keep_copies_the_track_and_confirms(self):
         self.bot._callback(9, f"keep:{self.key}")
-        self.assertIn("Saved to Liked: Night Drive", self.last())
-        self.assertIn("4 files", self.last())
+        self.assertIn("اتحفظ في المفضلة: Night Drive", self.last())
+        self.assertIn("4 ملف", self.last())
         dest = os.path.join(self.tmp, "liked", f"{self.key}_Night_Drive")
         self.assertTrue(os.path.exists(os.path.join(dest, "Night_Drive_320kbps.mp3")))
         self.assertTrue(os.path.exists(os.path.join(dest, "lyrics.txt")))
@@ -67,7 +67,7 @@ class LikedTests(unittest.TestCase):
     def test_folder_gone_from_a_restarted_notebook(self):
         os.rename(self.folder, self.folder + "_moved")
         self.bot._callback(9, f"keep:{self.key}")
-        self.assertIn("not on this machine any more", self.last())
+        self.assertIn("مش على الجهاز تاني", self.last())
 
     def test_liked_lists_what_was_kept(self):
         self.bot._callback(9, f"keep:{self.key}")
@@ -78,7 +78,7 @@ class LikedTests(unittest.TestCase):
 
     def test_liked_empty_state(self):
         self.bot._handle({"message": {"chat": {"id": 9, "type": "private"}, "from": {"id": 9}, "text": "/liked"}})
-        self.assertIn("Nothing liked yet", self.last())
+        self.assertIn("مفيش مفضّل لسه", self.last())
 
 
 if __name__ == "__main__":
