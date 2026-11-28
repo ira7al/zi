@@ -1551,7 +1551,10 @@ class Bot:
         elif text and not text.startswith("/"):
             self._react(chat_id, mid, ziassist.reaction_for(text))
         if self._is_dataset_upload(msg):
-            self._ds_intake(chat_id, msg)
+            if self._audio_ref_wanted(chat_id):
+                self._reference_audio(chat_id, msg)
+            else:
+                self._ds_intake(chat_id, msg)
             return
         photo = msg.get("photo")
         if not photo and doc and str(doc.get("mime_type") or "").startswith("image/"):
@@ -1720,6 +1723,9 @@ class Bot:
                 pass
             self._show_options(chat_id, b)
             return
+        if data == "lora:t":
+            self._lora_toggle(chat_id)
+            return
         if data.startswith("tw:"):
             self._tweak_cb(chat_id, data)
             return
@@ -1823,8 +1829,11 @@ class Bot:
         if data in GENRE_PRESETS:
             # Tapping a style always starts (or restarts) the builder, whatever step it was
             # on, or whether it was lost with a restarted kernel.
+            keep_lora = ((self.builders.get(chat_id) or {}).get("spec") or {}).get("lora")
             self.builders[chat_id] = {"step": "genre", "spec": {"lang": "en", "quality": "high",
                                                                "instrumental": True, "seconds": 330}}
+            if keep_lora:
+                self.builders[chat_id]["spec"]["lora"] = keep_lora
             b = self.builders[chat_id]
         if not b:
             self.tg.send(chat_id, "الجلسة دي انتهت. /track بيبدأ تراك جديد.")
@@ -1964,9 +1973,17 @@ class Bot:
         if code == "ref":
             b["step"] = "ref_wait"
             self.tg.send(chat_id, self.REF_HINT)
+        elif code == "audio":
+            b["step"] = "own_prompt"
+            b.pop("own_ref", None)
+            b["want_audio_ref"] = True
+            self.tg.send(chat_id, "ابعت التراك أو الـ MP3 اللي عايزه مرجع (لحد ٢٠ ميجا). "
+                                  "باخد منه السرعة والمقام والجو كستايل بس، ومبقراش اسمه ولا أي بيانات فيه. "
+                                  "بعدها ابعت البرومبت بتاعك.")
         elif code == "own":
             b["step"] = "own_prompt"
             b.pop("own_ref", None)
+            b.pop("want_audio_ref", None)
             self.tg.send(chat_id, "ابعت البرومبت في رسالة واحدة. كل اللي محتاجه التراك يتكتب فيها: "
                                   "BPM، المقام، الصوت، الهيكل.\n"
                                   "أي اسم مغني أو تراك حقيقي بيتشال، وبوريك بالظبط إيه اللي اتشال وليه - "
@@ -2125,12 +2142,88 @@ class Bot:
                 return
         self.builders[chat_id] = {"step": "mode", "spec": {"lang": "en", "quality": "high",
                                                            "instrumental": True, "seconds": 330}}
-        genres = list(GENRE_PRESETS)
-        kb = [[{"text": "\u270d\ufe0f بروموبت من عندي", "callback_data": "p:own"},
-               {"text": "\u2728 الذكاء يكتبه", "callback_data": "p:ai"}]]
-        kb += [[{"text": g, "callback_data": g}] for g in genres]
+        self._track_menu(chat_id)
+
+    def _lora_names(self):
+        """Adapters that really exist on the engine side. Empty until Mr Dorgham is trained."""
+        try:
+            glob = getattr(self.make_track, "__globals__", {}) or {}
+            return list((glob.get("LORA_ADAPTERS") or {}).keys())
+        except Exception:
+            return []
+
+    def _track_menu(self, chat_id):
+        b = self.builders.get(chat_id) or {}
+        first = [{"text": "\u270d\ufe0f بروموبت من عندي", "callback_data": "p:own"}]
+        if opt.audio_available():
+            first.append({"text": "\U0001f3a7 ارفع تراك/MP3 كمرجع", "callback_data": "p:audio"})
+        kb = [first]
+        second = [{"text": "\u2728 الذكاء يكتبه", "callback_data": "p:ai"}]
+        names = self._lora_names()
+        if names:
+            on = (b.get("spec") or {}).get("lora") in names
+            second.append({"text": ("\U0001f9ec الدرغام: شغال \u2705" if on else "\U0001f9ec استخدم الدرغام"),
+                           "callback_data": "lora:t"})
+        kb.append(second)
+        kb += [[{"text": g, "callback_data": g}] for g in GENRE_PRESETS]
         self.tg.send(chat_id, "تراك جديد. اختار ستايل، أو اكتب البرومبت بنفسك، "
                               "أو سيبني أكتبه من فكرة قصيرة.\n" + ASSIST_HINT, keyboard=kb)
+
+    def _lora_toggle(self, chat_id):
+        names = self._lora_names()
+        b = self.builders.get(chat_id)
+        if not names or not b:
+            self.tg.send(chat_id, "الدرغام لسه مش جاهز. أول ما التدريب يخلص هيظهر الزرار.")
+            return
+        sp = b["spec"]
+        if sp.get("lora") in names:
+            sp.pop("lora", None)
+        else:
+            sp["lora"] = names[0]
+        self._track_menu(chat_id)
+
+    def _audio_ref_wanted(self, chat_id):
+        b = self.builders.get(chat_id) or {}
+        return bool(b.get("want_audio_ref")) and b.get("step") in self.PROMPT_STEPS
+
+    def _reference_audio(self, chat_id, msg):
+        f = msg.get("audio") or msg.get("document") or {}
+        b = self.builders.get(chat_id)
+        if int(f.get("file_size") or 0) > 20 * 1024 * 1024:
+            self.tg.send(chat_id, "الملف أكبر من ٢٠ ميجا، تيليجرام مبيسمحش للبوت ينزّله. ابعت نسخة MP3 أصغر.")
+            return
+        try:
+            data = self._download_file(f["file_id"])
+        except Exception as e:
+            self.tg.send(chat_id, f"معرفتش أنزّل الملف ده: {str(e)[:120]}")
+            return
+        path = os.path.join(self.work, "audio_reference.bin")   # the name he gave it is never used
+        try:
+            with open(path, "wb") as fh:
+                fh.write(data)
+            res = opt.audio_analyze(path)
+        finally:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        if not res:
+            self.tg.send(chat_id, "معرفتش أقرا الملف ده كصوت (أو هو أقصر من ٨ ثواني). جرب MP3 تاني، أو ابعت لينك أو سكرين شوت.")
+            return
+        style = opt.audio_style_for(res, opt.PROMPT_STYLES)
+        self.tg.send(chat_id, opt.audio_describe(res) + "\nباخده كستايل بس، مفيش اسم ولا حاجة من الأغنية بتدخل البرومبت.")
+        b = self.builders.get(chat_id)
+        b.pop("want_audio_ref", None)
+        label = opt.PROMPT_STYLES[style].get("label", style)
+        if b.get("step") == "own_prompt":
+            b["own_ref"] = {"style": style, "theme": ""}
+            self.tg.send(chat_id, f"خدت المرجع كستايل ({label}). ابعت البرومبت بتاعك دلوقتي وهستخدمهم مع بعض.")
+            return
+        built = build_prompt("", b["spec"].get("seconds", 330), 0,
+                             instrumental=b["spec"].get("instrumental", True), style=style)
+        b["built"] = built
+        b["ref_note"] = "فهمت من المرجع: " + built["summary"]
+        self._show_prompt(chat_id, b)
 
     def _parse_spec(self, arg):
         # "melodic techno, night drive, 330s, instrumental, high, key Am, bpm 122, title X"

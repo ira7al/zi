@@ -541,3 +541,104 @@ def spec_summary(spec):
     if s.get("style_influence") not in (None, 50):
         parts.append(f"تأثير الستايل {s['style_influence']}")
     return "هعمل: " + "، ".join(str(x) for x in parts) + ". تمام؟"
+
+
+# ---------- style reference from an uploaded track (tempo, key, brightness only) ----------
+# Needs ffmpeg and numpy. Never reads tags, file names or lyrics, so no artist or track name can
+# reach a prompt. A rough style hint, not genre recognition.
+_ASR = 22050
+_AN_FFT = 2048
+_AHOP = 512
+_AMAJ = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88]
+_AMIN = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17]
+_ANAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+
+
+def audio_available():
+    import shutil
+    import subprocess  # noqa: F401
+    if not shutil.which("ffmpeg"):
+        return False
+    try:
+        import numpy  # noqa: F401
+    except Exception:
+        return False
+    return True
+
+
+def _audio_decode(path, seconds=90):
+    import subprocess
+    import numpy as np
+    out = subprocess.run(["ffmpeg", "-v", "error", "-i", path, "-t", str(seconds), "-ac", "1", "-ar", str(_ASR),
+                          "-f", "f32le", "-"], capture_output=True, timeout=120, check=True).stdout
+    return np.frombuffer(out, dtype=np.float32)
+
+
+def audio_analyze(path, samples=None):
+    """Returns {bpm, key, brightness_hz, rms} or None when the audio is too short or unreadable."""
+    import numpy as np
+    try:
+        y = samples if samples is not None else _audio_decode(path)
+    except Exception:
+        return None
+    if y is None or len(y) < _ASR * 8:
+        return None
+    y = y.astype(np.float64)
+    n = 1 + (len(y) - _AN_FFT) // _AHOP
+    idx = np.arange(_AN_FFT)[None, :] + _AHOP * np.arange(n)[:, None]
+    mag = np.abs(np.fft.rfft(y[idx] * np.hanning(_AN_FFT)[None, :], axis=1))
+    freqs = np.fft.rfftfreq(_AN_FFT, 1.0 / _ASR)
+    # tempo: autocorrelation of the onset envelope
+    logm = np.log1p(mag * 10)
+    env = np.maximum(0, np.diff(logm, axis=0)).sum(axis=1)
+    env = env - env.mean()
+    ac = np.correlate(env, env, mode="full")[len(env) - 1:]
+    fps = _ASR / _AHOP
+    best, best_score = None, -1e18
+    for bpm in np.arange(70.0, 176.0, 0.5):
+        lag = 60.0 / bpm * fps
+        lo, hi = int(lag), int(lag) + 1
+        if hi >= len(ac):
+            continue
+        v = ac[lo] * (hi - lag) + ac[hi] * (lag - lo)
+        # a mild pull toward 120 so half and double time do not win by accident
+        score = v * np.exp(-0.5 * (np.log2(bpm / 120.0) / 0.9) ** 2)
+        if score > best_score:
+            best, best_score = bpm, score
+    # key: pitch-class energy against major and minor profiles
+    band = (freqs >= 65) & (freqs <= 2000)
+    pc = np.zeros(12)
+    midi = np.round(69 + 12 * np.log2(freqs[band] / 440.0)).astype(int) % 12
+    energy = (mag[:, band] ** 2).sum(axis=0)
+    for k in range(12):
+        pc[k] = energy[midi == k].sum()
+    best_key, best_r = None, -2
+    for mode, prof in (("major", _AMAJ), ("minor", _AMIN)):
+        for tonic in range(12):
+            r = np.corrcoef(pc, np.roll(prof, tonic))[0, 1]
+            if r > best_r:
+                best_r, best_key = r, f"{_ANAMES[tonic]} {mode}"
+    cent = float(((mag * freqs[None, :]).sum(axis=1) / (mag.sum(axis=1) + 1e-9)).mean())
+    return {"bpm": int(round(best)), "key": best_key, "brightness_hz": int(cent),
+            "rms": float(np.sqrt((y ** 2).mean()))}
+
+
+def audio_describe(res):
+    """One Egyptian line of what was heard. No names, nothing but the measurements."""
+    br = res["brightness_hz"]
+    tone = "دافي وغامق" if br < 1500 else ("متوازن" if br < 2800 else "مضيء وحاد")
+    punch = "هادي" if res["rms"] < 0.05 else ("قوي" if res["rms"] > 0.15 else "متوسط القوة")
+    return f"سمعت منه: سرعة حوالي {res['bpm']} BPM، مقام {res['key']}، الجو {tone} و{punch}."
+
+
+def audio_style_for(res, styles):
+    """Nearest style profile by tempo, with the same mode (major/minor) preferred."""
+    minor = "minor" in (res.get("key") or "")
+    best, best_cost = None, 1e9
+    for name, st in styles.items():
+        cost = abs(float(st.get("bpm") or 120) - res["bpm"])
+        if ("minor" in str(st.get("key", ""))) != minor:
+            cost += 6
+        if cost < best_cost:
+            best, best_cost = name, cost
+    return best
