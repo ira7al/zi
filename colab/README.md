@@ -117,6 +117,12 @@ It comes from a Google Cloud project with the YouTube Data API enabled, an OAuth
 
 The 9:16 video is used for the channel, reels and shorts; the YouTube button renders a 1280x720 version from the same cover on demand so the full track reads properly on YouTube.
 
+## Repeat the last settings (build .18)
+
+`/track` opens with a button carrying the last settings used: style, length, instrumental or not. One tap shows the same Ready card and one more tap renders it again; `/track again` does the same from a message. The settings are saved on every queue, so they survive a kernel restart.
+
+"Another" on a prompt preview now changes the arrangement as well as the mood: three moods, four focuses (arpeggio, bassline, pads, percussion) and three mixes, so twelve different prompts come out of one idea.
+
 ## What a long render and a failure look like now (build .17)
 
 - A high-quality render sends one line every 5 minutes: still rendering, how long it has been, nothing to resend.
@@ -155,14 +161,14 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
-## Bot build 2026-11-28.17: reload and engine patch
+## Bot build 2026-11-28.18: reload and engine patch
 
 The bot now loads a second file (`bot/zi_options.py`), so a cell 5 that only fetches `zi_bot.py` fails. Use this cell instead; it pins the commit and fetches both.
 
 ```python
-# pinned reload - build .17 (bot + its shared option model)
+# pinned reload - build .18 (bot + its shared option model)
 import os, sys, importlib.util, urllib.request
-SHA = "aefb00b848b2edcdafecb2cacf0d9e0ced3bcf5c"
+SHA = "bca0afd91387870a90c6c002808ddd6f2ca9c014"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
