@@ -12,6 +12,7 @@
 import hashlib, json, os, queue, random, re, subprocess, threading, time, traceback, urllib.request, urllib.parse, uuid
 
 VERSION = "2026-11-28.14"
+_WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
 FILE_API = "https://api.telegram.org/file/bot{token}/{path}"
@@ -469,6 +470,66 @@ class Bot:
         except Exception as e:
             print("publish menu failed:", repr(e))
 
+    # ---------- voice ----------
+    def _download_voice(self, voice):
+        f = self.tg.call("getFile", file_id=voice["file_id"])
+        url = FILE_API.format(token=self.tg.token, path=f["file_path"])
+        name = f"voice_{str(voice.get('file_unique_id') or voice['file_id'])[-16:]}.oga"
+        path = os.path.join(self.out_root, name)
+        with urllib.request.urlopen(url, timeout=180) as r, open(path, "wb") as fh:
+            fh.write(r.read())
+        return path
+
+    def _transcribe(self, path):
+        """CPU speech to text. Multilingual, because he speaks Egyptian Arabic."""
+        global _WHISPER
+        try:
+            from faster_whisper import WhisperModel
+        except Exception as e:
+            print("transcription unavailable:", repr(e))
+            return None
+        try:
+            if _WHISPER is None:
+                for name in ("small", "base"):
+                    try:
+                        _WHISPER = WhisperModel(name, device="cpu", compute_type="int8")
+                        print("whisper model:", name)
+                        break
+                    except Exception as e:
+                        print("whisper", name, "failed:", repr(e))
+                if _WHISPER is None:
+                    return None
+            segments, _info = _WHISPER.transcribe(path, vad_filter=True, beam_size=1)
+            return " ".join(seg.text.strip() for seg in segments).strip()
+        except Exception as e:
+            print("transcribe failed:", repr(e))
+            return None
+
+    def _voice_prompt(self, chat_id, voice):
+        try:
+            path = self._download_voice(voice)
+        except Exception as e:
+            self.tg.send(chat_id, f"I could not fetch that voice note: {str(e)[:150]}")
+            return None
+        self.tg.send(chat_id, "Listening...")
+        text = self._transcribe(path)
+        if not text:
+            self.tg.send(chat_id, "I cannot transcribe on this box yet. In the notebook run "
+                                  "`!pip install -q faster-whisper` and restart the bot, then speak again. "
+                                  "You can also type the prompt.")
+            return None
+        self.tg.send(chat_id, "Heard: " + text)
+        if opt.has_arabic(text):
+            english, leftover = opt.to_english(text)
+            if english:
+                note = f"\n(no English for: {', '.join(leftover[:5])})" if leftover else ""
+                self.tg.send(chat_id, "In English: " + english + note)
+                return english
+            self.tg.send(chat_id, "I heard Arabic but could not map any of it to music words. "
+                                  "Try naming a style, a mood, or a place, or type it.")
+            return None
+        return text
+
     # ---------- update handling ----------
     def _handle(self, u):
         cb = u.get("callback_query")
@@ -534,10 +595,25 @@ class Bot:
         if doc and (doc.get("file_name") or "").endswith(".json"):
             self._batch_doc(chat_id, doc)
             return
+        voice = msg.get("voice") or msg.get("audio") or msg.get("video_note")
+        if voice and not text:
+            text = self._voice_prompt(chat_id, voice)
+            if not text:
+                return
         if not text:
             return
         if chat_id in self.builders and not text.startswith("/"):
             self._builder_text(chat_id, text)
+            return
+        if not text.startswith("/"):
+            # free text with no builder: treat it as an idea and draft the prompt
+            self._track(chat_id, "")
+            b = self.builders.get(chat_id)
+            if b:
+                b["idea_seed"] = text
+                b["variant"] = 0
+                b["built"] = build_prompt(text, b["spec"].get("seconds", 330), 0)
+                self._show_prompt(chat_id, b)
             return
         cmd, _, arg = text.partition(" ")
         cmd = cmd.lower().split("@")[0]
