@@ -38,7 +38,7 @@ jobs:
           set -e
           mkdir -p out
           if [ "${{ matrix.target }}" = "win" ]; then
-            (cd dist && zip -9 ../out/ZiMusicStudio-${{ matrix.label }}.zip ZiMusicStudio.exe)
+            (cd dist && 7z a -tzip -mx=9 ../out/ZiMusicStudio-${{ matrix.label }}.zip ZiMusicStudio.exe)
           elif [ "${{ matrix.target }}" = "mac" ]; then
             (cd dist && zip -9 -r ../out/ZiMusicStudio-${{ matrix.label }}.zip ZiMusicStudio.app)
           else
