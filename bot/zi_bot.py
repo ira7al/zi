@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, subprocess, threading, time, traceback, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.14"
+VERSION = "2026-11-28.15"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -63,6 +63,13 @@ AI_LABEL = "AI-generated music (ACE-Step 1.5, MIT licence). Label it AI-generate
 # The bot token administers the channel (that is how its photo and description were
 # set), so the channel is the one platform that posts end to end from here.
 CHANNEL = "@rahal_music"
+
+# ---------- training dataset intake ----------
+# Files the owner sends to train the LoRA land here, original names kept, deduped by hash.
+DATASET_SUBDIR = os.path.join("dataset", "mr-dorgham")
+DS_MAX_BYTES = 20 * 1024 * 1024      # Bot API getFile cap
+DS_AUDIO_EXT = {".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg", ".oga", ".opus",
+                ".aiff", ".aif", ".wma"}
 PUBLISH_AI = "AI-generated with ACE-Step under Rahal's direction and selection."
 PUBLISH_TAGS = "#melodictechno #indiedance #progressivehouse #afrohouse"
 PLATFORMS = [("yt", "YouTube"), ("ig", "Instagram"), ("tt", "TikTok"),
@@ -84,6 +91,7 @@ COMMANDS = [("menu", "every action, as buttons"),
             ("library", "latest releases"),
             ("publish", "publish the last track"),
             ("social", "links to the profiles"),
+            ("dataset", "training set status"),
             ("get", "send a track's audio, cover and video"),
             ("routenote", "RouteNote form text for a track"),
             ("batch", "send several tracks as JSON"),
@@ -103,6 +111,7 @@ HELP = """Zi Music Studio bot - make tracks from chat.
 /routenote <title> - send the RouteNote form text for a track
 /publish [title] - post the last track (or the named one) to YouTube, Instagram, TikTok, the Telegram channel, Facebook
 /social - links to the YouTube, Instagram, TikTok and Telegram channel profiles
+/dataset - training set status (files sent for the Mr Dorgham model)
 /jobs - import jobs saved by the Windows app (Drive zi_data/jobs)
 /diag - build version and update counts (for debugging)
 /cancel - cancel the current builder step
@@ -258,6 +267,7 @@ class Bot:
         self.stop = threading.Event()
         self.conflict_warned = False
         self.stats = {"message": 0, "callback": 0, "last": "nothing yet"}
+        self.ds_lyrics = {}   # chat_id -> sha of the file whose lyrics we are waiting for
         os.makedirs(out_root, exist_ok=True)
 
     @staticmethod
@@ -470,6 +480,159 @@ class Bot:
         except Exception as e:
             print("publish menu failed:", repr(e))
 
+    # ---------- training dataset ----------
+    def _dataset_dir(self):
+        d = os.path.join(self.out_root, DATASET_SUBDIR)
+        os.makedirs(d, exist_ok=True)
+        return d
+
+    def _ds_path(self):
+        return os.path.join(self._dataset_dir(), "manifest.json")
+
+    def _ds_manifest(self):
+        m = self._load(self._ds_path(), {"files": {}})
+        if not isinstance(m, dict) or not isinstance(m.get("files"), dict):
+            m = {"files": {}}
+        return m
+
+    def _ds_save(self, m):
+        tmp = self._ds_path() + ".tmp"
+        with open(tmp, "w") as fh:
+            json.dump(m, fh, indent=2, ensure_ascii=False)
+        os.replace(tmp, self._ds_path())
+
+    @staticmethod
+    def _is_dataset_upload(msg):
+        if msg.get("audio"):
+            return True
+        doc = msg.get("document") or {}
+        name = (doc.get("file_name") or "").lower()
+        mime = (doc.get("mime_type") or "").lower()
+        return bool(doc) and (mime.startswith("audio/") or any(name.endswith(e) for e in DS_AUDIO_EXT))
+
+    def _download_file(self, file_id):
+        info = self.tg.call("getFile", file_id=file_id)
+        url = FILE_API.format(token=self.tg.token, path=info["file_path"])
+        with urllib.request.urlopen(url, timeout=300) as r:
+            return r.read()
+
+    def _ds_intake(self, chat_id, msg):
+        f = msg.get("audio") or msg.get("document") or {}
+        raw_name = (f.get("file_name") or f.get("title") or "").strip()
+        if not raw_name:
+            raw_name = f"track_{str(f.get('file_id'))[-10:]}"
+        name = os.path.basename(raw_name.replace("\\", "/")) or "track"
+        size = int(f.get("file_size") or 0)
+        if size > DS_MAX_BYTES:
+            self.tg.send(chat_id,
+                         f"That one is {size / 1048576:.1f} MB, and Telegram only lets a bot download up to 20 MB, "
+                         "so I cannot pull it.\nSend it as an MP3 (almost always well under 20 MB), or put the WAVs "
+                         "in a Drive folder and tell me which folder.")
+            return
+        try:
+            data = self._download_file(f["file_id"])
+        except Exception as e:
+            self.tg.send(chat_id, f"I could not download that one: {str(e)[:200]}\n"
+                                  "If it is over 20 MB, send an MP3 or a Drive folder instead.")
+            return
+        sha = hashlib.sha256(data).hexdigest()
+        m = self._ds_manifest()
+        files = m["files"]
+        if sha in files:
+            self.tg.send(chat_id, f"Already have that one ({files[sha]['name']}). {len(files)} in the set.")
+            return
+        saved = name
+        stem, ext = os.path.splitext(name)
+        n = 2
+        while os.path.exists(os.path.join(self._dataset_dir(), saved)):
+            saved = f"{stem} ({n}){ext}"
+            n += 1
+        with open(os.path.join(self._dataset_dir(), saved), "wb") as fh:
+            fh.write(data)
+        files[sha] = {"name": saved, "size": len(data), "added": time.strftime("%Y-%m-%d %H:%M:%S"),
+                      "kind": None, "lyrics": None}
+        self._ds_save(m)
+        count = len(files)
+        short = sha[:10]
+        self.tg.send(chat_id, f"Saved {saved} ({len(data) / 1048576:.1f} MB). {count} received so far.\n"
+                              "Vocal or instrumental?",
+                     keyboard=[[{"text": "\U0001f3a4 Vocal", "callback_data": f"ds:v:{short}"},
+                                {"text": "\U0001f3b9 Instrumental", "callback_data": f"ds:i:{short}"}]])
+
+    def _ds_find(self, short):
+        for sha, v in self._ds_manifest()["files"].items():
+            if sha.startswith(short):
+                return sha, v
+        return None, None
+
+    def _ds_label(self, chat_id, short, kind):
+        sha, v = self._ds_find(short)
+        if not sha:
+            self.tg.send(chat_id, "That file is not in the set any more. /dataset shows the count.")
+            return
+        m = self._ds_manifest()
+        m["files"][sha]["kind"] = kind
+        self._ds_save(m)
+        total = len(m["files"])
+        if kind == "vocal":
+            self.tg.send(chat_id, f"Marked vocal. {total} in the set.\nLyrics for it? Send them as a message or a .txt, "
+                                  "or skip.",
+                         keyboard=[[{"text": "\u270d\ufe0f Add lyrics", "callback_data": f"ds:l:{short}"},
+                                    {"text": "Skip", "callback_data": f"ds:s:{short}"}]])
+        else:
+            self.tg.send(chat_id, f"Marked instrumental. {total} in the set.")
+
+    def _ds_lyrics_wait(self, chat_id, short):
+        sha, v = self._ds_find(short)
+        if not sha:
+            self.tg.send(chat_id, "That file is not in the set any more.")
+            return
+        self.ds_lyrics[chat_id] = sha
+        self.tg.send(chat_id, f"Send the lyrics for {v['name']} as one message, or a .txt file.")
+
+    def _ds_save_lyrics(self, chat_id, text=None, path=None):
+        sha = self.ds_lyrics.pop(chat_id, None)
+        if not sha:
+            return False
+        m = self._ds_manifest()
+        entry = m["files"].get(sha)
+        if not entry:
+            self.tg.send(chat_id, "That file is not in the set any more.")
+            return True
+        body = text
+        if path:
+            with open(path, "r", errors="replace") as fh:
+                body = fh.read()
+        body = (body or "").strip()
+        if not body:
+            self.tg.send(chat_id, "Empty lyrics, nothing saved.")
+            return True
+        stem = os.path.splitext(entry["name"])[0]
+        lp = os.path.join(self._dataset_dir(), stem + ".lyrics.txt")
+        with open(lp, "w") as fh:
+            fh.write(body + "\n")
+        m["files"][sha]["lyrics"] = os.path.basename(lp)
+        self._ds_save(m)
+        self.tg.send(chat_id, f"Lyrics saved next to {entry['name']}.")
+        return True
+
+    def _dataset(self, chat_id):
+        files = self._ds_manifest()["files"]
+        vocal = sum(1 for v in files.values() if v.get("kind") == "vocal")
+        inst = sum(1 for v in files.values() if v.get("kind") == "instrumental")
+        unlabelled = [v["name"] for v in files.values() if not v.get("kind")]
+        lyrics = sum(1 for v in files.values() if v.get("lyrics"))
+        total = sum(int(v.get("size") or 0) for v in files.values())
+        lines = [f"Training set (mr-dorgham): {len(files)} files, {total / 1048576:.1f} MB",
+                 f"vocal {vocal} | instrumental {inst} | not labelled {len(unlabelled)} | with lyrics {lyrics}",
+                 f"Folder: {self._dataset_dir()}",
+                 "Send audio files or .txt lyrics any time. A bot can only download files up to 20 MB, "
+                 "so send MP3s or a Drive folder for the rest."]
+        if unlabelled:
+            lines.append("Waiting for a label: " + ", ".join(unlabelled[:8]) +
+                         (f" and {len(unlabelled) - 8} more" if len(unlabelled) > 8 else ""))
+        self.tg.send(chat_id, "\n".join(lines))
+
     # ---------- voice ----------
     def _download_voice(self, voice):
         f = self.tg.call("getFile", file_id=voice["file_id"])
@@ -592,6 +755,19 @@ class Bot:
             else:
                 self.tg.send(chat_id, "This is a private studio bot.")
             return
+        if self._is_dataset_upload(msg):
+            self._ds_intake(chat_id, msg)
+            return
+        if doc and (doc.get("file_name") or "").lower().endswith(".txt") and chat_id in self.ds_lyrics:
+            try:
+                data = self._download_file(doc["file_id"])
+                tmp = os.path.join(self.out_root, "lyrics_upload.txt")
+                with open(tmp, "wb") as fh:
+                    fh.write(data)
+                self._ds_save_lyrics(chat_id, path=tmp)
+            except Exception as e:
+                self.tg.send(chat_id, f"Could not read that .txt: {str(e)[:150]}")
+            return
         if doc and (doc.get("file_name") or "").endswith(".json"):
             self._batch_doc(chat_id, doc)
             return
@@ -601,6 +777,9 @@ class Bot:
             if not text:
                 return
         if not text:
+            return
+        if chat_id in self.ds_lyrics and not text.startswith("/"):
+            self._ds_save_lyrics(chat_id, text=text)
             return
         if chat_id in self.builders and not text.startswith("/"):
             self._builder_text(chat_id, text)
@@ -644,6 +823,8 @@ class Bot:
             self._publish_cmd(chat_id, arg.strip())
         elif cmd == "/social":
             self._social(chat_id)
+        elif cmd == "/dataset":
+            self._dataset(chat_id)
         elif cmd == "/diag":
             self._diag(chat_id)
         elif cmd == "/jobs":
@@ -666,6 +847,19 @@ class Bot:
             except Exception:
                 pass
             self._show_options(chat_id, b)
+            return
+        if data.startswith("ds:"):
+            parts = data.split(":")
+            act = parts[1] if len(parts) > 1 else ""
+            short = parts[2] if len(parts) > 2 else ""
+            if act == "v":
+                self._ds_label(chat_id, short, "vocal")
+            elif act == "i":
+                self._ds_label(chat_id, short, "instrumental")
+            elif act == "l":
+                self._ds_lyrics_wait(chat_id, short)
+            elif act == "s":
+                self.tg.send(chat_id, "Skipped.")
             return
         if data == "menu":
             self._menu(chat_id)
@@ -1333,7 +1527,8 @@ class Bot:
                {"text": "\u2728 AI writes it", "callback_data": "menu:ai"}],
               [{"text": "\u25b6\ufe0f Publish last track", "callback_data": "menu:publish"},
                {"text": "\U0001f310 Social links", "callback_data": "menu:social"}],
-              [{"text": "\U0001f4ca Status", "callback_data": "menu:status"},
+              [{"text": "\U0001f4be Dataset", "callback_data": "menu:dataset"},
+               {"text": "\U0001f4ca Status", "callback_data": "menu:status"},
                {"text": "\U0001f9fe RouteNote form", "callback_data": "menu:routenote"}],
               [{"text": "\U0001f6e0 Diag", "callback_data": "menu:diag"},
                {"text": "\u2753 Help", "callback_data": "menu:help"}]]
@@ -1354,6 +1549,8 @@ class Bot:
             self._publish_cmd(chat_id, "")
         elif what == "social":
             self._social(chat_id)
+        elif what == "dataset":
+            self._dataset(chat_id)
         elif what == "status":
             self._status(chat_id)
         elif what == "routenote":
