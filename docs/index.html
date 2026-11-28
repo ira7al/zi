@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b0b10">
+<title>Zi Music Studio</title>
+<link rel="manifest" href="manifest.json">
+<style>
+  :root { color-scheme: dark; }
+  body { font-family: system-ui, sans-serif; background:#0b0b10; color:#eee; margin:0; padding:16px; max-width:560px; margin-inline:auto; }
+  h1 { font-size:1.4rem; margin:8px 0 4px; }
+  .sub { color:#999; font-size:.85rem; margin-bottom:16px; }
+  a.card { display:block; background:#17171f; border:1px solid #2a2a38; border-radius:14px; padding:16px; margin:10px 0; text-decoration:none; color:#eee; }
+  a.card b { font-size:1.05rem; }
+  a.card span { display:block; color:#9aa; font-size:.8rem; margin-top:4px; direction:ltr; text-align:right; }
+  a.card:active { background:#20202c; }
+  h2 { font-size:1.05rem; margin:22px 0 8px; }
+  label { display:block; font-size:.85rem; color:#bbb; margin:10px 0 4px; }
+  select, input[type=text], input[type=number], textarea { width:100%; box-sizing:border-box; background:#12121a; color:#eee; border:1px solid #2a2a38; border-radius:10px; padding:10px; font-size:.95rem; }
+  textarea { min-height:90px; direction:ltr; }
+  .row { display:flex; gap:10px; align-items:center; }
+  button { background:#4f46e5; color:#fff; border:0; border-radius:10px; padding:12px 18px; font-size:1rem; margin-top:14px; width:100%; }
+  button.ghost { background:#26263a; }
+  pre { background:#12121a; border:1px solid #2a2a38; border-radius:10px; padding:10px; font-size:.75rem; overflow:auto; direction:ltr; text-align:left; white-space:pre-wrap; }
+  .note { color:#8a8; font-size:.8rem; margin-top:8px; }
+</style>
+</head>
+<body>
+<h1>Zi Music Studio</h1>
+<div class="sub">Rahal's AI music studio - launcher. GPU renders happen on Colab/Kaggle; this app is your remote.</div>
+
+<a class="card" href="https://colab.research.google.com/github/ira7al/zi/blob/main/colab/Zi_Music_Studio.ipynb">
+  <b>افتح الاستوديو (Colab)</b>
+  <span>colab.research.google.com - run cells 1, 2, then 3/4/5</span>
+</a>
+<a class="card" href="https://t.me/rahal_music_bot">
+  <b>بوت التيليجرام</b>
+  <span>@rahal_music_bot - /track /batch /queue /status /library</span>
+</a>
+<a class="card" href="https://drive.google.com/drive/folders/1BexgBlVPcCG9Mce1ZOS5VR4fnkEihAI_">
+  <b>فولدر التراكات (Drive)</b>
+  <span>Zi_Music - releases, covers, RouteNote forms</span>
+</a>
+<a class="card" href="https://github.com/ira7al/zi/releases">
+  <b>تحميل نسخة الكمبيوتر</b>
+  <span>GitHub Releases - Windows / Linux / macOS</span>
+</a>
+
+<h2>جهّز تراك جديد (job)</h2>
+<label>Preset</label>
+<select id="preset">
+  <option>Melodic Techno 122</option>
+  <option>Melodic Techno 124</option>
+  <option>Mid-tempo Techno 118</option>
+  <option>Afro-Dance Techno 124</option>
+  <option>Indie Dance 120</option>
+  <option>Deep House 120</option>
+  <option>Downtempo Indie 100</option>
+</select>
+<label>عنوان التراك (اختياري)</label>
+<input type="text" id="title" placeholder="Night Drive">
+<label>المدة بالدقايق</label>
+<input type="number" id="minutes" value="5.5" min="1" max="10" step="0.5">
+<label>فكرة إضافية للبرومبت (اختياري)</label>
+<input type="text" id="idea" placeholder="desert night vibe">
+<div class="row" style="margin-top:10px">
+  <input type="checkbox" id="instr" checked style="width:auto">
+  <label for="instr" style="margin:0">Instrumental (من غير كلمات)</label>
+</div>
+<div id="lyricsWrap" style="display:none">
+  <label>الكلمات</label>
+  <textarea id="lyrics" placeholder="[Verse] ..."></textarea>
+</div>
+<button id="make">اعمل ملف الـ job</button>
+<pre id="out" style="display:none"></pre>
+<button id="copy" class="ghost" style="display:none">انسخ الـ JSON</button>
+<div class="note" id="howto" style="display:none">احفظه كملف .json جوه Drive &gt; zi_data &gt; jobs، وبعدين من البوت: /jobs</div>
+
+<script>
+const PRESETS = {
+ "Melodic Techno 122": ["melodic progressive techno", 122, "Warm analog bassline, rolling kick, lush detuned pads, plucky arpeggio lead. Hopeful, late-night. Long intro, build, drop, breakdown, final drop, DJ-friendly outro."],
+ "Melodic Techno 124": ["melodic progressive techno", 124, "Punchy kick, sidechained bass, hypnotic minor arpeggio, wide pads, subtle vocal chops. Euphoric but melancholic."],
+ "Mid-tempo Techno 118": ["mid-tempo techno", 118, "Heavy rolling bass, dark textures, tight percussion, slow-burning tension."],
+ "Afro-Dance Techno 124": ["Afro-dance techno", 124, "Hand percussion, deep bass, hypnotic chant-like hook, warm pads."],
+ "Indie Dance 120": ["indie dance", 120, "Bright guitars-like plucks, groovy bass, live-feel drums, nostalgic mood."],
+ "Deep House 120": ["deep house", 120, "Warm chords, soft kick, smooth bass, jazzy stabs, relaxed groove."],
+ "Downtempo Indie 100": ["downtempo indie", 100, "Dreamy pads, soft beat, intimate mood, slow build."]
+};
+const $ = id => document.getElementById(id);
+$("instr").onchange = () => $("lyricsWrap").style.display = $("instr").checked ? "none" : "block";
+$("make").onclick = () => {
+  const pre = $("preset").value;
+  const [genre, bpm, desc] = PRESETS[pre];
+  const minutes = Math.max(1, Math.min(10, parseFloat($("minutes").value) || 5.5));
+  const instr = $("instr").checked;
+  const lyrics = instr ? "[Instrumental]" : $("lyrics").value.trim();
+  if (!instr && !lyrics) { alert("ضيف كلمات أو فعّل Instrumental"); return; }
+  const now = new Date();
+  const stamp = now.toISOString().replace(/[-:T]/g,"").slice(0,14);
+  const title = $("title").value.trim() || (genre.replace(/\b\w/g, c=>c.toUpperCase()) + " " + stamp.slice(4,8));
+  const job = {
+    id: stamp + "-" + title.toLowerCase().replace(/[^a-z0-9]+/g,"-").slice(0,20),
+    title, preset: pre, genre, bpm,
+    style_prompt: (bpm + " BPM " + genre + ". " + desc + " " + $("idea").value.trim()).trim(),
+    seconds: Math.round(minutes*60), instrumental: instr, lyrics,
+    artist: "Rahal", writer: "Rahal", status: "queued", ai_generated: true
+  };
+  $("out").textContent = JSON.stringify(job, null, 2);
+  $("out").style.display = "block";
+  $("copy").style.display = "block";
+  $("howto").style.display = "block";
+};
+$("copy").onclick = async () => { await navigator.clipboard.writeText($("out").textContent); $("copy").textContent = "اتنسخ ✓"; };
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+</script>
+</body>
+</html>
