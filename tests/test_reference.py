@@ -129,13 +129,13 @@ class ReferenceTests(unittest.TestCase):
                                       "text": "https://open.example.com/track/123"}})
         self.assertIn("could not open that link", self.text())
 
-    def test_a_screenshot_without_ocr_asks_for_text(self):
+    def test_a_screenshot_without_ocr_or_vision_asks_for_text(self):
         self.bot._download_file = lambda fid: b"jpegbytes"
         self.enter_ref()
         with mock.patch.dict(sys.modules, {"pytesseract": None, "PIL": None, "PIL.Image": None}):
             self.bot._handle({"message": {"chat": {"id": 9, "type": "private"}, "from": {"id": 9},
                                           "photo": [{"file_id": "small"}, {"file_id": "big"}]}})
-        self.assertIn("cannot read screenshots", self.text())
+        self.assertIn("مش قادر أقرا الصورة", self.text())
 
     def test_a_screenshot_with_ocr_flows_into_the_style(self):
         self.bot._download_file = lambda fid: b"jpegbytes"
