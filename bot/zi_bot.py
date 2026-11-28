@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.20"
+VERSION = "2026-11-28.21"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -47,6 +47,15 @@ except Exception:  # loaded by path from the notebook: add this file's folder
     _opt_spec = _ilu.spec_from_file_location("zi_options", _opt_path)
     opt = _ilu.module_from_spec(_opt_spec)
     _opt_spec.loader.exec_module(opt)
+
+try:
+    import zi_assistant as ziassist
+except Exception:  # loaded by path from the notebook
+    import importlib.util as _ilu2
+    _as_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "zi_assistant.py")
+    _as_spec = _ilu2.spec_from_file_location("zi_assistant", _as_path)
+    ziassist = _ilu2.module_from_spec(_as_spec)
+    _as_spec.loader.exec_module(ziassist)
 
 build_prompt = opt.build_prompt
 clean_idea = opt.clean_idea
@@ -92,6 +101,8 @@ COMMANDS = [("menu", "every action, as buttons"),
             ("status", "engine and session status"),
             ("library", "latest releases"),
             ("publish", "publish the last track"),
+            ("ask", "ask the assistant (Arabic)"),
+            ("end", "close the assistant chat"),
             ("studio", "the Studio web app"),
             ("social", "links to the profiles"),
             ("liked", "tracks you kept"),
@@ -106,6 +117,8 @@ COMMANDS = [("menu", "every action, as buttons"),
 HELP = """Zi Music Studio bot - make tracks from chat.
 Menu and Studio are the two buttons under the message box.
 /menu - every action as one button (start here)
+/ask - ask the assistant what is missing or what to do next (Arabic); /ask alone opens a chat
+/end - close the assistant chat
 /track - guided builder: pick a style, write your own prompt, let it write one from your idea,
          or send a reference (a name, a link, a screenshot, a voice note) to work out the style
 /track <spec> - one-shot, e.g.: /track melodic techno, night drive, 330s, instrumental, high
@@ -308,6 +321,7 @@ class Bot:
         self.conflict_warned = False
         self.stats = {"message": 0, "callback": 0, "last": "nothing yet"}
         self.ds_lyrics = {}   # chat_id -> sha of the file whose lyrics we are waiting for
+        self.ask_mode = set()  # chats talking to the assistant
         self.render_note_minutes = 5   # how often a long render says it is still alive
         os.makedirs(out_root, exist_ok=True)
 
@@ -605,6 +619,68 @@ class Bot:
             self._publish_menu(chat_id, folder, title)
         except Exception as e:
             print("publish menu failed:", repr(e))
+
+    # ---------- assistant ----------
+    def _snapshot(self):
+        """Everything the assistant is allowed to talk about, read from the bot itself."""
+        files = self._ds_manifest()["files"]
+        vocal = sum(1 for v in files.values() if v.get("kind") == "vocal")
+        inst = sum(1 for v in files.values() if v.get("kind") == "instrumental")
+        liked = sum(1 for v in self._liked()["tracks"].values() if v.get("kept"))
+        try:
+            yt = bool(self._yt_token())
+        except Exception:
+            yt = False
+        lora = False
+        try:
+            glob = getattr(self.make_track, "__globals__", {}) or {}
+            lora = bool(glob.get("LORA_ADAPTERS"))
+        except Exception:
+            pass
+
+        def have(module):
+            try:
+                import importlib.util as _u
+                return _u.find_spec(module) is not None
+            except Exception:
+                return False
+
+        return {"build": VERSION, "engine": bool(self.make_track),
+                "rendering": self.current, "waiting": self.jobs.qsize(),
+                "dataset": {"count": len(files), "vocal": vocal, "instrumental": inst,
+                            "unlabelled": max(0, len(files) - vocal - inst)},
+                "liked": liked,
+                "publish": {"youtube": yt, "telegram": bool(CHANNEL),
+                            "instagram": False, "tiktok": False, "facebook": False},
+                "lora": lora, "voice": have("faster_whisper"), "ocr": have("pytesseract")}
+
+    def _assistant(self, chat_id, question):
+        try:
+            state = self._snapshot()
+        except Exception as e:
+            print("assistant snapshot failed:", repr(e))
+            state = {"build": VERSION}
+        try:
+            text = ziassist.answer(question, state)
+        except Exception as e:
+            print("assistant answer failed:", repr(e))
+            text = "حصلت مشكلة وأنا بجهز الرد. جرب تاني، أو /status."
+        self.tg.send(chat_id, text)
+
+    def _ask(self, chat_id, arg):
+        q = (arg or "").strip()
+        if q:
+            self._assistant(chat_id, q)
+            return
+        self.ask_mode.add(chat_id)
+        state = self._snapshot()
+        head = "أنا مساعد البوت. اسألني بالعربي وأنا أجاوب من حالة الشغل نفسها.\n" \
+               "أقدر أقولك: الناقص، اللي تعمله بعد كده، حالة الشغل، تراكات التدريب، اللي حفظته، النشر، والموديل.\n" \
+               "اكتب \"خروج\" أو /end تقفل المحادثة."
+        miss = ziassist.missing(state)
+        if miss:
+            head += "\n\nاللي ناقص دلوقتي:\n- " + "\n- ".join(miss[:5])
+        self.tg.send(chat_id, head)
 
     # ---------- style reference ----------
     REF_HINT = ("Send the reference: a track or artist name, a screenshot, a link, or a voice note. "
@@ -1138,6 +1214,13 @@ class Bot:
         if chat_id in self.ds_lyrics and not text.startswith("/"):
             self._ds_save_lyrics(chat_id, text=text)
             return
+        if chat_id in self.ask_mode and not text.startswith("/"):
+            if text.strip().lower() in ("خروج", "إنهي", "انهي", "stop", "exit"):
+                self.ask_mode.discard(chat_id)
+                self.tg.send(chat_id, "قفلت المحادثة مع المساعد. /ask لو رجعت.")
+                return
+            self._assistant(chat_id, text)
+            return
         if chat_id in self.builders and not text.startswith("/"):
             self._builder_text(chat_id, text)
             return
@@ -1168,6 +1251,14 @@ class Bot:
             self._launcher(chat_id)
         elif cmd == "/menu":
             self._menu(chat_id)
+        elif cmd == "/ask":
+            self._ask(chat_id, arg)
+        elif cmd == "/end":
+            if chat_id in self.ask_mode:
+                self.ask_mode.discard(chat_id)
+                self.tg.send(chat_id, "قفلت المحادثة مع المساعد. /ask لو رجعت.")
+            else:
+                self.tg.send(chat_id, "مفيش محادثة مفتوحة. /ask يفتحها.")
         elif cmd == "/studio":
             self.tg.send(chat_id, "Studio app: " + STUDIO_URL)
             self._launcher(chat_id)
@@ -1932,7 +2023,8 @@ class Bot:
                {"text": "\u2728 AI writes it", "callback_data": "menu:ai"}],
               [{"text": "\u25b6\ufe0f Publish last track", "callback_data": "menu:publish"},
                {"text": "\U0001f310 Social links", "callback_data": "menu:social"}],
-              [{"text": "\U0001f4be Dataset", "callback_data": "menu:dataset"},
+              [{"text": "\U0001f916 Assistant", "callback_data": "menu:assistant"},
+               {"text": "\U0001f4be Dataset", "callback_data": "menu:dataset"},
                {"text": "\U0001f4ca Status", "callback_data": "menu:status"},
                {"text": "\U0001f9fe RouteNote form", "callback_data": "menu:routenote"}],
               [{"text": "\U0001f6e0 Diag", "callback_data": "menu:diag"},
@@ -1954,6 +2046,8 @@ class Bot:
             self._publish_cmd(chat_id, "")
         elif what == "social":
             self._social(chat_id)
+        elif what == "assistant":
+            self._ask(chat_id, "")
         elif what == "dataset":
             self._dataset(chat_id)
         elif what == "status":
