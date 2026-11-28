@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, subprocess, threading, time, traceback, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.10"
+VERSION = "2026-11-28.11"
 
 API = "https://api.telegram.org/bot{token}/{method}"
 FILE_API = "https://api.telegram.org/file/bot{token}/{path}"
@@ -32,6 +32,11 @@ GENRE_PRESETS = {
  "Downtempo": "100-105 bpm downtempo indie electronic, soft round kick, warm electric bass, dreamy washed guitars, mellow keys, vinyl texture, hazy nostalgic calm",
 }
 DURATIONS = [60, 120, 180, 240, 300, 330, 420, 600]
+
+# Keys the notebook's make_track reads. Different engine builds have used different
+# names for the length, so the bot fills all of them with the same value.
+REQUIRED_SPEC_KEYS = ("name", "genre", "idea", "lang", "instrumental", "seconds", "quality")
+LENGTH_KEYS = ("seconds", "duration", "duration_sec", "target_sec")
 QUALITIES = [("high", "High (2 seeds, best pick)"), ("standard", "Standard"), ("fast", "Fast draft")]
 AI_LABEL = "AI-generated music (ACE-Step 1.5, MIT licence). Label it AI-generated wherever you release it."
 
@@ -548,12 +553,37 @@ class Bot:
                     spec["idea"] += ". Theme: " + p
         return spec
 
+    def _normalize_spec(self, spec):
+        """Fill the keys the engine reads, including the length under every name it may use."""
+        if not isinstance(spec, dict):
+            return spec
+        raw = None
+        for k in LENGTH_KEYS:
+            if spec.get(k) not in (None, ""):
+                raw = spec[k]
+                break
+        try:
+            secs = int(float(raw))
+        except Exception:
+            secs = 330
+        secs = max(60, min(600, secs))
+        for k in LENGTH_KEYS:
+            spec[k] = secs
+        genre = spec.get("genre") or spec.get("name") or "melodic techno"
+        spec["genre"] = genre
+        spec["name"] = spec.get("name") or spec.get("title") or genre
+        spec["idea"] = spec.get("idea") or genre
+        spec["lang"] = spec.get("lang") or "en"
+        spec["instrumental"] = bool(spec.get("instrumental", True))
+        q = str(spec.get("quality") or "standard").lower()
+        spec["quality"] = q if q in ("fast", "standard", "high") else "standard"
+        return spec
+
     def _enqueue(self, chat_id, spec):
         if not self.make_track:
             self.tg.send(chat_id, "No engine in this session. Run the notebook's engine cell first.")
             return
-        spec.setdefault("seconds", 330)
-        spec["seconds"] = max(60, min(600, int(spec["seconds"])))
+        spec = self._normalize_spec(spec)
         spec["_thread"] = self.threads.get(chat_id)
         self.jobs.put((chat_id, spec))
         self.queued.append(spec.get("title") or spec.get("name") or spec.get("genre") or "track")
@@ -587,6 +617,7 @@ class Bot:
             self.tg.send(chat_id, f"That JSON did not parse into track specs: {str(e)[:200]}")
             return
         for s in specs:
+            s = self._normalize_spec(s)
             s.setdefault("idea", s.get("genre", ""))
             s.setdefault("lang", "en")
             self.jobs.put((chat_id, s))
@@ -748,6 +779,7 @@ class Bot:
             self.tg.send(chat_id, "No app jobs found in Drive (looked in Zi_Music/jobs and zi_data/jobs).")
             return
         for j in found:
+            j = self._normalize_spec(j)
             j.setdefault("idea", j.get("genre", ""))
             j.setdefault("lang", "en")
             self.jobs.put((chat_id, j))
