@@ -40,29 +40,31 @@ RouteNote has no upload API we use here, so upload by hand.
 Cell 5 starts the bot. It downloads `bot/zi_bot.py`, stops any poller left by an earlier run, and calls `start_engine_bot(token, make_track, run_queue, out_root, work)` with the notebook's own engine functions. The token comes from a secret named `ZI_BOT_TOKEN` (Colab: key icon > Secrets, enable notebook access; Kaggle: Add-ons > Secrets). The first run prints a pairing code; send `/start <code>` to the bot to bind the owner. Only the bound owner can use it.
 
 ### Reload the bot on a pinned build
-Re-running cell 5 always picks up `main`. To load a specific commit instead (a build that has not reached `main` yet, or going back to a known-good one), paste this as its own cell. Replace `SHA` with the commit, and run it only after the engine cells, because it reuses `make_track`, `run_queue`, `OUT_ROOT` and `WORK`.
+Re-running cell 5 always picks up `main`. To load a specific commit instead (a build that has not reached `main` yet, or going back to a known-good one), paste this as its own cell. Replace `SHA` with the commit; the cell fetches all three bot files, and run it only after the engine cells, because it reuses `make_track`, `run_queue`, `OUT_ROOT` and `WORK`.
 
 ```python
 # pinned bot reload - the correct start call is start_engine_bot(...), not start()
 import os, sys, importlib.util, urllib.request
 SHA = "PUT_COMMIT_SHA_HERE"
-API_SRC = f"https://api.github.com/repos/ira7al/zi/contents/bot/zi_bot.py?ref={SHA}"
-RAW_SRC = f"https://raw.githubusercontent.com/ira7al/zi/{SHA}/bot/zi_bot.py"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
 except Exception:
     pass
-try:
-    _req = urllib.request.Request(API_SRC, headers={"Accept": "application/vnd.github.raw", "User-Agent": "zi-notebook"})
-    with urllib.request.urlopen(_req, timeout=60) as _r:
-        _code = _r.read()
-except Exception as _e:
-    print("API download failed (", _e, "), falling back to raw.githubusercontent.com")
-    with urllib.request.urlopen(RAW_SRC, timeout=60) as _r:
-        _code = _r.read()
+for _rel in ("bot/zi_bot.py", "bot/zi_options.py", "bot/zi_assistant.py"):
+    _src = f"https://api.github.com/repos/ira7al/zi/contents/{_rel}?ref={SHA}"
+    _raw = f"https://raw.githubusercontent.com/ira7al/zi/{SHA}/{_rel}"
+    try:
+        _req = urllib.request.Request(_src, headers={"Accept": "application/vnd.github.raw", "User-Agent": "zi-notebook"})
+        with urllib.request.urlopen(_req, timeout=60) as _r:
+            _code = _r.read()
+    except Exception as _e:
+        print("API download failed (", _e, "), falling back to raw.githubusercontent.com")
+        with urllib.request.urlopen(_raw, timeout=60) as _r:
+            _code = _r.read()
+    open(os.path.join(LOCAL_TMP, os.path.basename(_rel)), "wb").write(_code)
+    print(os.path.basename(_rel), len(_code), "bytes")
 _bot_path = os.path.join(LOCAL_TMP, "zi_bot.py")
-open(_bot_path, "wb").write(_code)
 _spec = importlib.util.spec_from_file_location("zi_bot", _bot_path)
 zi_bot = importlib.util.module_from_spec(_spec)
 sys.modules["zi_bot"] = zi_bot
