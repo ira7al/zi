@@ -167,13 +167,29 @@ def answer(question, state):
 
 
 # ---------- optional: a free hosted model, when a key is present ----------
+TONE = ("الأسلوب: اتكلم زي واحد مصري عادي من الشارع، عامية خالص، قصير ودافي، وهزار خفيف مسموح. "
+        "ممنوع الفصحى والجمل الرسمية (زي: يسعدني، بالتأكيد، يمكنك، من فضلك، عزيزي، لا تتردد) وممنوع أي مصطلح تقني. "
+        "ممنوع تبدأ بترحيب رسمي أو تختم بعرض مساعدة جاهز.\n"
+        "أمثلة على الشكل المطلوب:\n"
+        "- سأل: ازيك؟ ← رديت: تمام الحمد لله، إنت عامل إيه؟ جاهز نعمل حاجة حلوة؟\n"
+        "- سأل: يعني إيه BPM؟ ← رديت: دي سرعة التراك، كام دقة في الدقيقة. ١٢٢ يعني ماشي معتدل كده، مناسب للرقص.\n"
+        "- سأل: ينفع أعمل تراك هادي للسواقة بليل؟ ← رديت: طبعاً ينفع! قولي المود وأنا أظبطهولك، وغالباً هيطلع حلو.\n"
+        "- سأل: مش عارف أبدأ منين ← رديت: ولا يهمك، قولي حاسس بإيه دلوقتي وأنا أطلعلك فكرة، من غير تعقيد.\n"
+        "- سأل: التراك ده طلع وحش ← رديت: ولا يهمك، نجرب تاني. قولي إيه اللي مضايقك فيه، الإيقاع ولا الجو؟")
+
 SYSTEM = ("أنت المساعد الشخصي بتاع راهال، جوّه بوت Zi Music Studio. رد بالمصري، قصير - ٤ سطور كتير.\n"
           "لو عرّفت بنفسك قول: أنا مساعدك الشخصي. ممنوع تقول \"مساعد راهال\".\n"
-          "كل حقيقة في ردك لازم تكون من الحالة اللي تحت. لو الحاجة مش في الحالة قول إنك مش شايفها.\n"
-          "ما تخترعش أرقام ولا مميزات، وما تقولش إنك عملت حاجة. ماتكلمش عن أي مفاتيح أو أسرار.\n"
-          "ماتتكلمش عن الإنجين ولا المحرك ولا النوتبوك ولا OCR ولا الصوت ولا أي حاجة تقنية، "
-          "وماتقولش إن ميزة شغالة أو مفعّلة. لو الرندر مش شغال قول له يشغّل خلية الإنجين وبس.\n"
-          "لازم تذكر تراكات مستر درغام: كام تراك عنده دلوقتي، وكام فاضل لحد ما الموديل يتدرب كويس.")
+          "أي سؤال معلومات عامة (موسيقى، إنتاج، مصطلحات زي LoRA أو BPM أو المقام، أو أي موضوع تاني) "
+          "جاوب عليه مباشرة وبإيجاز من معرفتك، من غير ما تربطه بحالة البوت ومن غير ما تقول مش شايفه.\n"
+          "تحت هتلاقي معلومات المشروع. استخدمها بس لو سأل عن المشروع نفسه: التراكات، الطابور، النشر، "
+          "الحالة، أو إيه الناقص. ممنوع تذكر عدد تراكات مستر درغام أو المطلوب أو أي رقم من المعلومات دي "
+          "لو السؤال مش عنها، وماتحطهاش في آخر الرد كملحوظة.\n"
+          "في كلام المشروع بس: كل حقيقة لازم تكون من المعلومات اللي تحت، ولو حاجة مش فيها قول إنك مش شايفها. "
+          "ما تخترعش أرقام ولا مميزات، وما تقولش إنك عملت حاجة، وما تقولش إن ميزة شغالة أو مفعّلة "
+          "إلا لو مكتوبة في المعلومات. ماتكلمش عن أي مفاتيح أو أسرار.\n"
+          "ماتتكلمش عن الإنجين ولا المحرك ولا النوتبوك ولا OCR ولا الصوت ولا أي حاجة تقنية عن البوت نفسه. "
+          "لو الرندر مش شغال وسأل قول له يشغّل خلية الإنجين وبس.\n"
+          + TONE)
 
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
@@ -196,7 +212,7 @@ def build_request(question, state, model=None, thinking_budget=0):
         gen["thinkingConfig"] = {"thinkingBudget": int(thinking_budget)}
     return {"system_instruction": {"parts": [{"text": SYSTEM}]},
             "contents": [{"role": "user", "parts": [{"text":
-                          "الحالة الحقيقية للبوت:\n" + context_block(state) +
+                          "معلومات المشروع (استخدمها بس لو سأل عن المشروع):\n" + context_block(state) +
                           "\n\nسؤاله: " + (question or "").strip()}]}],
             "generationConfig": gen}
 
@@ -391,8 +407,7 @@ def read_image(image_bytes, key, model=None, mime="image/jpeg", opener=None, tim
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_DEFAULT_MODEL = "openai/gpt-oss-120b"
 GROQ_FALLBACK_MODELS = ("qwen/qwen3.8-27b",)
-GROQ_SYSTEM = ("أنت المساعد الشخصي للمستخدم. ردّ بالمصري، قصير ومباشر، وبناءً على حالة البوت الحقيقية "
-               "اللي هتتبعتلك بس. متخترعش حاجة مش موجودة في الحالة. ") + SYSTEM
+GROQ_SYSTEM = SYSTEM
 
 
 def groq_models(model=None):
@@ -410,7 +425,7 @@ def build_groq_request(question, state, model=None):
     name = (model or groq_models()[0]).strip()
     body = {"model": name,
             "messages": [{"role": "system", "content": GROQ_SYSTEM},
-                         {"role": "user", "content": "الحالة الحقيقية للبوت:\n" + context_block(state) +
+                         {"role": "user", "content": "معلومات المشروع (استخدمها بس لو سأل عن المشروع):\n" + context_block(state) +
                           "\n\nسؤاله: " + (question or "").strip()}],
             "temperature": 0.4, "max_tokens": 1200}
     if "gpt-oss" in name:
@@ -483,8 +498,16 @@ JARGON = ("ocr", "الإنجين", "الانجين", "المحرك", "محرك",
 
 def has_jargon(text):
     """True when a model answer slipped into technical status or the wrong intro."""
+    import re as _re
     low = (text or "").lower()
-    return any(w in low for w in JARGON)
+    for w in JARGON:
+        if w.isascii():
+            # whole words only, so "rapid" or "capital" never trips "api"
+            if _re.search(r"(?<![a-z])" + _re.escape(w) + r"(?![a-z])", low):
+                return True
+        elif w in low:
+            return True
+    return False
 
 
 def dataset_line(state):
