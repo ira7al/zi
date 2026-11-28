@@ -38,16 +38,16 @@ class LauncherTests(unittest.TestCase):
         boards = self.keyboards()
         self.assertTrue(boards, "no persistent keyboard was sent")
         rows = boards[-1]["reply"]["keyboard"]
-        self.assertEqual([b["text"] for b in rows[0]], ["\u2630 Menu", "\U0001f39b Studio"])
-        self.assertEqual(rows[0][1]["web_app"]["url"], zb.STUDIO_URL)
+        self.assertEqual([b["text"] for b in rows[0]], ["Menu"])
+        self.assertEqual(rows[1][0]["web_app"]["url"], zb.STUDIO_URL)
         self.assertTrue(boards[-1]["reply"]["is_persistent"])
 
     def test_the_studio_button_points_at_the_live_app(self):
         self.assertEqual(zb.STUDIO_URL, "https://ira7al.github.io/zi/")
-        self.assertEqual(zb.Bot.launcher()["keyboard"][0][1]["web_app"], {"url": zb.STUDIO_URL})
+        self.assertEqual(zb.Bot.launcher()["keyboard"][1][0]["web_app"], {"url": zb.STUDIO_URL})
 
     def test_tapping_menu_opens_the_menu_and_not_a_track_builder(self):
-        self.say("\u2630 Menu")
+        self.say("Menu")
         self.assertIn(9, [9])                      # nothing crashed
         self.assertNotIn(9, self.bot.builders)
         flat = [b["callback_data"] for m in self.bot.tg.sent if m.get("keyboard")
@@ -79,8 +79,7 @@ class LauncherTests(unittest.TestCase):
         self.say("ايه الناقص")
         boards = self.keyboards()
         self.assertEqual(len(boards), 1)
-        self.assertEqual([b["text"] for b in boards[0]["reply"]["keyboard"][0]],
-                         ["\u2630 Menu", "\U0001f39b Studio"])
+        self.assertEqual([b["text"] for b in boards[0]["reply"]["keyboard"][0]], ["Menu"])
         self.say("تاني")
         self.assertEqual(len(self.keyboards()), 1)     # only once, not every message
 
