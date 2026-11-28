@@ -40,7 +40,7 @@ class FakeTG:
 
 
 def buttons(msg):
-    return [b["callback_data"] for row in (msg["keyboard"] or []) for b in row]
+    return [b.get("callback_data", "") for row in (msg["keyboard"] or []) for b in row]
 
 
 class BuilderTests(unittest.TestCase):
@@ -245,11 +245,13 @@ class BuilderTests(unittest.TestCase):
         self.bot._callback(self.chat, "menu:ai")
         self.assertIn("Give me the idea", self.bot.tg.sent[-1]["text"])
 
-    def test_start_offers_the_menu_button(self):
+    def test_start_shows_the_inline_menu_and_no_reply_keyboard(self):
         self.msg("/start")
         found = [m for m in self.bot.tg.sent if m.get("keyboard")]
         self.assertTrue(found)
-        self.assertIn("menu", buttons(found[0]))
+        self.assertIn("menu:track", buttons(found[0]))
+        self.assertFalse([m for m in self.bot.tg.sent
+                          if m.get("reply") and "keyboard" in m["reply"]])
 
     def test_prompt_tap_without_a_builder_does_not_crash(self):
         self.tap("p:own")

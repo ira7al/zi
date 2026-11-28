@@ -24,22 +24,19 @@ def _tracks(n):
 def missing(state):
     """Everything that is not done yet, in the order it matters. Never invents."""
     out = []
-    if not state.get("engine"):
-        out.append("الإنجين مش محمّل - شغّل خلية الإنجين في النوتبوك وبعدها خلية البوت")
     ds = state.get("dataset") or {}
     n = int(ds.get("count") or 0)
     if n < REQUIRED_DATASET:
-        out.append(f"تراكات التدريب: {n} من حوالي {REQUIRED_DATASET}")
+        out.append(f"تراكات مستر درغام: {n} من حوالي {REQUIRED_DATASET} - محتاج كمان "
+                   f"{REQUIRED_DATASET - n} علشان الموديل يتدرب كويس")
     if int(ds.get("unlabelled") or 0):
         out.append(f"{ds['unlabelled']} تراك لسه من غير تصنيف (فوكال / إنسترومنتال)")
     if not (state.get("publish") or {}).get("youtube"):
         out.append("توكن يوتيوب مش موجود، فالنشر على يوتيوب مقفول")
     if not state.get("lora"):
         out.append("موديل مستر درغام لسه مش متدرب")
-    if not state.get("voice"):
-        out.append("تحويل الصوت لكلام مش متاح على الجهاز ده")
-    if not state.get("ocr"):
-        out.append("قراءة الاسكرين شوت مش متاحة على الجهاز ده")
+    if not state.get("engine"):
+        out.append("الرندر واقف: شغّل خلية الإنجين في النوتبوك، وبعدها خلية البوت")
     return out
 
 
@@ -47,7 +44,7 @@ def next_steps(state):
     """What to do next, most useful first. Only things the bot can actually see."""
     steps = []
     if not state.get("engine"):
-        steps.append("شغّل خلية الإنجين في النوتبوك، وبعدها خلية البوت، وبعد كده /status")
+        steps.append("الرندر مش شغال: شغّل خلية الإنجين في النوتبوك، وبعدها خلية البوت، وبعد كده /status")
         return steps
     ds = state.get("dataset") or {}
     n = int(ds.get("count") or 0)
@@ -69,13 +66,12 @@ def status(state):
     pub = state.get("publish") or {}
     on = [name for name, ok in (("يوتيوب", pub.get("youtube")), ("انستجرام", pub.get("instagram")),
                                 ("تيك توك", pub.get("tiktok")), ("تليجرام", pub.get("telegram"))) if ok]
-    lines = [f"النسخة {state.get('build', '?')}",
-             "الإنجين: " + ("شغال" if state.get("engine") else "مش محمّل"),
-             "بيترندر دلوقتي: " + (state.get("rendering") or "مفيش"),
+    lines = ["بيترندر دلوقتي: " + (state.get("rendering") or "مفيش"),
              f"مستني في الطابور: {int(state.get('waiting') or 0)}"]
+    lines.append(dataset_line(state))
     if ds:
-        lines.append(f"تراكات التدريب: {ds.get('count', 0)} (فوكال {ds.get('vocal', 0)} | "
-                     f"إنسترومنتال {ds.get('instrumental', 0)} | من غير تصنيف {ds.get('unlabelled', 0)})")
+        lines.append(f"منهم فوكال {ds.get('vocal', 0)} وإنسترومنتال {ds.get('instrumental', 0)}"
+                     + (f"، و{ds['unlabelled']} لسه من غير تصنيف" if int(ds.get("unlabelled") or 0) else ""))
     lines.append(f"التراكات اللي حفظتها: {int(state.get('liked') or 0)}")
     lines.append("النشر متوصل على: " + ("، ".join(on) if on else "مفيش حاجة متوصلة"))
     lines.append("موديل مستر درغام: " + ("جاهز" if state.get("lora") else "لسه مش متدرب"))
@@ -163,16 +159,21 @@ def answer(question, state):
     if it == "thanks":
         return "العفو. أي حاجة تحتاجها اسألني."
     if it == "greet":
-        return "أهلاً. جاهز. تحب أعرفك إيه الناقص، ولا نبدأ تراك؟"
+        return ("أهلاً بيك. أنا مساعدك الشخصي.\n" + dataset_line(state)
+                + "\nتحب أقولك إيه الناقص، ولا نبدأ تراك؟")
     # nothing matched: say what it can answer instead of guessing
     return ("مش متأكد إني فهمت السؤال. أقدر أجاوب على: اللي ناقص، اللي تعمله بعد كده، "
             "حالة الشغل، تراكات التدريب، اللي حفظته، النشر، وموديل مستر درغام.")
 
 
 # ---------- optional: a free hosted model, when a key is present ----------
-SYSTEM = ("أنت مساعد جوّه بوت Zi Music Studio بتاع راهال. رد بالمصري، قصير - ٤ سطور كتير.\n"
+SYSTEM = ("أنت المساعد الشخصي بتاع راهال، جوّه بوت Zi Music Studio. رد بالمصري، قصير - ٤ سطور كتير.\n"
+          "لو عرّفت بنفسك قول: أنا مساعدك الشخصي. ممنوع تقول \"مساعد راهال\".\n"
           "كل حقيقة في ردك لازم تكون من الحالة اللي تحت. لو الحاجة مش في الحالة قول إنك مش شايفها.\n"
-          "ما تخترعش أرقام ولا مميزات، وما تقولش إنك عملت حاجة. ماتكلمش عن أي مفاتيح أو أسرار.")
+          "ما تخترعش أرقام ولا مميزات، وما تقولش إنك عملت حاجة. ماتكلمش عن أي مفاتيح أو أسرار.\n"
+          "ماتتكلمش عن الإنجين ولا المحرك ولا النوتبوك ولا OCR ولا الصوت ولا أي حاجة تقنية، "
+          "وماتقولش إن ميزة شغالة أو مفعّلة. لو الرندر مش شغال قول له يشغّل خلية الإنجين وبس.\n"
+          "لازم تذكر تراكات مستر درغام: كام تراك عنده دلوقتي، وكام فاضل لحد ما الموديل يتدرب كويس.")
 
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
@@ -321,18 +322,53 @@ def _opener(opener):
     return _req.urlopen
 
 
+# words that must never reach him: technical status, and the wrong name for the assistant
+JARGON = ("ocr", "الإنجين", "الانجين", "المحرك", "محرك", "النوتبوك", "نوتبوك", "kernel",
+          "tesseract", "whisper", "ffmpeg", "edge-tts", "gtts", "gemini", "api",
+          "مساعد راهال", "النسخة", "build", "مفعّلين", "مفعلين", "مفعّلة", "مفعلة")
+
+
+def has_jargon(text):
+    """True when a model answer slipped into technical status or the wrong intro."""
+    low = (text or "").lower()
+    return any(w in low for w in JARGON)
+
+
+def dataset_line(state):
+    """His own tracks for the Mr Dorgham model, and how many are still needed."""
+    ds = state.get("dataset") or {}
+    n = int(ds.get("count") or 0)
+    left = max(0, REQUIRED_DATASET - n)
+    if not n:
+        return (f"تراكات مستر درغام: لسه معندوش تراكات للتدريب، ومحتاج حوالي "
+                f"{REQUIRED_DATASET} علشان الموديل يتدرب كويس")
+    if left:
+        return (f"تراكات مستر درغام: عنده {_tracks(n)} لحد دلوقتي، وفاضل حوالي {left} "
+                f"لحد {REQUIRED_DATASET} علشان الموديل يتدرب كويس")
+    return f"تراكات مستر درغام: عنده {_tracks(n)}، والعدد كفاية للتدريب"
+
+
+def user_block(state):
+    """What he can act on, in his words. No build number, no engine, no OCR, no voice.
+
+    The model is not told what the box can do, so it cannot claim a capability that
+    is not live; and the assistant never reports technical status he did not ask for.
+    """
+    pub = state.get("publish") or {}
+    on = [name for name, ok in (("يوتيوب", pub.get("youtube")), ("انستجرام", pub.get("instagram")),
+                                ("تيك توك", pub.get("tiktok")), ("تليجرام", pub.get("telegram"))) if ok]
+    lines = [dataset_line(state),
+             "التراكات اللي حفظها: " + str(int(state.get("liked") or 0)),
+             "بيترندر دلوقتي: " + str(state.get("rendering") or "مفيش"),
+             "مستني في الطابور: " + str(int(state.get("waiting") or 0)),
+             "النشر متوصل على: " + ("، ".join(on) if on else "مفيش"),
+             "موديل مستر درغام: " + ("متوصل كاختيار في الإعدادات" if state.get("lora")
+                                     else "لسه مش متدرب، محتاج تراكاته الأول")]
+    if not state.get("engine"):
+        lines.append("الرندر واقف دلوقتي: محتاج يشغّل خلية الإنجين في النوتبوك")
+    return "\n".join(lines)
+
+
 def context_block(state):
-    """The same facts as plain text, for a hosted model later."""
-    return "\n".join([
-        "build: " + str(state.get("build")),
-        "engine loaded: " + str(bool(state.get("engine"))),
-        "rendering: " + str(state.get("rendering") or "nothing"),
-        "waiting: " + str(int(state.get("waiting") or 0)),
-        "dataset: " + str(state.get("dataset")),
-        "liked: " + str(int(state.get("liked") or 0)),
-        "publish: " + str(state.get("publish")),
-        "lora trained: " + str(bool(state.get("lora"))),
-        "voice: " + str(bool(state.get("voice"))),
-        "ocr: " + str(bool(state.get("ocr"))),
-        "missing: " + "; ".join(missing(state)) or "none",
-    ])
+    """Kept for the older callers and for tests: the same user-facing facts."""
+    return user_block(state)

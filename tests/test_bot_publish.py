@@ -215,7 +215,8 @@ class PublishTests(unittest.TestCase):
                                       "from": {"id": self.chat}, "text": "/start"}})
         boards = [m for m in self.bot.tg.sent if m.get("keyboard")]
         self.assertTrue(boards)
-        self.assertEqual(boards[0]["keyboard"][0][0]["callback_data"], "menu")
+        flat = [b.get("callback_data") for row in boards[0]["keyboard"] for b in row]
+        self.assertIn("menu:track", flat)
 
     def test_commands_are_registered_on_start(self):
         self.bot._register_commands()
@@ -224,9 +225,8 @@ class PublishTests(unittest.TestCase):
         self.assertIn("setChatMenuButton", called)
         set_cmds = [c for c in self.bot.tg.calls if c[0][0] == "setMyCommands"][-1]
         cmds = [c["command"] for c in json.loads(set_cmds[1]["commands"])]
-        self.assertIn("help", cmds)
-        # the corner list stays short: the rest live in /help and in the inline menu
-        self.assertLessEqual(len(cmds), 8)
+        # one entry only: the corner opens a list with Menu, which posts the inline menu
+        self.assertEqual(cmds, ["menu"])
 
     def test_stale_release_key_does_not_crash(self):
         self.bot._publish_cb(self.chat, "pub:tg:deadbeefdeadbeefdeadbeef")

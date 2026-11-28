@@ -52,6 +52,7 @@ class AlwaysOnTests(unittest.TestCase):
     def test_a_spoken_question_goes_to_the_assistant(self):
         self.bot._download_voice = lambda v: os.path.join(self.tmp, "v.ogg")
         self.bot._transcribe = lambda p: "what is still missing from my setup"
+        self.bot._speak = lambda chat_id, text: True      # no TTS call in a test
         self.bot._handle({"message": {"chat": {"id": 9, "type": "private"}, "from": {"id": 9},
                                       "voice": {"file_id": "v1"}}})
         self.assertNotIn(9, self.bot.builders)
