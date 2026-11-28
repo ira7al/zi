@@ -35,7 +35,7 @@ class GroqTests(unittest.TestCase):
         self.assertEqual(out, "رد من جروك")
         self.assertEqual(seen["url"], "https://api.groq.com/openai/v1/chat/completions")
         self.assertEqual(seen["auth"], "Bearer SECRET")
-        self.assertEqual(seen["body"]["model"], "llama-3.3-70b-versatile")
+        self.assertEqual(seen["body"]["model"], "openai/gpt-oss-120b")
         self.assertNotIn("SECRET", seen["url"])
         self.assertEqual(seen["body"]["messages"][0]["role"], "system")
 
@@ -54,6 +54,21 @@ class GroqTests(unittest.TestCase):
         slept = []
         self.assertEqual(za.ask_groq("q", {}, "k", opener=opener, sleep=slept.append), "رد من جروك")
         self.assertEqual(len(slept), 2)
+
+    def test_404_moves_to_the_fallback_model(self):
+        tried = []
+
+        def opener(req, timeout=0):
+            m = json.loads(req.data)["model"]
+            tried.append(m)
+            if m == "openai/gpt-oss-120b":
+                raise err(404)
+            return Resp(OK)
+        self.assertEqual(za.ask_groq("q", {}, "k", opener=opener, sleep=lambda s: None), "رد من جروك")
+        self.assertEqual(tried, ["openai/gpt-oss-120b", "qwen/qwen3.8-27b"])
+
+    def test_allam_never_used(self):
+        self.assertFalse(any("allam" in m for m in za.groq_models()))
 
     def test_429_forever_falls_through_and_key_not_printed(self):
         def opener(req, timeout=0):

@@ -216,7 +216,7 @@ Nothing in this feature generates music or touches the GPU.
 
 ## Bot build 2026-11-28.35: Groq for the assistant
 
-Answer order: Groq (OpenAI-compatible, free plan), then Gemini, then the grounded rule-based answers. Key: Kaggle/Colab secret `GROQ_API_KEY` (or env `ZI_GROQ_KEY`). Model: `llama-3.3-70b-versatile`, override with `ZI_GROQ_MODEL`. A 429 is retried with a short backoff, then it falls through. The key is only sent in the Authorization header and never printed. `/diag` shows whether each key is present. Reload with the pinned cell below.
+Answer order: Groq (OpenAI-compatible, free plan), then Gemini, then the grounded rule-based answers. Key: Kaggle/Colab secret `GROQ_API_KEY` (or env `ZI_GROQ_KEY`). Model: `openai/gpt-oss-120b`, override with `ZI_GROQ_MODEL`. A 429 is retried with a short backoff, then it falls through. The key is only sent in the Authorization header and never printed. `/diag` shows whether each key is present. Reload with the pinned cell below.
 
 ## Bot build 2026-11-28.34: Arabic everywhere
 
