@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.error, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.40"
+VERSION = "2026-11-28.41"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -334,6 +334,8 @@ class Bot:
         self.queued = []     # titles waiting behind the current render
         self.current = None
         self.builders = {}   # chat_id -> dict of the guided /track flow
+        self.pending = {}    # chat_id -> an image or link waiting for his instruction
+        self.last_say = {}   # chat_id -> his latest text or voice, so an image right after joins it
         self.stop = threading.Event()
         self.conflict_warned = False
         self.stats = {"message": 0, "callback": 0, "last": "nothing yet"}
@@ -714,7 +716,7 @@ class Bot:
                 print("assistant: free model on (" + self.llm_model + ")")
         return bool(self.llm_key or self.groq_key)
 
-    def _vision_text(self, path, mime="image/jpeg"):
+    def _vision_text(self, path, mime="image/jpeg", prompt=None):
         """Read a screenshot: Groq first, Gemini second. None when both fail (the caller says so)."""
         if not self._llm():
             return None
@@ -729,7 +731,7 @@ class Bot:
         problems = []
         if self.groq_key and hasattr(ziassist, "read_image_groq"):
             try:
-                text, problem = ziassist.read_image_groq(data, self.groq_key, mime=mime)
+                text, problem = ziassist.read_image_groq(data, self.groq_key, mime=mime, prompt=prompt)
             except Exception as e:
                 print("groq vision call failed:", type(e).__name__)
                 text, problem = None, type(e).__name__
@@ -1343,6 +1345,100 @@ class Bot:
             return text
         return text
 
+
+    # ---------- one request from several pieces ----------
+    JOIN_SEC = 90
+
+    def _fresh(self, ts):
+        return ts is not None and time.time() - ts <= self.JOIN_SEC
+
+    def _remember_say(self, chat_id, text):
+        if text and not text.startswith("/"):
+            self.last_say[chat_id] = {"text": text, "ts": time.time(), "used": False}
+
+    def _recent_say(self, chat_id):
+        d = self.last_say.get(chat_id)
+        if d and not d["used"] and self._fresh(d["ts"]):
+            return d
+        return None
+
+    def _hold(self, chat_id, kind, payload):
+        self.pending[chat_id] = {"kind": kind, "payload": payload, "ts": time.time()}
+        what = "الصورة" if kind == "photo" else "اللينك"
+        self.tg.send(chat_id, f"استلمت {what}. قولي عايز إيه منها (اكتب أو ابعت فويس)، أو دوس:",
+                     keyboard=[[{"text": "\U0001f50e ستايل مرجع", "callback_data": "img:ref"},
+                                {"text": "\u274c سيبها", "callback_data": "img:drop"}]])
+
+    def _take_pending(self, chat_id):
+        d = self.pending.get(chat_id)
+        if d and self._fresh(d["ts"]):
+            self.pending.pop(chat_id, None)
+            return d
+        self.pending.pop(chat_id, None)
+        return None
+
+    def _combined(self, chat_id, kind, payload, instruction):
+        """An image or link plus what he said about it: one request, one answer."""
+        instruction = (instruction or "").strip()
+        words = ziassist.strip_links(instruction) if kind == "link" else instruction
+        step = (self.builders.get(chat_id) or {}).get("step")
+        asks_ref = ziassist.is_reference_words(words) or (len(words) < 3 and kind in ("photo", "link"))
+        if asks_ref or (step in self.PROMPT_STEPS and not self._looks_like_question(words)):
+            if step not in self.PROMPT_STEPS:
+                self.builders[chat_id] = {"step": "ref_wait",
+                                          "spec": {"lang": "en", "quality": "high",
+                                                   "instrumental": True, "seconds": 330}}
+            self.tg.send(chat_id, "فهمت: ده مرجع للستايل بس. بقراه وأطلع منه الستايل.")
+            if kind == "photo":
+                self._reference_photo(chat_id, payload)
+            else:
+                self._reference_link(chat_id, payload)
+            return
+        if kind == "photo":
+            what = self._describe_photo(payload)
+            if not what:
+                self.tg.send(chat_id, "معرفتش أقرا الصورة دلوقتي. قولي اللي فيها بكلمتين وأكمل معاك.")
+                return
+        else:
+            what = self._page_title(payload)
+            if not what:
+                self.tg.send(chat_id, "معرفتش أفتح اللينك ده. قولي هو إيه وأكمل معاك.")
+                return
+        self._assistant(chat_id, ziassist.combine_question(words or instruction, what, "image" if kind == "photo" else "link"),
+                        suggest=True)
+
+    @staticmethod
+    def _looks_like_question(text):
+        return bool(re.search(r"[?\u061f]|^(ايه|إيه|ليه|ازاي|إزاي|هل|مين|فين|امتى|إمتى|عايز اعرف|فيها|ده ايه)", (text or "").strip()))
+
+    def _describe_photo(self, photo):
+        try:
+            data = self._download_file(photo["file_id"])
+            path = os.path.join(self.work, "combined.jpg")
+            with open(path, "wb") as fh:
+                fh.write(data)
+        except Exception as e:
+            print("combined image download failed:", type(e).__name__)
+            return None
+        if not self._llm():
+            return None
+        return self._vision_text(path, prompt=ziassist.DESCRIBE_PROMPT)
+
+    def _page_title(self, url):
+        if not re.match(r"^https?://", url, re.I):
+            url = "https://" + url
+        try:
+            page = self._http_text(url)
+        except Exception as e:
+            print("combined link fetch failed:", type(e).__name__)
+            return None
+        for pat in (r'<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']+)',
+                    r"<title[^>]*>(.*?)</title>"):
+            m = re.search(pat, page, re.S | re.I)
+            if m and m.group(1).strip():
+                return re.sub(r"\s+", " ", m.group(1)).strip()[:200]
+        return None
+
     # ---------- update handling ----------
     def _handle(self, u):
         cb = u.get("callback_query")
@@ -1418,18 +1514,20 @@ class Bot:
         if not photo and doc and str(doc.get("mime_type") or "").startswith("image/"):
             photo = [doc]                       # a screenshot sent as a file, not as a photo
         if photo:
+            caption = (msg.get("caption") or "").strip()
+            said = self._recent_say(chat_id)
+            if not caption and said:
+                caption = said["text"]
+                said["used"] = True
+            if caption:
+                self._combined(chat_id, "photo", photo[-1], caption)
+                return
             step = (self.builders.get(chat_id) or {}).get("step")
             if step in self.PROMPT_STEPS:
                 self._reference_photo(chat_id, photo[-1])
                 return
-            if not step:
-                # a screenshot out of the blue is a reference: open a builder for it
-                self.builders[chat_id] = {"step": "ref_wait",
-                                          "spec": {"lang": "en", "quality": "high",
-                                                   "instrumental": True, "seconds": 330}}
-                self.tg.send(chat_id, "بعت الصورة كمرجع. بقراها وأطلع منها الستايل بس.")
-                self._reference_photo(chat_id, photo[-1])
-                return
+            self._hold(chat_id, "photo", photo[-1])
+            return
         if doc and (doc.get("file_name") or "").lower().endswith(".txt") and chat_id in self.ds_lyrics:
             try:
                 data = self._download_file(doc["file_id"])
@@ -1452,6 +1550,30 @@ class Bot:
             from_voice = True
         if not text:
             return
+        if not text.startswith("/"):
+            rp = (msg.get("reply_to_message") or {}).get("photo")
+            held = self._take_pending(chat_id)
+            if rp:
+                self._combined(chat_id, "photo", rp[-1], text)
+                return
+            if held:
+                self._combined(chat_id, held["kind"], held["payload"], text)
+                return
+            link = re.search(r"(https?://\S+|www\.\S+)", text)
+            step = (self.builders.get(chat_id) or {}).get("step")
+            if link and step not in self.PROMPT_STEPS and chat_id not in self.ask_mode:
+                rest = ziassist.strip_links(text)
+                said = self._recent_say(chat_id)
+                if len(rest) >= 3:
+                    self._combined(chat_id, "link", link.group(1), rest)
+                    return
+                if said:
+                    said["used"] = True
+                    self._combined(chat_id, "link", link.group(1), said["text"])
+                    return
+                self._hold(chat_id, "link", link.group(1))
+                return
+            self._remember_say(chat_id, text)
         if chat_id in self.ds_lyrics and not text.startswith("/"):
             self._ds_save_lyrics(chat_id, text=text)
             return
@@ -1587,6 +1709,15 @@ class Bot:
                 return
             q = {"missing": "إيه الناقص؟", "next": "أعمل إيه بعد كده؟", "status": "الحالة"}.get(what, "الحالة")
             self._assistant(chat_id, q, suggest=True)
+            return
+        if data in ("img:ref", "img:drop"):
+            held = self.pending.pop(chat_id, None)
+            if not held:
+                self.tg.send(chat_id, "مفيش حاجة مستنية. ابعتها تاني.")
+            elif data == "img:drop":
+                self.tg.send(chat_id, "تمام، سيبتها.")
+            else:
+                self._combined(chat_id, held["kind"], held["payload"], "مرجع")
             return
         if data == "menu":
             self._menu(chat_id)
