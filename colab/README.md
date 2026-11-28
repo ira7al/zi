@@ -117,6 +117,15 @@ It comes from a Google Cloud project with the YouTube Data API enabled, an OAuth
 
 The 9:16 video is used for the channel, reels and shorts; the YouTube button renders a 1280x720 version from the same cover on demand so the full track reads properly on YouTube.
 
+## Menu and Studio under the message box (build .20)
+
+Two buttons now sit under the message box in the bot chat:
+
+- **Menu** opens the bot's menu (everything it can do, one tap each)
+- **Studio** opens the Studio web app at https://ira7al.github.io/zi/ as a Mini App, the same URL the chat's menu button already used
+
+They are sent when the owner binds the bot, on `/start`, `/help`, `/menu` and `/studio`. The Studio menu button in the corner is unchanged, so there are two ways in. Tapping Menu used to be read as a free-text idea; it opens the menu now.
+
 ## Reference: work out the style from something he already knows (build .19)
 
 In the prompt step, **Reference** asks for what he has in mind. Any of these works:
@@ -172,14 +181,14 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
-## Bot build 2026-11-28.19: reload and engine patch
+## Bot build 2026-11-28.20: reload and engine patch
 
 The bot now loads a second file (`bot/zi_options.py`), so a cell 5 that only fetches `zi_bot.py` fails. Use this cell instead; it pins the commit and fetches both.
 
 ```python
-# pinned reload - build .19 (bot + its shared option model)
+# pinned reload - build .20 (bot + its shared option model)
 import os, sys, importlib.util, urllib.request
-SHA = "93f34784ab101c6e6963ee9262000d632926dc74"
+SHA = "db3bd7f1cd478a189f9748b942875b6d8817d572"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
