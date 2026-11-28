@@ -61,11 +61,11 @@ def status_of(key):
 PROMPT_STYLES = {
     "house style": {"label": "melodic house", "bpm": 124, "key": "F major",
         "mood": "major key with a wistful edge, dreamy, driving, nostalgic",
-        "sound": "four-on-the-floor, punchy dry kick, rolling round sidechained sub bass with melodic movement, "
+        "sound": "four-on-the-floor, punchy dry kick, deep weighty round sub bass, strong low end, sidechained to the kick with melodic movement, "
                  "offbeat open hats, shuffled hats, shaker and hand percussion, plucky arpeggio motif, "
-                 "simple memorable synth hook, warm wide analog pads, airy vocal chops, patient DJ-style intro, "
+                 "simple memorable synth hook, warm analog pads, airy vocal chops, patient DJ-style intro, "
                  "gradual build, emotional breakdown, riser, euphoric drop",
-        "mix": "wide airy stereo, mono-solid deep warm low end, warm saturation, clean polished club master with headroom"},
+        "mix": "focused stereo image with a solid center, mono-solid deep heavy low end, soft warm rounded top end, warm saturation, clean polished club master with headroom"},
     "organic house": {"label": "organic house", "bpm": 120, "key": "D major",
         "mood": "warm, breezy, sunset",
         "sound": "soft kick, warm round bass, shakers, airy pads, gentle pluck melody, breathy vocal texture, "
@@ -83,7 +83,7 @@ PROMPT_STYLES = {
     "progressive": {"label": "progressive house-techno", "bpm": 124, "key": "D minor",
         "mood": "patient, sunrise euphoria",
         "sound": "rolling bassline, crisp claps, slowly opening filter arpeggio, layered pads, festival riser",
-        "mix": "wide stereo image, clean low mids, open top end"},
+        "mix": "focused stereo image, clean low mids, soft top end"},
     "indie dance": {"label": "indie dance", "bpm": 124, "key": "F minor",
         "mood": "bittersweet, playful",
         "sound": "gritty melodic analog bassline, four-on-the-floor kick, snappy claps, retro arpeggio, "
@@ -108,7 +108,7 @@ STYLE_LOOKUP = [(("indie",), "indie dance"), (("afro",), "afro house"), (("organ
                 (("melodic house",), "melodic house"), (("melodic techno", "techno"), "melodic techno"),
                 (("house",), "melodic house")]
 # production traits shared by every style: the feel he wants across the catalogue
-HOUSE_TRAITS = ("mono-solid low end, wide stereo top, warm polished master with headroom (not over-limited), "
+HOUSE_TRAITS = ("heavy mono-solid low end, focused stereo with a solid center, soft warm top end (not bright), warm polished master with headroom (not over-limited), "
                 "few elements each well placed, no muddy mids, background layers low and ducked")
 EASTERN_WORDS = ("eastern", "oriental", "arabic", "arab", "oud", "maqam", "organic", "egyptian")
 EASTERN_FLAVOR = ("eastern flavor, 123 bpm feel, darbuka and hand percussion, plucked oud-like motif, ney flute, "
@@ -119,7 +119,7 @@ FOCUS_VARIANTS = ("the arpeggio carries the hook", "the bassline carries the gro
                   "the pads carry the emotion", "the percussion carries the drive")
 MIX_VARIANTS = ("spacious mix, clean low mids, open top end",
                 "tight punchy mix, firm low end, airy top end",
-                "warm analog mix, soft top end, wide stereo image")
+                "warm analog mix, soft top end, solid centered image")
 BPM_RE = re.compile(r"\b(1[0-4]\d)\b")
 KEY_RE = re.compile(r"\b(?:in\s+|key\s+(?:of\s+)?)([A-G][#b]?)\s*(minor|major|maj|m)?\b", re.I)
 # A reference to a real act, label or song has no place in a prompt field. The old
