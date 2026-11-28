@@ -214,6 +214,13 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
+## Bot build 2026-11-28.53: house style
+
+- New default style "house style" (melodic house, 124 BPM, F major) built from the 11-track brief: punchy dry kick, rolling round sidechained sub bass, offbeat and shuffled hats, hand percussion, plucky arpeggio, simple hook, warm wide pads, airy vocal chops, patient build, clean warm master with headroom. No artist names.
+- Used when no style is named. Every style now also carries the shared production traits (mono-solid low end, wide top, warm master with headroom, few well-placed elements, background layers low).
+- Optional eastern flavor (darbuka, oud-like pluck, ney, Arabic-style vocal lines) when the idea says eastern, oriental, arabic, oud, maqam or organic. New "organic house" style (120 BPM). Indie dance is now the 124 BPM gritty-bass edge, melodic techno the 122 BPM G minor cinematic one.
+- No engine patch change: the .52 patch cell stays as is.
+
 ## Bot build 2026-11-28.52: music quality
 
 - Image or cover-art text is never used as a music idea any more. A visual description is replaced by a genre prompt, and a pasted image prompt is refused.
@@ -393,9 +400,9 @@ What .25 changes for whoever is testing:
 - `/diag` prints which voice engines are on the box and whether screenshots have a key.
 
 ```python
-# pinned reload - build .52 (bot + options + assistant + voice + art)
+# pinned reload - build .53 (bot + options + assistant + voice + art)
 import os, sys, importlib.util, urllib.request
-SHA = "e7454280d3eb7374689b959c9c7f1999f04b2f42"
+SHA = "91d0f3522b97c134b34fd5c461d7b1092bc3e47a"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
