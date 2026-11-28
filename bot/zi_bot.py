@@ -9,9 +9,9 @@
 # the owner sends "/start <code>" in the bot chat to bind. Only the bound
 # owner can use the bot - anyone else is refused (GPU hours are capped).
 
-import hashlib, json, os, queue, random, re, subprocess, threading, time, urllib.request, urllib.parse, uuid
+import hashlib, json, os, queue, random, re, subprocess, threading, time, traceback, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.6"
+VERSION = "2026-11-28.7"
 
 API = "https://api.telegram.org/bot{token}/{method}"
 FILE_API = "https://api.telegram.org/file/bot{token}/{path}"
@@ -91,6 +91,16 @@ class TG:
             return r
         except Exception as e:
             self._note(text, False, e)
+            msg = str(e).lower()
+            if fields.get("message_thread_id") and ("thread" in msg or "topic" in msg):
+                # the topic is gone or the bot cannot post there: say it in the chat itself
+                fields.pop("message_thread_id", None)
+                try:
+                    r = self.call("sendMessage", **fields)
+                    self._note("(no thread) " + text, True)
+                    return r
+                except Exception as e2:
+                    self._note("(no thread) " + text, False, e2)
             raise
 
     def _upload(self, method, chat_id, field, path, caption=None):
@@ -334,6 +344,10 @@ class Bot:
             chat_id = (cmsg.get("chat") or {}).get("id")
             if chat_id is None or not self._is_owner(chat_id):
                 return
+            try:
+                self.tg._note(f"cb chat={chat_id} thread={cmsg.get('message_thread_id')} owner={self._is_owner(chat_id)}", True)
+            except Exception:
+                pass
             if cmsg.get("message_thread_id"):
                 self.threads[chat_id] = cmsg["message_thread_id"]
             # stop the button spinner even if the handler below fails
@@ -345,6 +359,7 @@ class Bot:
                 self._callback(chat_id, cb["data"])
             except Exception as e:
                 print("callback handler failed:", repr(e))
+                traceback.print_exc()
                 try:
                     self.threads.pop(chat_id, None)
                     self.tg.send(chat_id, f"That step failed: {str(e)[:200]}")
