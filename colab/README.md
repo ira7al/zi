@@ -117,6 +117,14 @@ It comes from a Google Cloud project with the YouTube Data API enabled, an OAuth
 
 The 9:16 video is used for the channel, reels and shorts; the YouTube button renders a 1280x720 version from the same cover on demand so the full track reads properly on YouTube.
 
+## What the prompt screen tells him (build .24)
+
+- A real artist or track name is taken out of the prompt field, and the screen says exactly what went and why, in Arabic and English: the removed words in quotes, then "real artist or track names never go in the prompt field; the description around the name is kept".
+- A description after "inspired by" or "similar to" is not a name and stays: only a capitalised span that music vocabulary does not explain is removed.
+- Nothing removed: a tick line instead.
+- **Use as reference** turns the removed name into a style through the free lookup, so the name still does something useful.
+- A link or a screenshot sent at either prompt step (write my own, or AI writes it) is a reference, not prompt text. YouTube, Spotify, SoundCloud and Apple Music pages are read through `og:title` as well as `<title>`.
+
 ## The free model behind the Assistant (build .22)
 
 Add a secret named **ZI_LLM_KEY** (Kaggle: Add-ons > Secrets; Colab: key icon > Secrets with notebook access on) holding a free Gemini API key from Google AI Studio. Nothing else changes: the bot reads it itself, and without it the Assistant keeps answering from the bot's state exactly as in .21.
@@ -200,14 +208,14 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
-## Bot build 2026-11-28.23: reload and engine patch
+## Bot build 2026-11-28.24: reload and engine patch
 
 The bot now loads a second file (`bot/zi_options.py`), so a cell 5 that only fetches `zi_bot.py` fails. Use this cell instead; it pins the commit and fetches both.
 
 ```python
-# pinned reload - build .23 (bot + its shared option model + the assistant)
+# pinned reload - build .24 (bot + its shared option model + the assistant)
 import os, sys, importlib.util, urllib.request
-SHA = "194631f1dbada2e6701aedf6bd90b159392d8b11"
+SHA = "812e3b75cecd04e325c95884ec8d602b2389244a"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
