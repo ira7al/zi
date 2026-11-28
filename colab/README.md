@@ -116,3 +116,99 @@ The YouTube button reads a JSON file with three fields, from `OUT_ROOT` (normall
 It comes from a Google Cloud project with the YouTube Data API enabled, an OAuth client of type Desktop/Installed app, and one consent by the channel owner with the `https://www.googleapis.com/auth/youtube.upload` scope. The bot exchanges the refresh token for an access token at each upload, so the file does not expire. Uploads are public, category Music, `containsSyntheticMedia` set (YouTube's altered-content disclosure), and the description carries the AI wording plus tags.
 
 The 9:16 video is used for the channel, reels and shorts; the YouTube button renders a 1280x720 version from the same cover on demand so the full track reads properly on YouTube.
+
+## Bot build 2026-11-28.14: reload and engine patch
+
+The bot now loads a second file (`bot/zi_options.py`), so a cell 5 that only fetches `zi_bot.py` fails. Use this cell instead; it pins the commit and fetches both.
+
+```python
+# pinned reload - build .14 (bot + its shared option model)
+import os, sys, importlib.util, urllib.request
+SHA = "aea7a75e14a0324f2ea7d9a0a4d146fc3995154c"
+try:
+    ZI_BOT.stop.set()
+    print("Stopped the previous bot instance.")
+except Exception:
+    pass
+for _rel in ("bot/zi_bot.py", "bot/zi_options.py"):
+    _api = f"https://api.github.com/repos/ira7al/zi/contents/{_rel}?ref={SHA}"
+    _raw = f"https://raw.githubusercontent.com/ira7al/zi/{SHA}/{_rel}"
+    try:
+        _req = urllib.request.Request(_api, headers={"Accept": "application/vnd.github.raw", "User-Agent": "zi-notebook"})
+        with urllib.request.urlopen(_req, timeout=60) as _r:
+            _code = _r.read()
+    except Exception as _e:
+        print("API download failed (", _e, "), falling back to raw")
+        with urllib.request.urlopen(_raw, timeout=60) as _r:
+            _code = _r.read()
+    open(os.path.join(LOCAL_TMP, os.path.basename(_rel)), "wb").write(_code)
+    print(os.path.basename(_rel), len(_code), "bytes")
+_spec = importlib.util.spec_from_file_location("zi_bot", os.path.join(LOCAL_TMP, "zi_bot.py"))
+zi_bot = importlib.util.module_from_spec(_spec)
+sys.modules["zi_bot"] = zi_bot
+_spec.loader.exec_module(zi_bot)
+_token = os.environ.get("ZI_BOT_TOKEN", "").strip()
+if not _token:
+    try:
+        from google.colab import userdata
+        _token = (userdata.get("ZI_BOT_TOKEN") or "").strip()
+    except Exception:
+        pass
+if not _token:
+    try:
+        from kaggle_secrets import UserSecretsClient
+        _token = (UserSecretsClient().get_secret("ZI_BOT_TOKEN") or "").strip()
+    except Exception:
+        pass
+if not _token:
+    raise SystemExit("Add the bot token as a secret named ZI_BOT_TOKEN first.")
+ZI_BOT = zi_bot.start_engine_bot(token=_token, make_track=make_track, run_queue=run_queue, out_root=OUT_ROOT, work=WORK)
+print("build", zi_bot.VERSION)
+```
+
+### Engine cell: options, XL switch and LoRA hooks
+
+The bot sends `steps`, `model`, `guidance_scale`, `seed` and `lyrics` in the spec. The engine cell in this repo already honours them; an older kernel ignores them and still renders. What changed inside `gen_candidates`:
+
+```python
+    _m = spec.get("model")
+    if _m:
+        _model = MODEL_MAP.get(_m, _m)
+        if _model not in (MODELS or []) and _m == "xl":
+            print(f"  ! {_model} is not on the box yet, falling back to turbo")
+            _model = "acestep-v15-turbo"
+    else:
+        _model = pick_model(quality)
+    payload = {"audio_format":"flac", "batch_size": q["candidates"], "thinking": q["thinking"],
+               "inference_steps": int(spec.get("steps") or q["steps"]), "model": _model,
+               "audio_duration": spec["seconds"],
+               "use_random_seed": spec.get("seed") in (None, "", -1),
+               "vocal_language": spec.get("lang","en")}
+    if spec.get("bpm"): payload["bpm"] = spec["bpm"]
+    if spec.get("key"): payload["key_scale"] = spec["key"]
+    if spec.get("guidance_scale"): payload["guidance_scale"] = float(spec["guidance_scale"])
+    _lora = spec.get("lora")
+    if _lora and _lora in LORA_ADAPTERS:
+        payload["lora_path"] = LORA_ADAPTERS[_lora]
+    _lyrics = (spec.get("lyrics") or "").strip()
+    if spec.get("instrumental"):
+        payload.update({"prompt": spec["idea"], "lyrics": "[inst]", "instrumental": True})
+    elif _lyrics:
+        payload.update({"prompt": spec["idea"], "lyrics": _lyrics, "instrumental": False})
+    else:
+        payload.update({"sample_mode": True, "sample_query": spec["idea"]})
+```
+
+Above `pick_model()`:
+
+```python
+# XL switch and LoRA hooks. Fill LORA_ADAPTERS when an adapter lands, e.g.
+# {"mr-dorgham": "/kaggle/working/adapters/mr-dorgham"}; the bot already sends the name.
+MODEL_MAP = {"turbo": "acestep-v15-turbo", "turbo-shift3": "acestep-v15-turbo-shift3",
+             "xl": "acestep-v15-xl"}
+LORA_ADAPTERS = {}
+```
+
+Field meanings, from the ACE-Step 1.5 API reference: `guidance_scale` is CFG (default 7.0), `seed` is an int with -1 for random, `lyrics` is the full lyrics with `[inst]` for instrumental, `key_scale` takes values like `F# minor`. A vocal track with no lyrics still uses sample mode, so nothing that worked before changes.
+
+For voice prompts, the setup cell can add `!pip install -q faster-whisper` (CPU, int8, base.en about 75 MB). The bot uses it only when a voice note arrives.
