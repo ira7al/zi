@@ -214,6 +214,14 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
+## Bot build 2026-11-28.44: tweak after listening, silent voice
+
+- After a render: "🎛 عدّل وولّد تاني" opens أكتر / أقل buttons with a one-line Arabic explanation each: الغرابة, تأثير الستايل, الطول, السرعة (BPM). "ولّد تاني بالتعديل" renders a fresh take (new seed, same prompt). Not shown before generating.
+- No "coming soon" buttons anywhere (صوت مرجعي, كفر, LoRA are gone).
+- Voice notes are no longer echoed. The bot shows a typing indicator, then acts. The heard text appears only when it is unsure ("ما وصلنيش كويس ... سمعت: ..."). Transcripts stay in `transcripts.log`.
+
+Reload with the pinned cell below.
+
 ## Bot build 2026-11-28.43: no option grid, settings from his words
 
 - Under the prompt there are only "ولّد" and "اسألني". The bot shows one line, "هعمل: ... تمام؟" (genre, music only or lyrics, length, BPM, key, title, tags). Generate starts the track.
@@ -309,9 +317,9 @@ What .25 changes for whoever is testing:
 - `/diag` prints which voice engines are on the box and whether screenshots have a key.
 
 ```python
-# pinned reload - build .43 (bot + options + assistant + voice + art)
+# pinned reload - build .44 (bot + options + assistant + voice + art)
 import os, sys, importlib.util, urllib.request
-SHA = "c2f6e3c18c4a597c63f46a05d2995c27dd203e1a"
+SHA = "acb8ef8e2a0cf1fe682a38948d7bef4cc41bd5ff"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
