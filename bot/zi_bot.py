@@ -76,7 +76,8 @@ SOCIAL = [("\u25b6\ufe0f YouTube", "https://www.youtube.com/@rahalofficialmusic"
           ("\U0001f3b5 TikTok", "https://www.tiktok.com/@rahalofficialmusic"),
           ("\U0001f4e3 Telegram channel", "https://t.me/rahal_music")]
 
-COMMANDS = [("track", "make a track (guided builder)"),
+COMMANDS = [("menu", "every action, as buttons"),
+            ("track", "make a track (guided builder)"),
             ("queue", "what is rendering and what is waiting"),
             ("status", "engine and session status"),
             ("library", "latest releases"),
@@ -90,6 +91,7 @@ COMMANDS = [("track", "make a track (guided builder)"),
             ("help", "all commands")]
 
 HELP = """Zi Music Studio bot - make tracks from chat.
+/menu - every action as one button (start here)
 /track - guided builder: pick a style, write your own prompt, or let it write one from your idea
 /track <spec> - one-shot, e.g.: /track melodic techno, night drive, 330s, instrumental, high
 /batch - send several tracks as JSON (list of specs), or paste after the command
@@ -540,7 +542,9 @@ class Bot:
         cmd, _, arg = text.partition(" ")
         cmd = cmd.lower().split("@")[0]
         if cmd == "/start" or cmd == "/help":
-            self.tg.send(chat_id, HELP, keyboard=[[{"text": "\U0001f310 Social links", "callback_data": "social"}]])
+            self.tg.send(chat_id, HELP, keyboard=[[{"text": "\u2630 Menu", "callback_data": "menu"}]])
+        elif cmd == "/menu":
+            self._menu(chat_id)
         elif cmd == "/cancel":
             self.builders.pop(chat_id, None)
             self.tg.send(chat_id, "Cancelled.")
@@ -586,6 +590,12 @@ class Bot:
             except Exception:
                 pass
             self._show_options(chat_id, b)
+            return
+        if data == "menu":
+            self._menu(chat_id)
+            return
+        if data.startswith("menu:"):
+            self._menu_step(chat_id, data[5:])
             return
         if data.startswith("o:"):
             if not b:
@@ -1240,6 +1250,43 @@ class Bot:
         line = f"{title} - Rahal. {PUBLISH_AI}"
         return title, line, line + "\n\n" + PUBLISH_TAGS
 
+    def _menu(self, chat_id):
+        kb = [[{"text": "\U0001f3b5 New track", "callback_data": "menu:track"},
+               {"text": "\U0001f4da Library", "callback_data": "menu:library"}],
+              [{"text": "\u270d\ufe0f My own prompt", "callback_data": "menu:own"},
+               {"text": "\u2728 AI writes it", "callback_data": "menu:ai"}],
+              [{"text": "\u25b6\ufe0f Publish last track", "callback_data": "menu:publish"},
+               {"text": "\U0001f310 Social links", "callback_data": "menu:social"}],
+              [{"text": "\U0001f4ca Status", "callback_data": "menu:status"},
+               {"text": "\U0001f9fe RouteNote form", "callback_data": "menu:routenote"}],
+              [{"text": "\U0001f6e0 Diag", "callback_data": "menu:diag"},
+               {"text": "\u2753 Help", "callback_data": "menu:help"}]]
+        self.tg.send(chat_id, "Menu. Everything the bot can do is one tap from here.", keyboard=kb)
+
+    def _menu_step(self, chat_id, what):
+        if what == "track":
+            self._track(chat_id, "")
+        elif what == "own":
+            self._track(chat_id, "")
+            self._prompt_step(chat_id, self.builders[chat_id], "own")
+        elif what == "ai":
+            self._track(chat_id, "")
+            self._prompt_step(chat_id, self.builders[chat_id], "ai")
+        elif what == "library":
+            self._library(chat_id)
+        elif what == "publish":
+            self._publish_cmd(chat_id, "")
+        elif what == "social":
+            self._social(chat_id)
+        elif what == "status":
+            self._status(chat_id)
+        elif what == "routenote":
+            self.tg.send(chat_id, "Which track? /routenote <title>")
+        elif what == "diag":
+            self._diag(chat_id)
+        else:
+            self.tg.send(chat_id, HELP, keyboard=[[{"text": "\u2630 Menu", "callback_data": "menu"}]])
+
     def _social(self, chat_id):
         kb = [[{"text": name, "url": url}] for name, url in SOCIAL]
         self.tg.send(chat_id, "Rahal everywhere:" if kb else
@@ -1259,7 +1306,8 @@ class Bot:
         kb = [[{"text": PLATFORM_LABEL[c], "callback_data": f"pub:{c}:{key}"} for c in ("yt", "ig")],
               [{"text": PLATFORM_LABEL[c], "callback_data": f"pub:{c}:{key}"} for c in ("tt", "tg")],
               [{"text": "Facebook (manual)", "callback_data": f"pub:fb:{key}"},
-               {"text": "All", "callback_data": f"pub:all:{key}"}]]
+               {"text": "All", "callback_data": f"pub:all:{key}"}],
+              [{"text": "\u2630 Menu", "callback_data": "menu"}]]
         self.tg.send(chat_id, f"Publish {title}?\n"
                               "A tap posts only the platform you tap, once.", keyboard=kb)
 

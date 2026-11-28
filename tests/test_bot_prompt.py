@@ -229,6 +229,26 @@ class BuilderTests(unittest.TestCase):
         self.tap("o:model")
         self.assertEqual(self.bot.builders[self.chat]["spec"]["model"], "turbo")
 
+    # ---- the Menu button ----
+    def test_menu_lists_every_action(self):
+        self.msg("/menu")
+        data = buttons(self.bot.tg.sent[-1])
+        for want in ("menu:track", "menu:own", "menu:ai", "menu:library", "menu:publish",
+                     "menu:social", "menu:status", "menu:routenote", "menu:diag", "menu:help"):
+            self.assertIn(want, data)
+
+    def test_menu_own_prompt_goes_straight_to_the_prompt_question(self):
+        self.bot._callback(self.chat, "menu:own")
+        self.assertIn("Send the prompt", self.bot.tg.sent[-1]["text"])
+
+    def test_menu_ai_asks_for_the_idea(self):
+        self.bot._callback(self.chat, "menu:ai")
+        self.assertIn("Give me the idea", self.bot.tg.sent[-1]["text"])
+
+    def test_start_offers_the_menu_button(self):
+        self.msg("/start")
+        self.assertIn("menu", buttons(self.bot.tg.sent[-1]))
+
     def test_prompt_tap_without_a_builder_does_not_crash(self):
         self.tap("p:own")
         self.assertIn("/track", self.bot.tg.sent[-1]["text"])
