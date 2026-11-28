@@ -11,7 +11,7 @@
 
 import hashlib, json, os, queue, random, re, subprocess, threading, time, traceback, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.8"
+VERSION = "2026-11-28.10"
 
 API = "https://api.telegram.org/bot{token}/{method}"
 FILE_API = "https://api.telegram.org/file/bot{token}/{path}"
@@ -359,12 +359,21 @@ class Bot:
         if cb:
             cmsg = cb.get("message") or {}
             chat_id = (cmsg.get("chat") or {}).get("id")
-            if chat_id is None or not self._is_owner(chat_id):
-                return
+            if chat_id is None:
+                # some updates omit the message; in a private chat the sender id is the
+                # chat id, so fall back to it instead of dropping the tap
+                chat_id = (cb.get("from") or {}).get("id")
             try:
-                self.tg._note(f"cb chat={chat_id} thread={cmsg.get('message_thread_id')} owner={self._is_owner(chat_id)}", True)
+                self.stats["last_cb_raw"] = json.dumps(cb, ensure_ascii=False)[:700]
             except Exception:
                 pass
+            try:
+                self.tg._note(f"cb chat={chat_id} thread={cmsg.get('message_thread_id')} owner={self._is_owner(chat_id)} has_msg={bool(cmsg)}", True)
+            except Exception:
+                pass
+            if chat_id is None or not self._is_owner(chat_id):
+                print("callback rejected:", "no chat id" if chat_id is None else f"not owner ({chat_id} != {self.owner})")
+                return
             if cmsg.get("message_thread_id"):
                 self.threads[chat_id] = cmsg["message_thread_id"]
             # stop the button spinner even if the handler below fails
@@ -447,9 +456,9 @@ class Bot:
                 return
             self._get(chat_id, folder, audio=True)
             return
-        if not b and data in GENRE_PRESETS:
-            # A tap can arrive after a session restart or on a second bot instance
-            # that has no builder for this chat; start one instead of going dead.
+        if data in GENRE_PRESETS:
+            # Tapping a style always starts (or restarts) the builder, whatever step it was
+            # on, or whether it was lost with a restarted kernel.
             self.builders[chat_id] = {"step": "genre", "spec": {"lang": "en", "quality": "high",
                                                                "instrumental": True, "seconds": 330}}
             b = self.builders[chat_id]
@@ -480,6 +489,12 @@ class Bot:
                 self._enqueue(chat_id, spec)
             else:
                 self.tg.send(chat_id, "Cancelled.")
+        else:
+            hint = {"theme": "Type the theme or mood as a message, or tap a style to start over.",
+                    "seconds": "Pick a length from the buttons above.",
+                    "instrumental": "Pick Instrumental or With lyrics above.",
+                    "quality": "Pick a quality from the buttons above."}.get(step, "/track starts a new one.")
+            self.tg.send(chat_id, hint)
 
     def _builder_text(self, chat_id, text):
         b = self.builders[chat_id]
@@ -645,6 +660,12 @@ class Bot:
             pass
         lines.append(f"threads known: {len(self.threads)}")
         lines.append(f"outputs: {self.out_root}")
+        try:
+            raw = self.stats.get("last_cb_raw")
+            if raw:
+                lines.append("last callback: " + raw[:400])
+        except Exception:
+            pass
         try:
             for t, what, ok in self.tg.log[-4:]:
                 lines.append(f"send {t} {ok}: {what}")
