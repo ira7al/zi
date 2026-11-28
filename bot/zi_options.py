@@ -60,11 +60,13 @@ def status_of(key):
 # ---------- prompt building ----------
 PROMPT_STYLES = {
     "house style": {"label": "melodic house", "bpm": 124, "key": "F major",
-        "mood": "major key with a wistful edge, dreamy, driving, nostalgic",
-        "sound": "four-on-the-floor, punchy dry kick, deep weighty round sub bass, strong low end, sidechained to the kick with melodic movement, "
-                 "offbeat open hats, shuffled hats, shaker and hand percussion, plucky arpeggio motif, "
-                 "simple memorable synth hook, warm analog pads, airy vocal chops, patient DJ-style intro, "
-                 "gradual build, emotional breakdown, riser, euphoric drop",
+        "mood": "bright major tonality with a wistful edge, dreamy, driving, nostalgic",
+        "sound": "four-on-the-floor, punchy dry kick, deep weighty round sub bass, strong low end, "
+                 "steady heavy centered bass with only light sidechain, soft even groove, gentle shuffled hats "
+                 "spread evenly across the beat, shaker and hand percussion, plucky arpeggio motif, "
+                 "simple memorable synth hook, warm analog pads, airy vocal chops, long patient intro, "
+                 "gradual build over about two minutes, emotional breakdown in the middle, "
+                 "late peak, strongest final section",
         "mix": "focused stereo image with a solid center, mono-solid deep heavy low end, soft warm rounded top end, warm saturation, clean polished club master with headroom"},
     "organic house": {"label": "organic house", "bpm": 120, "key": "D major",
         "mood": "warm, breezy, sunset",
