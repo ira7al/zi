@@ -214,6 +214,14 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
+## Bot build 2026-11-28.51: QC fixes
+
+- YouTube confirm step offers Public, Unlisted or Private. Each button is its own explicit tap, so nothing uploads without one. Public is the first button, as before.
+- The Studio page's service worker cache is now `zi-studio-v2` and it clears old caches, so installed phones pick up updates. It is still only a launcher.
+- Dorgham and RouteNote Form moved under More. The main menu keeps New Track, Library, Prompt + Reference, AI Writes It, Social Links, More and Studio.
+- Facebook is a real link button in Social Links (and in YouTube descriptions).
+- Fix: the animated YouTube video always failed to render, because ffmpeg could not pick an output format for the temporary `.part` file. Both videos are also cut to the audio length (they ran 0.5 s long before). A new test builds a 5 min 10 s track and checks with ffprobe that video and audio lengths match within 0.15 s.
+
 ## Bot build 2026-11-28.50: verified phone
 
 - A stranger's first message gets a Share My Number button (Telegram's request_contact). The number is accepted only when the contact's user id equals the sender's id, so Telegram has verified it and nobody can submit someone else's. It is stored as phone, phone_verified and phone_verified_at in the private record. It is optional.
@@ -371,9 +379,9 @@ What .25 changes for whoever is testing:
 - `/diag` prints which voice engines are on the box and whether screenshots have a key.
 
 ```python
-# pinned reload - build .50 (bot + options + assistant + voice + art)
+# pinned reload - build .51 (bot + options + assistant + voice + art)
 import os, sys, importlib.util, urllib.request
-SHA = "2f342b8a41365497bbc441632cad2687928bbaa9"
+SHA = "4d1d40a8ae5bc5a327d6c1a7b768457f0651dc11"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
