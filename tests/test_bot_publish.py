@@ -219,9 +219,11 @@ class PublishTests(unittest.TestCase):
 
     def test_commands_are_registered_on_start(self):
         self.bot._register_commands()
-        name, kw = self.bot.tg.calls[-1]
-        self.assertEqual(name[0], "setMyCommands")
-        cmds = [c["command"] for c in json.loads(kw["commands"])]
+        called = [c[0][0] for c in self.bot.tg.calls]
+        self.assertIn("setMyCommands", called)
+        self.assertIn("setChatMenuButton", called)
+        set_cmds = [c for c in self.bot.tg.calls if c[0][0] == "setMyCommands"][-1]
+        cmds = [c["command"] for c in json.loads(set_cmds[1]["commands"])]
         self.assertIn("social", cmds)
         self.assertIn("publish", cmds)
 

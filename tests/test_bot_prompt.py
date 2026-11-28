@@ -131,7 +131,7 @@ class BuilderTests(unittest.TestCase):
         shown = self.bot.tg.sent[-1]
         self.assertIn("122 BPM", shown["text"])
         self.assertIn("Structure in bars", shown["text"])
-        self.assertEqual(sorted(buttons(shown)), ["p:again", "p:edit", "p:ref", "p:use"])
+        self.assertEqual(sorted(buttons(shown)), ["ask", "p:again", "p:edit", "p:ref", "p:use"])
         self.tap("p:again")
         self.assertNotEqual(self.bot.tg.sent[-1]["text"], shown["text"])
         self.tap("p:use")
