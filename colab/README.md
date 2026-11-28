@@ -214,6 +214,14 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
+## Bot build 2026-11-28.42: reactions and playful tone
+
+- Every voice note or photo he sends gets a 👀 reaction. Casual chat gets a fitting one by code rules (thanks 👍, laughing 😂, win 🔥, love ❤), at most one every 15 seconds. Work messages get none.
+- The model can add one reaction with a [[react:X]] tag (👍 ❤ 🔥 😂 👀 🎉 🤔 only). The tag is stripped from the text.
+- Tone: street Egyptian, light teasing and emoji, actionable answers stay short and correct.
+
+Reload with the pinned cell below.
+
 ## Bot build 2026-11-28.41: image, link and words as one request
 
 - An image or link plus text or voice (either order, within 90 seconds, a caption, or a reply to the image) is handled as one request. The bot looks at the image (Groq vision, then Gemini), reads what he said, and answers once.
@@ -293,9 +301,9 @@ What .25 changes for whoever is testing:
 - `/diag` prints which voice engines are on the box and whether screenshots have a key.
 
 ```python
-# pinned reload - build .41 (bot + options + assistant + voice + art)
+# pinned reload - build .42 (bot + options + assistant + voice + art)
 import os, sys, importlib.util, urllib.request
-SHA = "22cef313549e48f4d8dc97509df097077ce29507"
+SHA = "fb6b81a21ad27f388be26dd5f95cca0fae8a0e9d"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
