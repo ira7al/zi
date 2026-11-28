@@ -9,9 +9,9 @@
 # the owner sends "/start <code>" in the bot chat to bind. Only the bound
 # owner can use the bot - anyone else is refused (GPU hours are capped).
 
-import hashlib, json, os, queue, random, re, subprocess, threading, time, traceback, urllib.request, urllib.parse, uuid
+import hashlib, json, os, queue, random, re, shutil, subprocess, threading, time, traceback, urllib.request, urllib.parse, uuid
 
-VERSION = "2026-11-28.15"
+VERSION = "2026-11-28.16"
 _WHISPER = None   # the CPU speech model, loaded the first time a voice note arrives
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -91,6 +91,7 @@ COMMANDS = [("menu", "every action, as buttons"),
             ("library", "latest releases"),
             ("publish", "publish the last track"),
             ("social", "links to the profiles"),
+            ("liked", "tracks you kept"),
             ("dataset", "training set status"),
             ("get", "send a track's audio, cover and video"),
             ("routenote", "RouteNote form text for a track"),
@@ -111,6 +112,7 @@ HELP = """Zi Music Studio bot - make tracks from chat.
 /routenote <title> - send the RouteNote form text for a track
 /publish [title] - post the last track (or the named one) to YouTube, Instagram, TikTok, the Telegram channel, Facebook
 /social - links to the YouTube, Instagram, TikTok and Telegram channel profiles
+/liked - tracks you marked as keepers (LoRA set)
 /dataset - training set status (files sent for the Mr Dorgham model)
 /jobs - import jobs saved by the Windows app (Drive zi_data/jobs)
 /diag - build version and update counts (for debugging)
@@ -480,6 +482,64 @@ class Bot:
         except Exception as e:
             print("publish menu failed:", repr(e))
 
+    # ---------- liked tracks ----------
+    def _liked_path(self):
+        return os.path.join(self.out_root, "zi_bot_liked.json")
+
+    def _liked(self):
+        d = self._load(self._liked_path(), {"tracks": {}})
+        if not isinstance(d, dict) or not isinstance(d.get("tracks"), dict):
+            d = {"tracks": {}}
+        return d
+
+    @staticmethod
+    def _slug(text):
+        return re.sub(r"[^A-Za-z0-9._-]+", "_", text or "").strip("_")[:40] or "track"
+
+    def _keep(self, chat_id, key):
+        name = self._lib_folder(key)
+        folder = os.path.join(self.out_root, name) if name else None
+        d = self._liked()
+        entry = d["tracks"].get(key) or {}
+        if entry.get("kept"):
+            self.tg.send(chat_id, f"Already in Liked: {entry.get('title', 'that track')}")
+            return
+        if not folder:
+            self.tg.send(chat_id, "That track is not on this machine any more (the notebook may have restarted). "
+                                  "Tap the button under a newer track, or /liked shows what is already kept.")
+            return
+        try:
+            title = self._publish_caption(folder)[0]
+        except Exception:
+            title = os.path.basename(folder)
+        dest = os.path.join(self.out_root, "liked", f"{key}_{self._slug(title)}")
+        os.makedirs(dest, exist_ok=True)
+        copied = 0
+        for name in sorted(os.listdir(folder)):
+            if name.lower().endswith((".mp3", ".wav", ".flac", ".json", ".txt", ".jpg", ".jpeg", ".png")):
+                try:
+                    shutil.copy2(os.path.join(folder, name), os.path.join(dest, name))
+                    copied += 1
+                except Exception as e:
+                    print("liked copy failed:", name, repr(e))
+        d["tracks"][key] = {"folder": folder, "title": title, "kept": True, "liked_dir": dest,
+                            "when": time.strftime("%Y-%m-%d %H:%M:%S")}
+        self._save(self._liked_path(), d)
+        total = sum(1 for v in d["tracks"].values() if v.get("kept"))
+        self.tg.send(chat_id, f"\u2b50 Saved to Liked: {title}\n{dest}\n{copied} files. {total} track(s) liked. /liked lists them.")
+
+    def _liked_cmd(self, chat_id):
+        d = self._liked()
+        kept = sorted((v.get("when", ""), v) for v in d["tracks"].values() if v.get("kept"))
+        if not kept:
+            self.tg.send(chat_id, "Nothing liked yet. Tap \u2b50 This is the one under a track and it is kept for the LoRA set.")
+            return
+        lines = [f"Liked: {len(kept)} track(s)"]
+        for when, v in kept[-20:]:
+            lines.append(f"- {v.get('title', '?')}  ({when})")
+        lines.append("Folder: " + os.path.join(self.out_root, "liked"))
+        self.tg.send(chat_id, "\n".join(lines))
+
     # ---------- training dataset ----------
     def _dataset_dir(self):
         d = os.path.join(self.out_root, DATASET_SUBDIR)
@@ -823,6 +883,8 @@ class Bot:
             self._publish_cmd(chat_id, arg.strip())
         elif cmd == "/social":
             self._social(chat_id)
+        elif cmd == "/liked":
+            self._liked_cmd(chat_id)
         elif cmd == "/dataset":
             self._dataset(chat_id)
         elif cmd == "/diag":
@@ -847,6 +909,9 @@ class Bot:
             except Exception:
                 pass
             self._show_options(chat_id, b)
+            return
+        if data.startswith("keep:"):
+            self._keep(chat_id, data.split(":", 1)[1])
             return
         if data.startswith("ds:"):
             parts = data.split(":")
@@ -1580,6 +1645,7 @@ class Bot:
               [{"text": PLATFORM_LABEL[c], "callback_data": f"pub:{c}:{key}"} for c in ("tt", "tg")],
               [{"text": "Facebook (manual)", "callback_data": f"pub:fb:{key}"},
                {"text": "All", "callback_data": f"pub:all:{key}"}],
+              [{"text": "\u2b50 This is the one", "callback_data": f"keep:{key}"}],
               [{"text": "\u2630 Menu", "callback_data": "menu"}]]
         self.tg.send(chat_id, f"Publish {title}?\n"
                               "A tap posts only the platform you tap, once.", keyboard=kb)
