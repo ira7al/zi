@@ -214,6 +214,14 @@ Labels and lyrics go into the same manifest, so the training step can read one f
 
 Nothing in this feature generates music or touches the GPU.
 
+## Bot build 2026-11-28.40: menu rework
+
+- المكتبة holds every track (made ones, with the running job and queue shown on top). Opening a track sends it with a "انشر" button that starts the publish flow (artwork, video, metadata, confirm tap) for that track.
+- "انشر آخر تراك" is gone from the main menu. "الداتا سيت" is now "الدرغام".
+- "⚙️ حاجات تانية" holds الحالة, تشخيص, المساعد, مساعدة.
+
+Reload with the pinned cell below.
+
 ## Bot build 2026-11-28.39: own prompt plus reference, feedback, Groq whisper
 
 - New-track menu: "برومبت من عندي" now takes an optional reference (link or screenshot, before or after the prompt) and uses both together, style only, no names. The separate "مرجع" button and the "Last" row are gone.
@@ -277,9 +285,9 @@ What .25 changes for whoever is testing:
 - `/diag` prints which voice engines are on the box and whether screenshots have a key.
 
 ```python
-# pinned reload - build .39 (bot + options + assistant + voice + art)
+# pinned reload - build .40 (bot + options + assistant + voice + art)
 import os, sys, importlib.util, urllib.request
-SHA = "93c459dbe154a0eac31abe967bd7906a9be0d0cf"
+SHA = "526b0f8c05093fee878646560b8b06505f031024"
 try:
     ZI_BOT.stop.set()
     print("Stopped the previous bot instance.")
